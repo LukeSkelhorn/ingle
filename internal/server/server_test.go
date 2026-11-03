@@ -473,9 +473,9 @@ func TestPeopleAdmin(t *testing.T) {
 	expect(t, phone.post("/admin/people", url.Values{"name": {""}, "kind": {"child"}, "colour": {"#46A758"}, "avatar_mode": {"none"}}),
 		http.StatusUnprocessableEntity, "Enter a name")
 
-	expectRedirectPrefix(t, phone.post("/admin/people", url.Values{
+	expectPersonCreated(t, phone.post("/admin/people", url.Values{
 		"name": {"Alfie"}, "kind": {"child"}, "colour": {"#46A758"}, "avatar_mode": {"emoji"}, "emoji": {"🦖"}, "sort_order": {"1"},
-	}), "/admin/people/")
+	}))
 	expect(t, phone.post("/admin/people", url.Values{
 		"name": {"Alfie"}, "kind": {"child"}, "colour": {"#46A758"}, "avatar_mode": {"none"},
 	}), http.StatusUnprocessableEntity, "already has that name")
@@ -522,9 +522,9 @@ func TestAddAdultWithCredentials(t *testing.T) {
 	h := newHarness(t)
 	h.setUp()
 	phone := h.phone()
-	expectRedirectPrefix(t, phone.post("/admin/people", url.Values{
+	expectPersonCreated(t, phone.post("/admin/people", url.Values{
 		"name": {"Dad"}, "kind": {"adult"}, "colour": {"#3E63DD"}, "avatar_mode": {"none"},
-	}), "/admin/people/")
+	}))
 	dad := itoa(h.person("Dad").ID)
 
 	expect(t, phone.post("/admin/people/"+dad+"/pin", url.Values{"pin": {"1357"}, "pin_confirm": {"1358"}}),
@@ -605,9 +605,9 @@ func TestChoresAdmin(t *testing.T) {
 	h := newHarness(t)
 	h.setUp()
 	phone := h.phone()
-	expectRedirectPrefix(t, phone.post("/admin/people", url.Values{
+	expectPersonCreated(t, phone.post("/admin/people", url.Values{
 		"name": {"Alfie"}, "kind": {"child"}, "colour": {"#46A758"}, "avatar_mode": {"none"},
-	}), "/admin/people/")
+	}))
 	alfie := h.person("Alfie")
 
 	expect(t, phone.get("/admin/chores/new"), http.StatusOK, "What needs doing?", "Alfie")
@@ -752,8 +752,10 @@ func TestHTMXRedirect(t *testing.T) {
 	}
 }
 
-func expectRedirectPrefix(t *testing.T, r resp, prefix string) {
+// expectPersonCreated checks a successful "add person" (303 to their page).
+func expectPersonCreated(t *testing.T, r resp) {
 	t.Helper()
+	const prefix = "/admin/people/"
 	if r.status != http.StatusSeeOther || !strings.HasPrefix(r.location, prefix) {
 		t.Fatalf("got %d → %q, want 303 → %q…\n%s", r.status, r.location, prefix, r.body)
 	}

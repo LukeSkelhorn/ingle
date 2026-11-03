@@ -75,6 +75,20 @@ func (q *Queries) BalancesForHousehold(ctx context.Context, householdID int64) (
 	return items, nil
 }
 
+const deleteLedgerForCompletion = `-- name: DeleteLedgerForCompletion :exec
+DELETE FROM ledger_entries WHERE household_id = ? AND completion_id = ?
+`
+
+type DeleteLedgerForCompletionParams struct {
+	HouseholdID  int64  `json:"household_id"`
+	CompletionID *int64 `json:"completion_id"`
+}
+
+func (q *Queries) DeleteLedgerForCompletion(ctx context.Context, arg DeleteLedgerForCompletionParams) error {
+	_, err := q.db.ExecContext(ctx, deleteLedgerForCompletion, arg.HouseholdID, arg.CompletionID)
+	return err
+}
+
 const insertLedgerEntry = `-- name: InsertLedgerEntry :one
 INSERT INTO ledger_entries (
     household_id, person_id, points, pence, kind, completion_id, redemption_id, note, created_by, created_at

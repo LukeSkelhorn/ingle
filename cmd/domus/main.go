@@ -91,6 +91,7 @@ func run(log *slog.Logger) error {
 		Handler:           srv.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
+	httpSrv.RegisterOnShutdown(srv.CloseStreams)
 
 	errCh := make(chan error, 1)
 	go func() {

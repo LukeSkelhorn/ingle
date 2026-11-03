@@ -1,17 +1,89 @@
 {{define "title"}}{{if .Household}}{{.Household}} · {{end}}Domus{{end}}
+{{define "bodyclass"}}is-board{{end}}
 {{define "content"}}
-<main class="board">
+<main class="board" id="board-page">
   <header class="board__header">
     <h1>{{if .Household}}{{.Household}}{{else}}Domus{{end}}</h1>
     <div class="board__clock" hx-get="/clock" hx-trigger="every 30s" hx-swap="innerHTML">
-      {{template "clock" .Data}}
+      {{template "clock" .Data.Clock}}
     </div>
   </header>
-  <p class="board__placeholder">Chores board coming soon.</p>
+
+  {{template "board" .Data.Board}}
+
+  <dialog id="sheet" class="sheet" aria-label="Who's doing this?"><div id="sheet-body"></div></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
   {{if .Viewer.Adult}}
   <a class="board__admin" href="/admin" aria-label="Admin">⚙︎</a>
   {{else if .Viewer.IsDisplay}}
   <a class="board__admin" href="/admin/unlock" aria-label="Unlock admin">⚙︎</a>
   {{end}}
 </main>
+<script>
+  // Live board: a server-sent event says "something changed" and the board
+  // re-fetches itself. Each page has a random id so it isn't told about its
+  // own taps (their response already carries the fresh board).
+  (function () {
+    var page = document.getElementById("board-page"),
+        sheet = document.getElementById("sheet"),
+        sheetBody = document.getElementById("sheet-body"),
+        toastEl = document.getElementById("toast"),
+        client = Math.random().toString(36).slice(2) + Date.now().toString(36),
+        toastTimer;
+    page.setAttribute("hx-headers", JSON.stringify({ "X-Board-Client": client }));
+
+    function refresh() {
+      var b = document.getElementById("board");
+      if (b && window.htmx) htmx.trigger(b, "refresh");
+    }
+
+    // Picker sheet: open when its content arrives, close after an action.
+    document.addEventListener("htmx:afterSwap", function (e) {
+      if (e.detail.target === sheetBody && !sheet.open) sheet.showModal();
+    });
+    document.addEventListener("htmx:afterRequest", function (e) {
+      if (sheet.open && sheet.contains(e.detail.elt) && e.detail.elt.hasAttribute("hx-post")) sheet.close();
+    });
+    sheet.addEventListener("click", function (e) {
+      if (e.target === sheet || e.target.closest("[data-close]")) sheet.close();
+    });
+    sheet.addEventListener("close", function () { sheetBody.innerHTML = ""; });
+
+    // Toasts come from the HX-Trigger response header.
+    document.body.addEventListener("toast", function (e) {
+      var t = e.detail || {};
+      clearTimeout(toastTimer);
+      toastEl.textContent = "";
+      toastEl.classList.toggle("toast--error", !!t.error);
+      var msg = document.createElement("span");
+      msg.textContent = t.message || "";
+      toastEl.appendChild(msg);
+      if (t.undo) {
+        var undo = document.createElement("button");
+        undo.type = "button";
+        undo.className = "btn toast__undo";
+        undo.textContent = "Undo";
+        undo.addEventListener("click", function () {
+          toastEl.hidden = true;
+          htmx.ajax("POST", t.undo, { source: page, target: "#board", swap: "outerHTML" });
+        });
+        toastEl.appendChild(undo);
+      }
+      toastEl.hidden = false;
+      toastTimer = setTimeout(function () { toastEl.hidden = true; }, t.undo ? 6000 : 3500);
+    });
+
+    if (window.EventSource) {
+      var connected = false,
+          es = new EventSource("/board/events?client=" + client);
+      es.addEventListener("board", refresh);
+      // After a reconnect (server restart, network blip) we may have missed
+      // events, so refresh once.
+      es.addEventListener("open", function () { if (connected) refresh(); connected = true; });
+    }
+    // The iPad waking from sleep may have missed events too.
+    document.addEventListener("visibilitychange", function () { if (!document.hidden) refresh(); });
+  })();
+</script>
 {{end}}

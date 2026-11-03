@@ -13,6 +13,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Domus">
   <link rel="stylesheet" href="/static/app.css">
+  <!-- Swap 409/422 responses too: the board answers a stale tap with the
+       current board and an error toast. -->
+  <meta name="htmx-config" content='{"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"409","swap":true},{"code":"422","swap":true},{"code":"[45]..","swap":false,"error":true}]}'>
   <script src="/static/htmx.min.js" defer></script>
 </head>
 <body class="{{block "bodyclass" .}}{{end}}">

@@ -51,6 +51,20 @@ func (q *Queries) CreateCompletion(ctx context.Context, arg CreateCompletionPara
 	return i, err
 }
 
+const deleteCompletion = `-- name: DeleteCompletion :exec
+DELETE FROM completions WHERE household_id = ? AND id = ?
+`
+
+type DeleteCompletionParams struct {
+	HouseholdID int64 `json:"household_id"`
+	ID          int64 `json:"id"`
+}
+
+func (q *Queries) DeleteCompletion(ctx context.Context, arg DeleteCompletionParams) error {
+	_, err := q.db.ExecContext(ctx, deleteCompletion, arg.HouseholdID, arg.ID)
+	return err
+}
+
 const getCompletion = `-- name: GetCompletion :one
 SELECT id, household_id, occurrence_id, person_id, completed_at, status, reviewed_by, reviewed_at, points, pence FROM completions WHERE household_id = ? AND id = ?
 `
@@ -76,6 +90,60 @@ func (q *Queries) GetCompletion(ctx context.Context, arg GetCompletionParams) (C
 		&i.Pence,
 	)
 	return i, err
+}
+
+const listLiveCompletionsForRange = `-- name: ListLiveCompletionsForRange :many
+SELECT c.id, c.occurrence_id, c.person_id, c.completed_at, c.status
+FROM completions c
+JOIN chore_occurrences o ON o.id = c.occurrence_id
+WHERE c.household_id = ?1
+  AND o.due_on >= ?2 AND o.due_on <= ?3
+  AND c.status <> 'rejected'
+`
+
+type ListLiveCompletionsForRangeParams struct {
+	HouseholdID int64  `json:"household_id"`
+	FromDate    string `json:"from_date"`
+	ToDate      string `json:"to_date"`
+}
+
+type ListLiveCompletionsForRangeRow struct {
+	ID           int64  `json:"id"`
+	OccurrenceID int64  `json:"occurrence_id"`
+	PersonID     int64  `json:"person_id"`
+	CompletedAt  int64  `json:"completed_at"`
+	Status       string `json:"status"`
+}
+
+// The live (pending or approved) completion for each occurrence due in
+// [from_date, to_date], for the board.
+func (q *Queries) ListLiveCompletionsForRange(ctx context.Context, arg ListLiveCompletionsForRangeParams) ([]ListLiveCompletionsForRangeRow, error) {
+	rows, err := q.db.QueryContext(ctx, listLiveCompletionsForRange, arg.HouseholdID, arg.FromDate, arg.ToDate)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListLiveCompletionsForRangeRow{}
+	for rows.Next() {
+		var i ListLiveCompletionsForRangeRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OccurrenceID,
+			&i.PersonID,
+			&i.CompletedAt,
+			&i.Status,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listPendingCompletions = `-- name: ListPendingCompletions :many

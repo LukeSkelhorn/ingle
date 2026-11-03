@@ -21,3 +21,6 @@ LEFT JOIN ledger_entries l ON l.person_id = p.id
 WHERE p.household_id = ? AND p.archived_at IS NULL
 GROUP BY p.id
 ORDER BY p.sort_order, p.name;
+
+-- name: DeleteLedgerForCompletion :exec
+DELETE FROM ledger_entries WHERE household_id = ? AND completion_id = ?;

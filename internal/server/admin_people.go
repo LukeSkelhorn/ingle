@@ -130,7 +130,6 @@ func (s *Server) loadPerson(w http.ResponseWriter, r *http.Request) (dbq.Person,
 // save fails.
 func (s *Server) readPersonForm(w http.ResponseWriter, r *http.Request, f *personForm, current *string) (in household.PersonInput, newPhoto string, errs valid.Errors, err error) {
 	r.Body = http.MaxBytesReader(w, r.Body, avatar.MaxUpload+maxFormBytes)
-	//nolint:gosec // G120: the body is capped by MaxBytesReader on the line above
 	if err := r.ParseMultipartForm(1 << 20); err != nil && !errors.Is(err, http.ErrNotMultipart) {
 		return in, "", valid.Errors{"photo": "That upload was too large (8 MB maximum)."}, nil
 	}

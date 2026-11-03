@@ -1,0 +1,119 @@
+{{/* The live part of the main board. It re-fetches itself on "refresh"
+     (fired by the page when a server-sent event arrives) and every five
+     minutes, which also catches the board day rolling over. */}}
+{{define "board"}}
+<div id="board" class="board__body" hx-get="/board" hx-trigger="refresh, every 5m" hx-swap="outerHTML">
+  {{if not .Columns}}
+  <div class="board__empty">
+    <p>No one's here yet.</p>
+    {{if .Adult}}<p><a class="btn btn--primary" href="/admin/people/new">Add people and chores in Admin</a></p>
+    {{else}}<p class="muted">A grown-up can add people and chores in Admin.</p>{{end}}
+  </div>
+  {{else}}
+  <section class="pool" aria-labelledby="pool-h">
+    <h2 id="pool-h" class="pool__title">Up for grabs</h2>
+    {{if .Pool}}
+    <ul class="chores chores--pool">{{range .Pool}}{{template "card" .}}{{end}}</ul>
+    {{else}}
+    <p class="pool__empty">Nothing up for grabs right now.</p>
+    {{end}}
+  </section>
+  <div class="columns">
+    {{range .Columns}}
+    <section class="column" style="--person: {{.Person.Colour}}" aria-label="{{.Person.Name}}">
+      <header class="column__head">
+        {{template "avatar" (avatar .Person "md")}}
+        <div class="column__who">
+          <h2 class="column__name">{{.Person.Name}}</h2>
+          <p class="column__balance">{{pts .Points}}{{if .Pence}} · {{money .Pence}}{{end}}</p>
+        </div>
+      </header>
+      {{if .TotalToday}}
+      <div class="progress" role="img" aria-label="{{.DoneToday}} of {{.TotalToday}} done today">
+        <div class="progress__bar"><span style="width: {{percent .DoneToday .TotalToday}}%"></span></div>
+        <span class="progress__text">{{if eq .DoneToday .TotalToday}}All done today 🎉{{else}}{{.DoneToday}} of {{.TotalToday}} done today{{end}}</span>
+      </div>
+      {{end}}
+      {{if .Cards}}
+      <ul class="chores">{{range .Cards}}{{template "card" .}}{{end}}</ul>
+      {{else}}
+      <p class="column__empty">Nothing today.</p>
+      {{end}}
+    </section>
+    {{end}}
+  </div>
+  {{end}}
+</div>
+{{end}}
+
+{{/* One chore. Pool chores open the picker; assigned and claimed chores are
+     completed with one tap; done chores are not interactive. */}}
+{{define "card"}}
+<li class="chore{{if .Done}} chore--done{{if .JustDone}} chore--just{{end}}{{end}}{{if .Overdue}} chore--overdue{{end}}{{if .Claimed}} chore--claimed{{end}}">
+  {{if .Done}}
+  <div class="chore__main">
+    <span class="chore__check chore__check--on" aria-hidden="true">✓</span>
+    <span class="chore__text">
+      <span class="chore__title">{{.Title}}</span>
+      <span class="chore__meta">{{if .Pending}}<span class="tag tag--wait">Waiting for a grown-up</span>{{else}}Done{{end}}</span>
+    </span>
+  </div>
+  {{else if and .Pool (not .Claimed)}}
+  <button class="chore__main" type="button"
+          hx-get="/board/occurrences/{{.OccurrenceID}}/pick" hx-target="#sheet-body" hx-swap="innerHTML">
+    <span class="chore__check chore__check--pool" aria-hidden="true">+</span>
+    <span class="chore__text">
+      <span class="chore__title">{{.Title}}</span>
+      {{template "chore_meta" .}}
+    </span>
+  </button>
+  {{else}}
+  <button class="chore__main" type="button" hx-disabled-elt="this"
+          hx-post="/board/occurrences/{{.OccurrenceID}}/complete" hx-target="#board" hx-swap="outerHTML">
+    <span class="chore__check" aria-hidden="true"></span>
+    <span class="chore__text">
+      <span class="visually-hidden">Mark done: </span><span class="chore__title">{{.Title}}</span>
+      {{template "chore_meta" .}}
+    </span>
+  </button>
+  {{if .Claimed}}
+  <button class="chore__aside" type="button" hx-disabled-elt="this"
+          hx-post="/board/occurrences/{{.OccurrenceID}}/release" hx-target="#board" hx-swap="outerHTML">Give back</button>
+  {{end}}
+  {{end}}
+</li>
+{{end}}
+
+{{define "chore_meta"}}
+<span class="chore__meta">
+  {{- if .Overdue}}<span class="tag tag--late">Overdue · {{shortDate .DueOn}}</span>{{end}}
+  {{- if .Claimed}}<span class="tag">Claimed</span>{{end}}
+  {{- with .DueTime}}<span>by {{.}}</span>{{end}}
+  {{- with worth .Points .Pence}}<span class="chip">{{.}}</span>{{end -}}
+</span>
+{{end}}
+
+{{/* The "who's doing this?" sheet for a pool chore. */}}
+{{define "picker"}}
+<form class="picker" hx-target="#board" hx-swap="outerHTML" onsubmit="return false">
+  {{/* Focus the title, not the first avatar, so nobody looks pre-chosen. */}}
+  <h2 class="picker__title" tabindex="-1" autofocus>{{.Card.Title}}</h2>
+  <p class="picker__ask">Who's doing this?</p>
+  <div class="picker__people">
+    {{range .People}}
+    <label class="picker__person" style="--person: {{.Colour}}">
+      <input class="visually-hidden" type="radio" name="person" value="{{.ID}}">
+      {{template "avatar" (avatar . "lg")}}
+      <span>{{.Name}}</span>
+    </label>
+    {{end}}
+  </div>
+  <div class="picker__actions">
+    <button class="btn btn--block" type="button" hx-disabled-elt="this"
+            hx-post="/board/occurrences/{{.Card.OccurrenceID}}/claim">I'll do it</button>
+    <button class="btn btn--primary btn--block" type="button" hx-disabled-elt="this"
+            hx-post="/board/occurrences/{{.Card.OccurrenceID}}/complete">It's done</button>
+    <button class="btn btn--ghost btn--block" type="button" data-close>Cancel</button>
+  </div>
+</form>
+{{end}}

@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/fs"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -139,10 +140,49 @@ func (s *Server) funcs() template.FuncMap {
 			return loc.FormatDate(t) + " " + loc.FormatTime(t)
 		},
 		"weekdayShort": func(d time.Weekday) string { return d.String()[:3] },
-		"dict":         dict,
-		"list":         func(v ...string) []string { return v },
-		"activity":     describeActivity,
+		"shortDate":    shortDate,
+		"worth":        s.worth,
+		"pts":          pts,
+		"percent": func(done, total int) int {
+			if total == 0 {
+				return 0
+			}
+			return done * 100 / total
+		},
+		"dict":     dict,
+		"list":     func(v ...string) []string { return v },
+		"activity": describeActivity,
 	}
+}
+
+// shortDate formats a stored YYYY-MM-DD as e.g. "Mon 2 Nov" (UK order).
+func shortDate(ymd string) string {
+	t, err := time.Parse("2006-01-02", ymd)
+	if err != nil {
+		return ymd
+	}
+	return t.Format("Mon 2 Jan")
+}
+
+// worth describes what a chore is worth, e.g. "5 pts · £0.50", or "" if
+// nothing.
+func (s *Server) worth(points, pence int64) string {
+	var parts []string
+	if points > 0 {
+		parts = append(parts, pts(points))
+	}
+	if pence > 0 {
+		parts = append(parts, s.Locale.FormatMoney(pence))
+	}
+	return strings.Join(parts, " · ")
+}
+
+// pts formats a points count: "1 pt", "12 pts".
+func pts(n int64) string {
+	if n == 1 || n == -1 {
+		return strconv.FormatInt(n, 10) + " pt"
+	}
+	return strconv.FormatInt(n, 10) + " pts"
 }
 
 // dict builds a map from alternating keys and values, for passing several

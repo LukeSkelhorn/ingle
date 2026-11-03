@@ -1,0 +1,271 @@
+package server
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/url"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/lukeskelhorn/domus/internal/store/dbq"
+)
+
+// boardHousehold sets up Mum (display + phone), Alfie and Isla, an assigned
+// chore for Alfie and a pool chore, all due today (Wed 1 July).
+func boardHousehold(t *testing.T) (h *harness, wall, phone *device) {
+	t.Helper()
+	h = newHarness(t)
+	h.setUp()
+	phone = h.phone()
+	for _, p := range []url.Values{
+		{"name": {"Alfie"}, "kind": {"child"}, "colour": {"#46A758"}, "avatar_mode": {"emoji"}, "emoji": {"🦖"}, "sort_order": {"1"}},
+		{"name": {"Isla"}, "kind": {"child"}, "colour": {"#E54666"}, "avatar_mode": {"none"}, "sort_order": {"2"}},
+	} {
+		expectPersonCreated(t, phone.post("/admin/people", p))
+	}
+	alfie := h.person("Alfie")
+	expectRedirect(t, phone.post("/admin/chores", url.Values{
+		"title": {"Feed the cat"}, "mode": {"assigned"}, "assignee_id": {itoa(alfie.ID)}, "repeat": {"daily"},
+		"starts_on": {"2026-07-01"}, "points": {"2"}, "due_time": {"08:00"},
+	}), "/admin/chores")
+	expectRedirect(t, phone.post("/admin/chores", url.Values{
+		"title": {"Hoover the lounge"}, "mode": {"pool"}, "repeat": {"once"}, "starts_on": {"2026-07-01"},
+		"points": {"5"}, "money": {"0.50"},
+	}), "/admin/chores")
+	wall = h.setUpDisplayLocked()
+	return h, wall, phone
+}
+
+func (h *harness) occurrence(title string) dbq.ChoreOccurrence {
+	h.t.Helper()
+	c := h.chore(title)
+	var id int64
+	if err := h.st.DB.QueryRowContext(h.t.Context(),
+		"SELECT id FROM chore_occurrences WHERE chore_id = ? AND due_on = '2026-07-01'", c.ID).Scan(&id); err != nil {
+		h.t.Fatal(err)
+	}
+	return must(h.st.Q.GetOccurrence(h.t.Context(), dbq.GetOccurrenceParams{HouseholdID: h.hh, ID: id}))
+}
+
+func toastOf(t *testing.T, r resp) toast {
+	t.Helper()
+	var m map[string]toast
+	if err := json.Unmarshal([]byte(r.header.Get("HX-Trigger")), &m); err != nil {
+		t.Fatalf("HX-Trigger %q: %v", r.header.Get("HX-Trigger"), err)
+	}
+	return m["toast"]
+}
+
+// section returns the HTML of the column labelled name.
+func section(body, name string) string {
+	i := strings.Index(body, `aria-label="`+name+`"`)
+	if i < 0 {
+		return ""
+	}
+	rest := body[i:]
+	if j := strings.Index(rest, "</section>"); j >= 0 {
+		return rest[:j]
+	}
+	return rest
+}
+
+func poolOf(body string) string {
+	i := strings.Index(body, `class="pool"`)
+	j := strings.Index(body, `class="columns"`)
+	if i < 0 || j < i {
+		return ""
+	}
+	return body[i:j]
+}
+
+func TestBoardShowsColumnsAndPool(t *testing.T) {
+	_, wall, _ := boardHousehold(t)
+	r := wall.get("/")
+	expect(t, r, http.StatusOK, "Up for grabs", "Hoover the lounge", "5 pts · £0.50",
+		`id="board"`, "/board/events", "Who's doing this?")
+	alfie := section(r.body, "Alfie")
+	for _, want := range []string{"🦖", "Feed the cat", "by 08:00", "0 of 1 done today", "0 pts"} {
+		if !strings.Contains(alfie, want) {
+			t.Errorf("Alfie's column lacks %q\n%s", want, alfie)
+		}
+	}
+	// Adults are on the board too.
+	if section(r.body, "Mum") == "" {
+		t.Error("no column for Mum")
+	}
+	if !strings.Contains(section(r.body, "Isla"), "Nothing today.") {
+		t.Error("Isla's empty column has no empty state")
+	}
+	expect(t, wall.get("/board"), http.StatusOK, `id="board"`, "Feed the cat")
+}
+
+func TestBoardStrangerSeesNothing(t *testing.T) {
+	h, _, _ := boardHousehold(t)
+	stranger := h.device()
+	for _, p := range []string{"/board", "/board/events", "/board/occurrences/1/pick"} {
+		expectRedirect(t, stranger.get(p), "/signin")
+	}
+	expectRedirect(t, stranger.post("/board/occurrences/1/complete", nil), "/signin")
+}
+
+func TestBoardCompleteAndUndo(t *testing.T) {
+	h, wall, _ := boardHousehold(t)
+	occ := h.occurrence("Feed the cat")
+
+	r := wall.post("/board/occurrences/"+itoa(occ.ID)+"/complete", nil)
+	expect(t, r, http.StatusOK, "1 of 1 done today", "chore--done", "chore--just", "2 pts")
+	tt := toastOf(t, r)
+	if tt.Message != "Nice one, Alfie!" || !strings.HasPrefix(tt.Undo, "/board/completions/") {
+		t.Errorf("toast = %+v", tt)
+	}
+	// It's already done.
+	r = wall.post("/board/occurrences/"+itoa(occ.ID)+"/complete", nil)
+	expect(t, r, http.StatusConflict, "chore--done")
+	if tt := toastOf(t, r); !tt.Error || tt.Message != "That's already done." {
+		t.Errorf("repeat toast = %+v", tt)
+	}
+
+	h.advance(10 * time.Second)
+	r = wall.post(tt.Undo, nil)
+	expect(t, r, http.StatusOK, "0 of 1 done today")
+	if strings.Contains(section(r.body, "Alfie"), "chore--done") {
+		t.Error("still done after undo")
+	}
+	if b := must(h.st.Q.BalanceForPerson(t.Context(), dbq.BalanceForPersonParams{HouseholdID: h.hh, PersonID: h.person("Alfie").ID})); b.Points != 0 {
+		t.Errorf("points after undo = %d", b.Points)
+	}
+
+	// Too late.
+	r = wall.post("/board/occurrences/"+itoa(occ.ID)+"/complete", nil)
+	undo := toastOf(t, r).Undo
+	h.advance(time.Minute)
+	r = wall.post(undo, nil)
+	expect(t, r, http.StatusConflict)
+	if tt := toastOf(t, r); tt.Message != "Too late to undo. Ask a grown-up." {
+		t.Errorf("late undo toast = %+v", tt)
+	}
+}
+
+func TestBoardPoolPickClaimRelease(t *testing.T) {
+	h, wall, phone := boardHousehold(t)
+	occ := h.occurrence("Hoover the lounge")
+	isla := h.person("Isla")
+	alfie := h.person("Alfie")
+	base := "/board/occurrences/" + itoa(occ.ID)
+
+	expect(t, wall.get(base+"/pick"), http.StatusOK, "Hoover the lounge", "Who's doing this?", "Isla", "Alfie", "Mum")
+
+	// No person chosen.
+	r := wall.post(base+"/claim", nil)
+	expect(t, r, http.StatusConflict)
+	if tt := toastOf(t, r); tt.Message != "Choose who's doing it." {
+		t.Errorf("toast = %+v", tt)
+	}
+	expect(t, wall.post(base+"/complete", nil), http.StatusConflict)
+
+	r = wall.post(base+"/claim", url.Values{"person": {itoa(isla.ID)}})
+	expect(t, r, http.StatusOK, "Nothing up for grabs right now.")
+	if !strings.Contains(section(r.body, "Isla"), "Hoover the lounge") || !strings.Contains(section(r.body, "Isla"), "Give back") {
+		t.Errorf("claimed chore not in Isla's column\n%s", section(r.body, "Isla"))
+	}
+	if tt := toastOf(t, r); tt.Message != "Isla is on it." {
+		t.Errorf("toast = %+v", tt)
+	}
+
+	// A stale screen tries to claim it for Alfie.
+	r = phone.post(base+"/claim", url.Values{"person": {itoa(alfie.ID)}})
+	expect(t, r, http.StatusConflict)
+	if tt := toastOf(t, r); tt.Message != "Someone's already on that one." {
+		t.Errorf("toast = %+v", tt)
+	}
+	expect(t, phone.get(base+"/pick"), http.StatusConflict)
+
+	// Give it back.
+	r = wall.post(base+"/release", nil)
+	expect(t, r, http.StatusOK)
+	if !strings.Contains(poolOf(r.body), "Hoover the lounge") {
+		t.Errorf("released chore not back in the pool\n%s", poolOf(r.body))
+	}
+
+	// Done straight from the pool, from a phone, by Alfie.
+	r = phone.post(base+"/complete", url.Values{"person": {itoa(alfie.ID)}})
+	expect(t, r, http.StatusOK, "Nothing up for grabs right now.", "5 pts · £0.50")
+	if !strings.Contains(section(r.body, "Alfie"), "Hoover the lounge") {
+		t.Error("done pool chore not shown under Alfie")
+	}
+}
+
+func TestBoardEvents(t *testing.T) {
+	h, wall, phone := boardHousehold(t)
+	occ := h.occurrence("Feed the cat")
+
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, h.ts.URL+"/board/events?client=phone1", http.NoBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := phone.c.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = res.Body.Close() })
+	if res.StatusCode != http.StatusOK || res.Header.Get("Content-Type") != "text/event-stream" {
+		t.Fatalf("stream: %d %s", res.StatusCode, res.Header.Get("Content-Type"))
+	}
+	lines := make(chan string, 16)
+	go func() {
+		sc := bufio.NewScanner(res.Body)
+		for sc.Scan() {
+			lines <- sc.Text()
+		}
+		close(lines)
+	}()
+	nextEvent := func(wait time.Duration) string {
+		t.Helper()
+		timeout := time.After(wait)
+		for {
+			select {
+			case l, ok := <-lines:
+				if !ok {
+					return "closed"
+				}
+				if strings.HasPrefix(l, "event: ") {
+					return strings.TrimPrefix(l, "event: ")
+				}
+			case <-timeout:
+				return ""
+			}
+		}
+	}
+
+	// The phone's own tap doesn't echo back to it…
+	req, err = http.NewRequestWithContext(t.Context(), http.MethodPost, h.ts.URL+"/board/occurrences/"+itoa(occ.ID)+"/complete", http.NoBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Origin", h.ts.URL)
+	req.Header.Set(boardClientHeader, "phone1")
+	expect(t, phone.do(req), http.StatusOK)
+	if ev := nextEvent(300 * time.Millisecond); ev != "" {
+		t.Fatalf("got %q for own change, want nothing", ev)
+	}
+
+	// …but a tap on the wall does.
+	expect(t, wall.post("/board/occurrences/"+itoa(h.occurrence("Hoover the lounge").ID)+"/complete",
+		url.Values{"person": {itoa(h.person("Isla").ID)}}), http.StatusOK)
+	if ev := nextEvent(2 * time.Second); ev != "board" {
+		t.Fatalf("event = %q, want board", ev)
+	}
+
+	// So does an admin change.
+	expectPersonCreated(t, phone.post("/admin/people", url.Values{
+		"name": {"Gran"}, "kind": {"adult"}, "colour": {"#46A758"}, "avatar_mode": {"none"},
+	}))
+	if ev := nextEvent(2 * time.Second); ev != "board" {
+		t.Fatalf("event after admin change = %q, want board", ev)
+	}
+}

@@ -421,6 +421,7 @@ func (s *Service) activity(ctx context.Context, q *dbq.Queries, householdID, act
 		"chore.claimed":   "occurrence",
 		"chore.released":  "occurrence",
 		"chore.completed": "completion",
+		"chore.undone":    "occurrence",
 		"chore.approved":  "completion",
 		"chore.rejected":  "completion",
 		"reward.redeemed": "redemption",

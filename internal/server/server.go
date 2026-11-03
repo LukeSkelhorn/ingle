@@ -37,9 +37,10 @@ type Deps struct {
 // Server serves the Domus web UI.
 type Server struct {
 	Deps
-	db    *sql.DB
-	pages *pages
-	now   func() time.Time
+	db     *sql.DB
+	pages  *pages
+	now    func() time.Time
+	events *hub
 
 	// setupDone latches once an adult can sign in; it never goes back
 	// because the last such adult can't be archived or stripped.
@@ -48,7 +49,7 @@ type Server struct {
 
 // New builds a Server.
 func New(d Deps) (*Server, error) {
-	s := &Server{Deps: d, now: time.Now}
+	s := &Server{Deps: d, now: time.Now, events: newHub()}
 	if d.Store != nil {
 		s.db = d.Store.DB
 	}
@@ -94,9 +95,18 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /{$}", viewer(s.handleIndex))
 	mux.Handle("GET /clock", viewer(s.handleClock))
 	mux.Handle("GET /avatars/{name}", viewer(s.handleAvatar))
+	mux.Handle("GET /board", viewer(s.handleBoard))
+	mux.Handle("GET /board/events", viewer(s.handleBoardEvents))
+	mux.Handle("GET /board/occurrences/{id}/pick", viewer(s.handlePick))
+	mux.Handle("POST /board/occurrences/{id}/claim", viewer(s.handleClaim))
+	mux.Handle("POST /board/occurrences/{id}/complete", viewer(s.handleComplete))
+	mux.Handle("POST /board/occurrences/{id}/release", viewer(s.handleRelease))
+	mux.Handle("POST /board/completions/{id}/undo", viewer(s.handleUndo))
 
 	// Admin routes: a signed-in adult (PIN on a display, password elsewhere).
-	admin := func(h http.HandlerFunc) http.Handler { return s.requireAdmin(h) }
+	// Any admin write may change what the board shows, so open boards are
+	// told to refresh afterwards.
+	admin := func(h http.HandlerFunc) http.Handler { return s.requireAdmin(s.publishAfterWrite(h)) }
 	mux.Handle("GET /admin", admin(s.handleAdminHome))
 
 	mux.Handle("GET /admin/people", admin(s.handlePeople))
@@ -159,10 +169,6 @@ func (s *Server) clock(ctx context.Context) clockView {
 	}
 }
 
-func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r, http.StatusOK, "board", s.view(r, "", s.clock(r.Context())))
-}
-
 func (s *Server) handleClock(w http.ResponseWriter, r *http.Request) {
 	s.renderPartial(w, r, "clock", s.clock(r.Context()))
 }
@@ -213,6 +219,10 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, status int, page
 }
 
 func (s *Server) renderPartial(w http.ResponseWriter, r *http.Request, name string, data any) {
+	s.renderPartialStatus(w, r, http.StatusOK, name, data)
+}
+
+func (s *Server) renderPartialStatus(w http.ResponseWriter, r *http.Request, status int, name string, data any) {
 	var buf bytes.Buffer
 	if err := s.pages.partial(&buf, name, data); err != nil {
 		s.Log.ErrorContext(r.Context(), "render partial", slog.String("partial", name), slog.Any("err", err))
@@ -221,7 +231,18 @@ func (s *Server) renderPartial(w http.ResponseWriter, r *http.Request, name stri
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(status)
 	_, _ = buf.WriteTo(w)
+}
+
+// publishAfterWrite tells open boards to refresh after a non-GET request.
+func (s *Server) publishAfterWrite(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		next(w, r)
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			s.events.publish(s.HouseholdID, "")
+		}
+	}
 }
 
 // serverError logs err and shows a generic error page.

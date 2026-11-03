@@ -51,6 +51,17 @@ Set these as environment variables, or copy `.env.example` to `.env`. Task loads
 | `DOMUS_WEEK_START`  | `monday`          | Day name                               |
 | `DOMUS_CURRENCY`    | `GBP`             | ISO code; amounts are stored in pence  |
 
+## The board
+
+The board has a column for each family member, adults included. Each column shows their points and £ balance, how much of today they've done, and their chores. Shared chores sit in **Up for grabs** at the top.
+
+- Tap one of your own chores to mark it done. Points are added straight away, unless the chore needs a grown-up to check it.
+- Tap a shared chore, pick who you are, then choose **I'll do it** (it moves to your column) or **It's done**. Use **Give back** to return a claimed chore to the pool.
+- Tapped the wrong thing? **Undo** appears for a few seconds after each completion.
+- Missed chores stay up, marked **Overdue**, until they're done or the next one is due. A missed daily chore doesn't pile up.
+
+Every open board (the wall iPad, a second display, an adult's phone) updates live when anything changes. Behind a reverse proxy, don't buffer `/board/events`: it's a server-sent event stream. nginx is told this via `X-Accel-Buffering: no`.
+
 ## Devices, sign-in and admin
 
 Domus knows two kinds of device:
@@ -92,12 +103,12 @@ task migrate:status
 cmd/domus/          entry point
 internal/config/    env config + UK defaults
 internal/locale/    date, week and money formatting
-internal/server/    HTTP routes, middleware and handlers (board, setup, sign-in, admin)
+internal/server/    HTTP routes, middleware and handlers (board + live events, setup, sign-in, admin)
 internal/auth/      PINs and passwords (argon2id), household displays, sessions, rate limits
 internal/settings/  per-household settings (timezone, day reset, admin idle timeout)
 internal/household/ people, credentials and rewards admin
 internal/avatar/    emoji picker and photo uploads
-internal/chores/    chore lifecycle: recurrence presets, admin edits, claim, complete, approve, redeem
+internal/chores/    chore lifecycle: recurrence presets, admin edits, board, claim, complete, undo, approve, redeem
 internal/store/     SQLite, embedded goose migrations, sqlc queries
 internal/store/dbq/ sqlc-generated code (don't edit; run task generate)
 web/templates/      html/template layout, partials and pages
