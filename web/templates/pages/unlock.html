@@ -1,0 +1,55 @@
+{{define "bodyclass"}}page{{end}}
+{{define "content"}}
+<main class="card card--narrow unlock">
+  <a class="btn btn--ghost" href="/">‹ Back to the board</a>
+  {{with .Data.Selected}}
+    <div class="unlock__who">
+      {{template "avatar" (avatar .Person "lg")}}
+      <h1>Hi {{.Person.Name}}</h1>
+    </div>
+    {{template "flash" $}}
+    {{if .Locked}}
+      <p class="muted">Too many wrong PINs. Try again in a few minutes.</p>
+    {{else}}
+    <form method="post" action="/admin/unlock" class="pinpad" id="pinpad">
+      <input type="hidden" name="person" value="{{.Person.ID}}">
+      <input class="pinpad__input" type="password" name="pin" id="pin" inputmode="numeric" pattern="[0-9]{4,6}"
+             minlength="4" maxlength="6" autocomplete="off" required aria-label="PIN" readonly>
+      <div class="pinpad__keys">
+        {{range $k := (list "1" "2" "3" "4" "5" "6" "7" "8" "9")}}<button type="button" class="pinpad__key" data-key="{{$k}}">{{$k}}</button>{{end}}
+        <button type="button" class="pinpad__key pinpad__key--muted" data-key="clear" aria-label="Clear">⌫</button>
+        <button type="button" class="pinpad__key" data-key="0">0</button>
+        <button type="submit" class="pinpad__key pinpad__key--go" aria-label="Unlock">→</button>
+      </div>
+    </form>
+    <script>
+      (function () {
+        var input = document.getElementById("pin");
+        document.querySelectorAll(".pinpad__key[data-key]").forEach(function (b) {
+          b.addEventListener("click", function () {
+            var k = b.dataset.key;
+            if (k === "clear") { input.value = input.value.slice(0, -1); return; }
+            if (input.value.length < 6) input.value += k;
+          });
+        });
+      })();
+    </script>
+    {{end}}
+    <p><a href="/admin/unlock">Not {{.Person.Name}}?</a></p>
+  {{else}}
+    <h1>Who's unlocking?</h1>
+    {{template "flash" .}}
+    {{if .Data.Adults}}
+    <ul class="people-grid">
+      {{range .Data.Adults}}
+      <li><a class="people-grid__item" href="/admin/unlock?person={{.Person.ID}}">
+        {{template "avatar" (avatar .Person "lg")}}<span>{{.Person.Name}}</span>
+      </a></li>
+      {{end}}
+    </ul>
+    {{else}}
+    <p class="muted">No adult has a PIN yet. Sign in on a phone or computer and set one under People.</p>
+    {{end}}
+  {{end}}
+</main>
+{{end}}

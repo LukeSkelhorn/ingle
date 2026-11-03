@@ -1,0 +1,43 @@
+{{define "bodyclass"}}admin{{end}}
+{{define "content"}}
+{{template "admin_nav" .}}
+<main class="admin__main">
+  <p><a href="/admin/rewards">‹ Rewards</a></p>
+  <h1>{{if .Data.ID}}{{.Data.Title}}{{else}}Add a reward{{end}}</h1>
+  {{template "flash" .}}
+  {{if .Data.Archived}}<p class="flash">Archived. Restore it from the Rewards list to offer it again.</p>{{end}}
+  <form class="card stack" method="post" action="{{if .Data.ID}}/admin/rewards/{{.Data.ID}}{{else}}/admin/rewards{{end}}">
+    <label class="field">
+      <span>Reward</span>
+      <input name="title" value="{{.Data.Title}}" required maxlength="100" autocomplete="off" placeholder="Film night pick">
+      {{template "err" index .Errors "title"}}
+    </label>
+    <label class="field">
+      <span>Details (optional)</span>
+      <textarea name="description" maxlength="1000" rows="2">{{.Data.Description}}</textarea>
+      {{template "err" index .Errors "description"}}
+    </label>
+    <div class="row">
+      <label class="field">
+        <span>Costs points</span>
+        <input type="number" name="cost_points" value="{{.Data.CostPoints}}" min="0" inputmode="numeric">
+        {{template "err" index .Errors "cost_points"}}
+      </label>
+      <label class="field">
+        <span>Costs money (£)</span>
+        <input name="money" value="{{.Data.Money}}" inputmode="decimal" pattern="£?[0-9]*([.][0-9]{1,2})?" placeholder="2.50">
+        {{template "err" index .Errors "money"}}
+        {{template "err" index .Errors "cost_pence"}}
+      </label>
+    </div>
+    <button class="btn btn--primary" type="submit">{{if .Data.ID}}Save{{else}}Add reward{{end}}</button>
+  </form>
+  {{if and .Data.ID (not .Data.Archived)}}
+  <section class="card stack">
+    <h2>Archive</h2>
+    <p class="muted">Stops offering this reward. Past redemptions are kept.</p>
+    <form method="post" action="/admin/rewards/{{.Data.ID}}/archive"><button class="btn btn--danger" type="submit">Archive reward</button></form>
+  </section>
+  {{end}}
+</main>
+{{end}}

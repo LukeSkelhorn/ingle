@@ -1,0 +1,35 @@
+{{define "bodyclass"}}admin{{end}}
+{{define "content"}}
+{{template "admin_nav" .}}
+<main class="admin__main">
+  <div class="admin__head">
+    <h1>People</h1>
+    <a class="btn btn--primary" href="/admin/people/new">Add someone</a>
+  </div>
+  <ul class="list card">
+    {{range .Data.People}}
+    <li><a class="list__row" href="/admin/people/{{.ID}}">
+      {{template "avatar" (avatar . "md")}}
+      <span class="list__main"><strong>{{.Name}}</strong>
+        <small class="muted">{{if eq .Kind "adult"}}Adult{{if .PinHash}} · PIN{{end}}{{if .PasswordHash}} · Sign-in{{end}}{{else}}Child{{end}}</small></span>
+      <span aria-hidden="true">›</span>
+    </a></li>
+    {{else}}
+    <li class="list__empty muted">No one yet.</li>
+    {{end}}
+  </ul>
+  {{if .Data.Archived}}
+  <details class="card">
+    <summary>Archived ({{len .Data.Archived}})</summary>
+    <ul class="list">
+      {{range .Data.Archived}}
+      <li class="list__row">
+        {{template "avatar" (avatar . "sm")}}<span class="list__main">{{.Name}}</span>
+        <form method="post" action="/admin/people/{{.ID}}/restore"><button class="btn" type="submit">Restore</button></form>
+      </li>
+      {{end}}
+    </ul>
+  </details>
+  {{end}}
+</main>
+{{end}}

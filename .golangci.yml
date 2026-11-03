@@ -21,6 +21,10 @@ linters:
   settings:
     misspell:
       locale: UK
+      # US spellings that are Go/library identifiers (image/color, imaging.Center).
+      ignore-rules:
+        - color
+        - center
     nolintlint:
       require-explanation: true
       require-specific: true

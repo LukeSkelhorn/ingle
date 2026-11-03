@@ -1,0 +1,34 @@
+{{define "bodyclass"}}admin{{end}}
+{{define "content"}}
+{{template "admin_nav" .}}
+<main class="admin__main">
+  <h1>Settings</h1>
+  {{template "flash" .}}
+  <form class="card stack" method="post" action="/admin/settings">
+    <label class="field">
+      <span>Household name</span>
+      <input name="household_name" value="{{.Data.HouseholdName}}" required maxlength="50">
+      {{template "err" index .Errors "household_name"}}
+    </label>
+    <label class="field">
+      <span>Timezone</span>
+      <select name="timezone">
+        {{range .Data.Timezones}}<option value="{{.}}"{{if eq . $.Data.Timezone}} selected{{end}}>{{.}}</option>{{end}}
+      </select>
+      {{template "err" index .Errors "timezone"}}
+    </label>
+    <label class="field field--short">
+      <span>New day starts at</span>
+      <input type="time" name="day_starts_at" value="{{.Data.DayStartsAt}}" required>
+      <small class="muted">Until then the board still shows yesterday, so late-night chores count for the right day.</small>
+      {{template "err" index .Errors "day_starts_at"}}
+    </label>
+    <label class="field field--short">
+      <span>Lock admin on displays after (minutes idle)</span>
+      <input type="number" name="admin_idle_minutes" value="{{.Data.AdminIdleMinutes}}" min="1" max="60" required inputmode="numeric">
+      {{template "err" index .Errors "admin_idle_minutes"}}
+    </label>
+    <button class="btn btn--primary" type="submit">Save settings</button>
+  </form>
+</main>
+{{end}}

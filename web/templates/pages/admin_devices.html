@@ -1,0 +1,56 @@
+{{define "bodyclass"}}admin{{end}}
+{{define "content"}}
+{{template "admin_nav" .}}
+<main class="admin__main">
+  <h1>Devices</h1>
+  {{template "flash" .}}
+
+  <section class="card stack">
+    <h2>Household displays</h2>
+    <p class="muted">Displays show the board to everyone. Adults unlock admin on them with their PIN, and it locks again after a few idle minutes.</p>
+    <ul class="list">
+      {{range .Data.Displays}}
+      <li class="list__row">
+        <span class="list__main"><strong>{{.Name}}</strong>{{if eq .ID $.Data.ThisDisplayID}} <span class="tag">This device</span>{{end}}
+          <small class="muted">Last seen {{when .LastSeenAt}}</small></span>
+        <form method="post" action="/admin/devices/{{.ID}}/revoke"><button class="btn btn--danger" type="submit">Remove</button></form>
+      </li>
+      {{else}}
+      <li class="list__empty muted">No household displays yet.</li>
+      {{end}}
+    </ul>
+    {{if not .Data.OnDisplay}}
+    <form class="stack" method="post" action="/admin/devices/register">
+      <p>Is this the device on the wall? Make it a household display. You'll be signed out here, and use your PIN for admin from then on.</p>
+      <label class="field field--short">
+        <span>Display name</span>
+        <input name="name" value="{{.Data.DefaultName}}" required maxlength="50">
+        {{template "err" index .Errors "name"}}
+      </label>
+      <button class="btn" type="submit">Make this a household display</button>
+    </form>
+    {{end}}
+  </section>
+
+  <section class="card stack">
+    <h2>Signed-in phones and computers</h2>
+    <ul class="list">
+      {{range .Data.Sessions}}
+      <li class="list__row">
+        <span class="list__main"><strong>{{.PersonName}}</strong>{{if .Current}} <span class="tag">This device</span>{{end}}
+          <small class="muted">{{if .UserAgent}}{{.UserAgent}} · {{end}}last used {{when .LastSeenAt}}</small></span>
+        <form method="post" action="/admin/sessions/revoke">
+          <input type="hidden" name="session" value="{{.ID}}">
+          <button class="btn btn--danger" type="submit">Sign out</button>
+        </form>
+      </li>
+      {{else}}
+      <li class="list__empty muted">No one is signed in on a phone or computer.</li>
+      {{end}}
+    </ul>
+    <form method="post" action="/admin/sessions/others">
+      <button class="btn" type="submit">Sign me out everywhere else</button>
+    </form>
+  </section>
+</main>
+{{end}}

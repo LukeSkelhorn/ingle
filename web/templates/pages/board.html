@@ -1,0 +1,17 @@
+{{define "title"}}{{if .Household}}{{.Household}} · {{end}}Domus{{end}}
+{{define "content"}}
+<main class="board">
+  <header class="board__header">
+    <h1>{{if .Household}}{{.Household}}{{else}}Domus{{end}}</h1>
+    <div class="board__clock" hx-get="/clock" hx-trigger="every 30s" hx-swap="innerHTML">
+      {{template "clock" .Data}}
+    </div>
+  </header>
+  <p class="board__placeholder">Chores board coming soon.</p>
+  {{if .Viewer.Adult}}
+  <a class="board__admin" href="/admin" aria-label="Admin">⚙︎</a>
+  {{else if .Viewer.IsDisplay}}
+  <a class="board__admin" href="/admin/unlock" aria-label="Unlock admin">⚙︎</a>
+  {{end}}
+</main>
+{{end}}

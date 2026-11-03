@@ -89,3 +89,26 @@ func TestStartOfWeek(t *testing.T) {
 		t.Errorf("sunday start = %s, want 01/11/2026", got)
 	}
 }
+
+func TestParseMoney(t *testing.T) {
+	l := UK()
+	good := map[string]int64{
+		"": 0, "0": 0, "1.50": 150, "£1.50": 150, "£ 2": 200, "0.5": 50, ".75": 75, "1,000.00": 100000, "12": 1200,
+	}
+	for in, want := range good {
+		got, err := l.ParseMoney(in)
+		if err != nil || got != want {
+			t.Errorf("ParseMoney(%q) = %d, %v; want %d", in, got, err, want)
+		}
+	}
+	for _, in := range []string{"-1", "1.234", "1.", "abc", "£", "1.5x", "$1"} {
+		if got, err := l.ParseMoney(in); err == nil {
+			t.Errorf("ParseMoney(%q) = %d, want error", in, got)
+		}
+	}
+	for pence, want := range map[int64]string{0: "0.00", 5: "0.05", 150: "1.50", 100000: "1000.00", -250: "-2.50"} {
+		if got := FormatMoneyInput(pence); got != want {
+			t.Errorf("FormatMoneyInput(%d) = %q, want %q", pence, got, want)
+		}
+	}
+}

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>{{block "title" .}}Domus{{end}}</title>
+  <title>{{block "title" .}}{{if .Title}}{{.Title}} · {{end}}Domus{{end}}</title>
   <meta name="theme-color" content="#4A90D9">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/static/icons/icon-192.png" type="image/png">
@@ -15,9 +15,47 @@
   <link rel="stylesheet" href="/static/app.css">
   <script src="/static/htmx.min.js" defer></script>
 </head>
-<body>
+<body class="{{block "bodyclass" .}}{{end}}">
   {{block "content" .}}{{end}}
+  {{if .Viewer.OnDisplayAdmin}}
   <script>
+    // Auto-lock admin on a household display after {{.Viewer.IdleSeconds}}s
+    // without a tap, so it isn't left open on the wall. The server enforces
+    // the same timeout.
+    (function () {
+      var idleMs = {{.Viewer.IdleSeconds}} * 1000, timer;
+      function lock() {
+        fetch("/admin/lock", { method: "POST", credentials: "same-origin" })
+          .finally(function () { location.href = "/"; });
+      }
+      function reset() { clearTimeout(timer); timer = setTimeout(lock, idleMs); }
+      ["pointerdown", "keydown", "input", "scroll"].forEach(function (e) {
+        document.addEventListener(e, reset, { passive: true, capture: true });
+      });
+      reset();
+    })();
+  </script>
+  {{end}}
+  <script>
+    // Fields marked data-show-when="name=a,b" are shown only while the form
+    // control called name has one of those values.
+    (function () {
+      var els = document.querySelectorAll("[data-show-when]");
+      if (!els.length) return;
+      function value(form, name) {
+        var el = form.querySelector('[name="' + name + '"]:checked') ||
+                 form.querySelector('select[name="' + name + '"]');
+        return el ? el.value : "";
+      }
+      function update() {
+        els.forEach(function (el) {
+          var form = el.closest("form"), parts = el.dataset.showWhen.split("=");
+          if (form) el.hidden = parts[1].split(",").indexOf(value(form, parts[0])) < 0;
+        });
+      }
+      document.addEventListener("change", update);
+      update();
+    })();
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js");
     }

@@ -1,7 +1,7 @@
 // Domus service worker: makes the board installable and caches static
 // assets. Pages and data always come from the server (network-first) so
 // the wall display never shows stale chores.
-const CACHE = "domus-static-v1";
+const CACHE = "domus-static-v2";
 const ASSETS = [
   "/static/htmx.min.js",
   "/static/app.css",

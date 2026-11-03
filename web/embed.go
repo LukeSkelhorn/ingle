@@ -6,7 +6,7 @@ import "embed"
 
 // Templates contains the html/template files.
 //
-//go:embed templates/*.html
+//go:embed templates
 var Templates embed.FS
 
 // Static contains assets served under /static/ (plus manifest and sw.js at root).

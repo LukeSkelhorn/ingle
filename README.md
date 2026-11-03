@@ -34,6 +34,8 @@ task docker:run   # or: docker run -p 8080:8080 -v domus-data:/data domus:dev
 
 The database is a single SQLite file, `./data/domus.db` (`/data/domus.db` in Docker). Migrations run automatically when the server starts.
 
+On first start, open Domus in a browser. You'll be taken to a one-off **setup** page where you name the household and create the first adult (name, email, password and PIN). Tick "use this device as the household display" if you're on the wall tablet.
+
 The container runs as the distroless `nonroot` user (UID 65532). A named volume works as-is. If you bind-mount a host directory instead, make it writable by that UID first: `sudo chown 65532:65532 ./domus-data`.
 
 ## Configuration
@@ -44,16 +46,30 @@ Set these as environment variables, or copy `.env.example` to `.env`. Task loads
 | ------------------- | ----------------- | -------------------------------------- |
 | `DOMUS_ADDR`        | `:8080`           | Listen address                         |
 | `DOMUS_DB_PATH`     | `./data/domus.db` | SQLite database file                   |
-| `DOMUS_TZ`          | `Europe/London`   | IANA timezone (tzdata is embedded)     |
+| `DOMUS_TZ`          | `Europe/London`   | Initial timezone; change it later in Admin › Settings |
 | `DOMUS_DATE_FORMAT` | `02/01/2006`      | Go layout; the default is DD/MM/YYYY   |
 | `DOMUS_WEEK_START`  | `monday`          | Day name                               |
 | `DOMUS_CURRENCY`    | `GBP`             | ISO code; amounts are stored in pence  |
+
+## Devices, sign-in and admin
+
+Domus knows two kinds of device:
+
+- **Household displays**, such as the wall iPad. They show the board to everyone, and kids use them to claim and complete chores. An adult unlocks **admin** on a display by tapping their picture and entering their **PIN**. Admin locks again after 2 idle minutes (configurable), or when you tap **Lock**. Five wrong PINs lock that person out for five minutes. Register a display during setup or under **Admin › Devices**, and remove it from there too.
+- **Personal devices**: adults' phones, laptops and desktops. Sign in with **email and password** to manage everything from anywhere. You stay signed in for 30 days of inactivity, and sessions can be signed out from **Admin › Devices**.
+
+Any other device (not a display, not signed in) only sees the sign-in page: no board, names or photos.
+
+Admin covers family members (with an emoji or photo, PINs and sign-ins), chores (assigned or shared, repeating daily/weekly/fortnightly/monthly, points and £), rewards, devices and settings (household name, timezone, when the board's day rolls over, admin auto-lock). Every change appears in the activity feed.
+
+If Domus is reachable from outside your home network, put it behind a reverse proxy with HTTPS (e.g. Caddy or Traefik) and forward `X-Forwarded-Proto` so cookies are marked `Secure`. Photos are stored next to the database, in `avatars/`.
 
 ## Install on iPad
 
 1. Open `http://<your-server>:8080` in Safari.
 2. Tap **Share → Add to Home Screen**. Domus then opens fullscreen like an app.
-3. For a wall display, turn on **Settings → Accessibility → Guided Access** and start it from inside Domus. This keeps the iPad locked to the board.
+3. Make it the household display: tick the box during setup, or sign in and use **Admin › Devices → Make this a household display**.
+4. For a wall display, turn on **Settings → Accessibility → Guided Access** and start it from inside Domus. This keeps the iPad locked to the board.
 
 ## Development
 
@@ -76,12 +92,15 @@ task migrate:status
 cmd/domus/          entry point
 internal/config/    env config + UK defaults
 internal/locale/    date, week and money formatting
-internal/server/    HTTP routes and handlers
-internal/auth/      PIN hashing (argon2id)
-internal/chores/    chore lifecycle: recurrence, claim, complete, approve, redeem
+internal/server/    HTTP routes, middleware and handlers (board, setup, sign-in, admin)
+internal/auth/      PINs and passwords (argon2id), household displays, sessions, rate limits
+internal/settings/  per-household settings (timezone, day reset, admin idle timeout)
+internal/household/ people, credentials and rewards admin
+internal/avatar/    emoji picker and photo uploads
+internal/chores/    chore lifecycle: recurrence presets, admin edits, claim, complete, approve, redeem
 internal/store/     SQLite, embedded goose migrations, sqlc queries
 internal/store/dbq/ sqlc-generated code (don't edit; run task generate)
-web/templates/      html/template views
+web/templates/      html/template layout, partials and pages
 web/static/         htmx, CSS, PWA manifest, service worker, icons
 ```
 
@@ -89,7 +108,9 @@ web/static/         htmx, CSS, PWA manifest, service worker, icons
 
 Every table has a `household_id`, so one database can hold several households. A self-hosted install has just one.
 
-- **people**: adults and children, each with a colour, an avatar and an optional PIN (stored as an argon2id hash).
+- **households** and **household_settings**: name, timezone, when the board's day rolls over and the admin idle timeout.
+- **people**: adults and children, each with a colour and an avatar (an emoji or an uploaded photo). Adults can have a PIN and an email + password, all stored as argon2id hashes.
+- **devices** are registered household displays, and **sessions** are adult sign-ins (PIN on a display, or password elsewhere). Only sha256 hashes of their tokens are stored.
 - **chores** are either *assigned* to one person or sit in the shared *pool*. Recurrence is an iCal `RRULE` evaluated in the household timezone. A chore can award points, pence or both, and can require an adult's approval.
 - **chore_occurrences**: the concrete instances that appear on the board. They're materialised 14 days ahead on startup, then refreshed every hour. Each pool occurrence can be claimed by one person.
 - **completions** are pending, approved or rejected. Only approved completions credit the **ledger_entries** table, and balances are the sum of a person's entries. Rewards are bought from the ledger through **redemptions**.

@@ -1,0 +1,27 @@
+{{define "bodyclass"}}admin{{end}}
+{{define "content"}}
+{{template "admin_nav" .}}
+<main class="admin__main">
+  <h1>Hello{{with .Viewer.Adult}} {{.Name}}{{end}}</h1>
+  <ul class="tiles">
+    <li><a class="tile" href="/admin/people"><strong>{{.Data.People}}</strong><span>People</span></a></li>
+    <li><a class="tile" href="/admin/chores"><strong>{{.Data.Chores}}</strong><span>Chores</span></a></li>
+    <li><a class="tile" href="/admin/rewards"><strong>{{.Data.Rewards}}</strong><span>Rewards</span></a></li>
+    <li><div class="tile"><strong>{{.Data.Pending}}</strong><span>Waiting for approval</span></div></li>
+  </ul>
+
+  <section class="card">
+    <h2>Recent activity</h2>
+    {{if .Data.Activity}}
+    <ul class="feed">
+      {{range .Data.Activity}}
+      <li><span><strong>{{if .ActorName}}{{deref .ActorName}}{{else}}Someone{{end}}</strong> {{activity .Verb}}</span>
+          <time class="muted">{{when .CreatedAt}}</time></li>
+      {{end}}
+    </ul>
+    {{else}}
+    <p class="muted">Nothing yet.</p>
+    {{end}}
+  </section>
+</main>
+{{end}}

@@ -3,6 +3,8 @@
 package locale
 
 import (
+	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -107,4 +109,65 @@ func groupThousands(s string) string {
 		b.WriteString(s[i : i+3])
 	}
 	return b.String()
+}
+
+// ErrInvalidMoney is returned by ParseMoney for input it can't read.
+var ErrInvalidMoney = errors.New("enter an amount like 1.50")
+
+// ParseMoney reads an amount typed into a form ("1.50", "£1.50", "0.5",
+// "2", "1,000.00") as minor units (pence). Negative amounts and more than
+// two decimal places are rejected; an empty string is zero.
+func (l Locale) ParseMoney(s string) (int64, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, nil
+	}
+	if sym, ok := currencySymbols[l.Currency]; ok {
+		s = strings.TrimPrefix(s, sym)
+	}
+	s = strings.ReplaceAll(strings.TrimSpace(s), ",", "")
+	if s == "" {
+		return 0, ErrInvalidMoney
+	}
+	whole, frac, hasFrac := strings.Cut(s, ".")
+	if whole == "" {
+		whole = "0"
+	}
+	if hasFrac && (len(frac) == 0 || len(frac) > 2) {
+		return 0, ErrInvalidMoney
+	}
+	for len(frac) < 2 {
+		frac += "0"
+	}
+	if !allDigits(whole) || !allDigits(frac) || len(whole) > 12 {
+		return 0, ErrInvalidMoney
+	}
+	w, err := strconv.ParseInt(whole, 10, 64)
+	if err != nil {
+		return 0, ErrInvalidMoney
+	}
+	f, err := strconv.ParseInt(frac, 10, 64)
+	if err != nil {
+		return 0, ErrInvalidMoney
+	}
+	return w*100 + f, nil
+}
+
+// FormatMoneyInput formats pence for a form field, without the symbol or
+// thousands separators (150 -> "1.50").
+func FormatMoneyInput(minor int64) string {
+	sign := ""
+	if minor < 0 {
+		sign, minor = "-", -minor
+	}
+	return fmt.Sprintf("%s%d.%02d", sign, minor/100, minor%100)
+}
+
+func allDigits(s string) bool {
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return s != ""
 }

@@ -51,17 +51,33 @@ var (
 	ErrInvalidRRule        = errors.New("invalid recurrence rule")
 )
 
+// Window is how many days ahead occurrences are materialised.
+const Window = 14
+
+// LocationFunc returns the timezone recurrence is evaluated in for a
+// household. It is a func so a timezone change in settings applies without a
+// restart.
+type LocationFunc func(ctx context.Context, householdID int64) *time.Location
+
+// FixedLocation returns a LocationFunc that always returns loc.
+func FixedLocation(loc *time.Location) LocationFunc {
+	return func(context.Context, int64) *time.Location { return loc }
+}
+
 // Service runs chore operations for the households in a store.
 type Service struct {
 	st  *store.Store
-	loc *time.Location
+	loc LocationFunc
 	now func() time.Time
 }
 
-// New returns a Service that evaluates recurrence in loc.
-func New(st *store.Store, loc *time.Location) *Service {
+// New returns a Service that evaluates recurrence in the zone loc returns.
+func New(st *store.Store, loc LocationFunc) *Service {
 	return &Service{st: st, loc: loc, now: time.Now}
 }
+
+// SetClock replaces the clock (tests).
+func (s *Service) SetClock(now func() time.Time) { s.now = now }
 
 // ValidateRRule checks an RFC 5545 RRULE (without the "RRULE:" prefix).
 func ValidateRRule(rule string) error {
@@ -75,8 +91,8 @@ func ValidateRRule(rule string) error {
 // for the local dates [from, from+days). It is idempotent and returns the
 // number of new occurrences.
 func (s *Service) Materialise(ctx context.Context, householdID int64, from time.Time, days int) (int, error) {
-	start := s.midnight(from)
-	end := time.Date(start.Year(), start.Month(), start.Day()+days-1, 0, 0, 0, 0, s.loc)
+	loc := s.loc(ctx, householdID)
+	start, end := window(from, days, loc)
 
 	chores, err := s.st.Q.ListChores(ctx, householdID)
 	if err != nil {
@@ -86,33 +102,51 @@ func (s *Service) Materialise(ctx context.Context, householdID int64, from time.
 	created := 0
 	err = s.st.WithTx(ctx, func(q *dbq.Queries) error {
 		for _, c := range chores {
-			dates, err := s.occurrenceDates(c, start, end)
+			n, err := materialiseChore(ctx, q, c, start, end, loc)
 			if err != nil {
-				return fmt.Errorf("chore %d: %w", c.ID, err)
+				return err
 			}
-			for _, d := range dates {
-				n, err := q.InsertOccurrence(ctx, dbq.InsertOccurrenceParams{
-					HouseholdID: householdID,
-					ChoreID:     c.ID,
-					DueOn:       d,
-					AssigneeID:  c.AssigneeID,
-				})
-				if err != nil {
-					return fmt.Errorf("insert occurrence: %w", err)
-				}
-				created += int(n)
-			}
+			created += n
 		}
 		return nil
 	})
 	return created, err
 }
 
+// window returns local midnight on from's date and days-1 days later.
+func window(from time.Time, days int, loc *time.Location) (start, end time.Time) {
+	y, m, d := from.In(loc).Date()
+	start = time.Date(y, m, d, 0, 0, 0, 0, loc)
+	end = time.Date(y, m, d+days-1, 0, 0, 0, 0, loc)
+	return start, end
+}
+
+func materialiseChore(ctx context.Context, q *dbq.Queries, c dbq.Chore, start, end time.Time, loc *time.Location) (int, error) {
+	dates, err := occurrenceDates(c, start, end, loc)
+	if err != nil {
+		return 0, fmt.Errorf("chore %d: %w", c.ID, err)
+	}
+	created := 0
+	for _, d := range dates {
+		n, err := q.InsertOccurrence(ctx, dbq.InsertOccurrenceParams{
+			HouseholdID: c.HouseholdID,
+			ChoreID:     c.ID,
+			DueOn:       d,
+			AssigneeID:  c.AssigneeID,
+		})
+		if err != nil {
+			return 0, fmt.Errorf("insert occurrence: %w", err)
+		}
+		created += int(n)
+	}
+	return created, nil
+}
+
 // occurrenceDates returns the local dates in [start, end] on which c is due.
 // One-off chores (no rrule) are due on starts_on, and are still created when
 // that date is already in the past so they don't silently disappear.
-func (s *Service) occurrenceDates(c dbq.Chore, start, end time.Time) ([]string, error) {
-	dtstart, err := time.ParseInLocation(DateLayout, c.StartsOn, s.loc)
+func occurrenceDates(c dbq.Chore, start, end time.Time, loc *time.Location) ([]string, error) {
+	dtstart, err := time.ParseInLocation(DateLayout, c.StartsOn, loc)
 	if err != nil {
 		return nil, fmt.Errorf("starts_on: %w", err)
 	}
@@ -135,7 +169,7 @@ func (s *Service) occurrenceDates(c dbq.Chore, start, end time.Time) ([]string, 
 
 	var dates []string
 	for _, t := range r.Between(start, end, true) {
-		dates = append(dates, t.In(s.loc).Format(DateLayout))
+		dates = append(dates, t.In(loc).Format(DateLayout))
 	}
 	return dates, nil
 }
@@ -402,11 +436,6 @@ func (s *Service) activity(ctx context.Context, q *dbq.Queries, householdID, act
 		return fmt.Errorf("activity: %w", err)
 	}
 	return nil
-}
-
-func (s *Service) midnight(t time.Time) time.Time {
-	y, m, d := t.In(s.loc).Date()
-	return time.Date(y, m, d, 0, 0, 0, 0, s.loc)
 }
 
 // getPerson loads an active person, scoped to the household so IDs from

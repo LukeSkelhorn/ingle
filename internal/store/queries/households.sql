@@ -7,3 +7,6 @@ SELECT * FROM households WHERE id = ?;
 
 -- name: GetFirstHousehold :one
 SELECT * FROM households ORDER BY id LIMIT 1;
+
+-- name: UpdateHouseholdName :exec
+UPDATE households SET name = ? WHERE id = ?;

@@ -1,0 +1,59 @@
+{{define "avatar"}}<span class="avatar avatar--{{.Size}}" style="--person: {{.Colour}}" aria-hidden="true">
+  {{- if .Photo}}<img src="{{.Photo}}" alt="">{{else if .Emoji}}{{.Emoji}}{{else}}{{.Initial}}{{end -}}
+</span>{{end}}
+
+{{define "err"}}{{with .}}<p class="field__err" role="alert">{{.}}</p>{{end}}{{end}}
+
+{{define "flash"}}{{with .Flash}}<p class="flash" role="status">{{.}}</p>{{end}}{{end}}
+
+{{define "admin_nav"}}
+<header class="admin__bar">
+  <a class="admin__brand" href="/admin">{{if .Household}}{{.Household}}{{else}}Domus{{end}}</a>
+  <nav class="admin__nav" aria-label="Admin">
+    <a href="/admin/people"{{if eq .Nav "people"}} aria-current="page"{{end}}>People</a>
+    <a href="/admin/chores"{{if eq .Nav "chores"}} aria-current="page"{{end}}>Chores</a>
+    <a href="/admin/rewards"{{if eq .Nav "rewards"}} aria-current="page"{{end}}>Rewards</a>
+    <a href="/admin/devices"{{if eq .Nav "devices"}} aria-current="page"{{end}}>Devices</a>
+    <a href="/admin/settings"{{if eq .Nav "settings"}} aria-current="page"{{end}}>Settings</a>
+  </nav>
+  <div class="admin__me">
+    {{with .Viewer.Adult}}{{template "avatar" (avatar . "sm")}} <span class="admin__name">{{.Name}}</span>{{end}}
+    <a class="btn btn--ghost" href="/">Board</a>
+    <form method="post" action="{{if .Viewer.OnDisplayAdmin}}/admin/lock{{else}}/signout{{end}}">
+      <button class="btn btn--ghost" type="submit">{{if .Viewer.OnDisplayAdmin}}Lock{{else}}Sign out{{end}}</button>
+    </form>
+  </div>
+</header>
+{{end}}
+
+{{/* dict "Selected" "#RRGGBB" "Colours" []string "Err" string */}}
+{{define "colour_picker"}}
+<fieldset class="field">
+  <legend>Colour</legend>
+  <div class="swatches">
+    {{range .Colours}}
+    <label class="swatch" style="--swatch: {{.}}">
+      <input type="radio" name="colour" value="{{.}}"{{if eq . $.Selected}} checked{{end}} required>
+      <span class="visually-hidden">{{.}}</span>
+    </label>
+    {{end}}
+  </div>
+  {{template "err" .Err}}
+</fieldset>
+{{end}}
+
+{{/* dict "Selected" emoji "Emojis" []string "Err" string */}}
+{{define "emoji_picker"}}
+<fieldset class="field">
+  <legend>Emoji</legend>
+  <div class="emojis">
+    {{range .Emojis}}
+    <label class="emoji">
+      <input type="radio" name="emoji" value="{{.}}"{{if eq . $.Selected}} checked{{end}}>
+      <span>{{.}}</span>
+    </label>
+    {{end}}
+  </div>
+  {{template "err" .Err}}
+</fieldset>
+{{end}}

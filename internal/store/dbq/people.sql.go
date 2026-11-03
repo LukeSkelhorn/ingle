@@ -24,10 +24,68 @@ func (q *Queries) ArchivePerson(ctx context.Context, arg ArchivePersonParams) er
 	return err
 }
 
+const clearPersonLogin = `-- name: ClearPersonLogin :exec
+UPDATE people SET email = NULL, password_hash = NULL WHERE household_id = ? AND id = ?
+`
+
+type ClearPersonLoginParams struct {
+	HouseholdID int64 `json:"household_id"`
+	ID          int64 `json:"id"`
+}
+
+func (q *Queries) ClearPersonLogin(ctx context.Context, arg ClearPersonLoginParams) error {
+	_, err := q.db.ExecContext(ctx, clearPersonLogin, arg.HouseholdID, arg.ID)
+	return err
+}
+
+const clearPersonPIN = `-- name: ClearPersonPIN :exec
+UPDATE people SET pin_hash = NULL WHERE household_id = ? AND id = ?
+`
+
+type ClearPersonPINParams struct {
+	HouseholdID int64 `json:"household_id"`
+	ID          int64 `json:"id"`
+}
+
+func (q *Queries) ClearPersonPIN(ctx context.Context, arg ClearPersonPINParams) error {
+	_, err := q.db.ExecContext(ctx, clearPersonPIN, arg.HouseholdID, arg.ID)
+	return err
+}
+
+const countActiveAssignedChores = `-- name: CountActiveAssignedChores :one
+SELECT COUNT(*) FROM chores
+WHERE household_id = ? AND assignee_id = ? AND archived_at IS NULL
+`
+
+type CountActiveAssignedChoresParams struct {
+	HouseholdID int64  `json:"household_id"`
+	AssigneeID  *int64 `json:"assignee_id"`
+}
+
+func (q *Queries) CountActiveAssignedChores(ctx context.Context, arg CountActiveAssignedChoresParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countActiveAssignedChores, arg.HouseholdID, arg.AssigneeID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countAdultsWithCredential = `-- name: CountAdultsWithCredential :one
+SELECT COUNT(*) FROM people
+WHERE household_id = ? AND kind = 'adult' AND archived_at IS NULL
+  AND (pin_hash IS NOT NULL OR password_hash IS NOT NULL)
+`
+
+func (q *Queries) CountAdultsWithCredential(ctx context.Context, householdID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countAdultsWithCredential, householdID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createPerson = `-- name: CreatePerson :one
 INSERT INTO people (household_id, name, kind, colour, avatar, sort_order, created_at)
 VALUES (?, ?, ?, ?, ?, ?, ?)
-RETURNING id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at
+RETURNING id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash
 `
 
 type CreatePersonParams struct {
@@ -62,12 +120,14 @@ func (q *Queries) CreatePerson(ctx context.Context, arg CreatePersonParams) (Per
 		&i.SortOrder,
 		&i.ArchivedAt,
 		&i.CreatedAt,
+		&i.Email,
+		&i.PasswordHash,
 	)
 	return i, err
 }
 
 const getPerson = `-- name: GetPerson :one
-SELECT id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at FROM people WHERE household_id = ? AND id = ?
+SELECT id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash FROM people WHERE household_id = ? AND id = ?
 `
 
 type GetPersonParams struct {
@@ -89,12 +149,80 @@ func (q *Queries) GetPerson(ctx context.Context, arg GetPersonParams) (Person, e
 		&i.SortOrder,
 		&i.ArchivedAt,
 		&i.CreatedAt,
+		&i.Email,
+		&i.PasswordHash,
 	)
 	return i, err
 }
 
+const getPersonByEmail = `-- name: GetPersonByEmail :one
+SELECT id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash FROM people WHERE email = ? AND archived_at IS NULL
+`
+
+func (q *Queries) GetPersonByEmail(ctx context.Context, email *string) (Person, error) {
+	row := q.db.QueryRowContext(ctx, getPersonByEmail, email)
+	var i Person
+	err := row.Scan(
+		&i.ID,
+		&i.HouseholdID,
+		&i.Name,
+		&i.Kind,
+		&i.Colour,
+		&i.Avatar,
+		&i.PinHash,
+		&i.SortOrder,
+		&i.ArchivedAt,
+		&i.CreatedAt,
+		&i.Email,
+		&i.PasswordHash,
+	)
+	return i, err
+}
+
+const listArchivedPeople = `-- name: ListArchivedPeople :many
+SELECT id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash FROM people
+WHERE household_id = ? AND archived_at IS NOT NULL
+ORDER BY name
+`
+
+func (q *Queries) ListArchivedPeople(ctx context.Context, householdID int64) ([]Person, error) {
+	rows, err := q.db.QueryContext(ctx, listArchivedPeople, householdID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Person{}
+	for rows.Next() {
+		var i Person
+		if err := rows.Scan(
+			&i.ID,
+			&i.HouseholdID,
+			&i.Name,
+			&i.Kind,
+			&i.Colour,
+			&i.Avatar,
+			&i.PinHash,
+			&i.SortOrder,
+			&i.ArchivedAt,
+			&i.CreatedAt,
+			&i.Email,
+			&i.PasswordHash,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPeople = `-- name: ListPeople :many
-SELECT id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at FROM people
+SELECT id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash FROM people
 WHERE household_id = ? AND archived_at IS NULL
 ORDER BY sort_order, name
 `
@@ -119,6 +247,8 @@ func (q *Queries) ListPeople(ctx context.Context, householdID int64) ([]Person, 
 			&i.SortOrder,
 			&i.ArchivedAt,
 			&i.CreatedAt,
+			&i.Email,
+			&i.PasswordHash,
 		); err != nil {
 			return nil, err
 		}
@@ -131,6 +261,42 @@ func (q *Queries) ListPeople(ctx context.Context, householdID int64) ([]Person, 
 		return nil, err
 	}
 	return items, nil
+}
+
+const setPersonEmail = `-- name: SetPersonEmail :exec
+UPDATE people SET email = ? WHERE household_id = ? AND id = ?
+`
+
+type SetPersonEmailParams struct {
+	Email       *string `json:"email"`
+	HouseholdID int64   `json:"household_id"`
+	ID          int64   `json:"id"`
+}
+
+func (q *Queries) SetPersonEmail(ctx context.Context, arg SetPersonEmailParams) error {
+	_, err := q.db.ExecContext(ctx, setPersonEmail, arg.Email, arg.HouseholdID, arg.ID)
+	return err
+}
+
+const setPersonLogin = `-- name: SetPersonLogin :exec
+UPDATE people SET email = ?, password_hash = ? WHERE household_id = ? AND id = ?
+`
+
+type SetPersonLoginParams struct {
+	Email        *string `json:"email"`
+	PasswordHash *string `json:"password_hash"`
+	HouseholdID  int64   `json:"household_id"`
+	ID           int64   `json:"id"`
+}
+
+func (q *Queries) SetPersonLogin(ctx context.Context, arg SetPersonLoginParams) error {
+	_, err := q.db.ExecContext(ctx, setPersonLogin,
+		arg.Email,
+		arg.PasswordHash,
+		arg.HouseholdID,
+		arg.ID,
+	)
+	return err
 }
 
 const setPersonPIN = `-- name: SetPersonPIN :exec
@@ -148,10 +314,24 @@ func (q *Queries) SetPersonPIN(ctx context.Context, arg SetPersonPINParams) erro
 	return err
 }
 
+const unarchivePerson = `-- name: UnarchivePerson :exec
+UPDATE people SET archived_at = NULL WHERE household_id = ? AND id = ?
+`
+
+type UnarchivePersonParams struct {
+	HouseholdID int64 `json:"household_id"`
+	ID          int64 `json:"id"`
+}
+
+func (q *Queries) UnarchivePerson(ctx context.Context, arg UnarchivePersonParams) error {
+	_, err := q.db.ExecContext(ctx, unarchivePerson, arg.HouseholdID, arg.ID)
+	return err
+}
+
 const updatePerson = `-- name: UpdatePerson :one
 UPDATE people SET name = ?, kind = ?, colour = ?, avatar = ?, sort_order = ?
 WHERE household_id = ? AND id = ?
-RETURNING id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at
+RETURNING id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash
 `
 
 type UpdatePersonParams struct {
@@ -186,6 +366,8 @@ func (q *Queries) UpdatePerson(ctx context.Context, arg UpdatePersonParams) (Per
 		&i.SortOrder,
 		&i.ArchivedAt,
 		&i.CreatedAt,
+		&i.Email,
+		&i.PasswordHash,
 	)
 	return i, err
 }

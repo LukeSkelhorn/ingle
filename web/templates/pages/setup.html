@@ -1,0 +1,65 @@
+{{define "bodyclass"}}page{{end}}
+{{define "content"}}
+<main class="card card--narrow">
+  <h1>Welcome to Domus</h1>
+  <p class="muted">Set up your household and the first adult. You can add everyone else afterwards.</p>
+  <form method="post" action="/setup" class="stack">
+    <fieldset class="stack">
+      <legend>Household</legend>
+      <label class="field">
+        <span>Household name</span>
+        <input name="household_name" value="{{.Data.HouseholdName}}" required maxlength="50" autocomplete="off">
+        {{template "err" index .Errors "household_name"}}
+      </label>
+    </fieldset>
+
+    <fieldset class="stack">
+      <legend>You</legend>
+      <label class="field">
+        <span>Your name</span>
+        <input name="name" value="{{.Data.Name}}" required maxlength="50" autocomplete="given-name">
+        {{template "err" index .Errors "name"}}
+      </label>
+      {{template "colour_picker" (dict "Selected" .Data.Colour "Colours" .Data.Colours "Err" (index .Errors "colour"))}}
+      {{template "emoji_picker" (dict "Selected" .Data.Emoji "Emojis" .Data.Emojis "Err" (index .Errors "emoji"))}}
+      <label class="field">
+        <span>Email</span>
+        <input type="email" name="email" value="{{.Data.Email}}" required autocomplete="email">
+        <small class="muted">Use this with your password to manage Domus from your phone or computer.</small>
+        {{template "err" index .Errors "email"}}
+      </label>
+      <label class="field">
+        <span>Password</span>
+        <input type="password" name="password" required minlength="10" maxlength="128" autocomplete="new-password">
+        {{template "err" index .Errors "password"}}
+      </label>
+      <label class="field">
+        <span>Confirm password</span>
+        <input type="password" name="password_confirm" required minlength="10" maxlength="128" autocomplete="new-password">
+        {{template "err" index .Errors "password_confirm"}}
+      </label>
+      <label class="field">
+        <span>PIN (4–6 digits)</span>
+        <input type="password" name="pin" required inputmode="numeric" pattern="[0-9]{4,6}" minlength="4" maxlength="6" autocomplete="off">
+        <small class="muted">Unlocks admin on the household display, so the kids can't change settings.</small>
+        {{template "err" index .Errors "pin"}}
+      </label>
+    </fieldset>
+
+    <fieldset class="stack">
+      <legend>This device</legend>
+      <label class="check">
+        <input type="checkbox" name="use_as_display" value="1"{{if .Data.UseAsDisplay}} checked{{end}}>
+        <span>Use this device as the household display (e.g. the wall tablet)</span>
+      </label>
+      <label class="field" data-show-when="use_as_display=1">
+        <span>Display name</span>
+        <input name="display_name" value="{{.Data.DisplayName}}" maxlength="50">
+        {{template "err" index .Errors "display_name"}}
+      </label>
+    </fieldset>
+
+    <button class="btn btn--primary btn--block" type="submit">Set up Domus</button>
+  </form>
+</main>
+{{end}}

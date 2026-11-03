@@ -1,0 +1,111 @@
+{{define "bodyclass"}}admin{{end}}
+{{define "content"}}
+{{template "admin_nav" .}}
+<main class="admin__main">
+  <p><a href="/admin/people">‹ People</a></p>
+  <h1>{{if .Data.ID}}{{.Data.Name}}{{else}}Add someone{{end}}</h1>
+  {{template "flash" .}}
+  {{if .Data.Archived}}<p class="flash">Archived. Restore them from the People list to show them on the board again.</p>{{end}}
+
+  <form class="card stack" method="post" enctype="multipart/form-data"
+        action="{{if .Data.ID}}/admin/people/{{.Data.ID}}{{else}}/admin/people{{end}}">
+    <label class="field">
+      <span>Name</span>
+      <input name="name" value="{{.Data.Name}}" required maxlength="50" autocomplete="off">
+      {{template "err" index .Errors "name"}}
+    </label>
+    <fieldset class="field">
+      <legend>They are</legend>
+      <div class="segmented">
+        <label><input type="radio" name="kind" value="child"{{if eq .Data.Kind "child"}} checked{{end}}> <span>Child</span></label>
+        <label><input type="radio" name="kind" value="adult"{{if eq .Data.Kind "adult"}} checked{{end}}> <span>Adult</span></label>
+      </div>
+      <small class="muted">Only adults can have a PIN or sign-in and manage the household.</small>
+      {{template "err" index .Errors "kind"}}
+    </fieldset>
+    {{template "colour_picker" (dict "Selected" .Data.Colour "Colours" .Data.Colours "Err" (index .Errors "colour"))}}
+
+    <fieldset class="field">
+      <legend>Picture</legend>
+      <div class="segmented">
+        <label><input type="radio" name="avatar_mode" value="emoji"{{if eq .Data.AvatarMode "emoji"}} checked{{end}}> <span>Emoji</span></label>
+        <label><input type="radio" name="avatar_mode" value="photo"{{if eq .Data.AvatarMode "photo"}} checked{{end}}> <span>Photo</span></label>
+        <label><input type="radio" name="avatar_mode" value="none"{{if eq .Data.AvatarMode "none"}} checked{{end}}> <span>Initial</span></label>
+      </div>
+    </fieldset>
+    <div data-show-when="avatar_mode=emoji">
+    {{template "emoji_picker" (dict "Selected" .Data.Emoji "Emojis" .Data.Emojis "Err" (index .Errors "emoji"))}}
+    </div>
+    <label class="field" data-show-when="avatar_mode=photo">
+      <span>Photo</span>
+      {{with .Data.Photo}}<img class="avatar avatar--lg" src="{{.}}" alt="Current photo">{{end}}
+      <input type="file" name="photo" accept="image/jpeg,image/png,image/gif,image/*">
+      <small class="muted">JPEG, PNG or GIF up to 8 MB. It's cropped to a square.</small>
+      {{template "err" index .Errors "photo"}}
+    </label>
+    <label class="field field--short">
+      <span>Order on the board</span>
+      <input type="number" name="sort_order" value="{{.Data.SortOrder}}" min="0" max="999" inputmode="numeric">
+      {{template "err" index .Errors "sort_order"}}
+    </label>
+    <button class="btn btn--primary" type="submit">{{if .Data.ID}}Save{{else}}Add{{end}}</button>
+  </form>
+
+  {{if and .Data.ID .Data.IsAdult (not .Data.Archived)}}
+  <section class="card stack">
+    <h2>PIN</h2>
+    <p class="muted">Unlocks admin on a household display. {{if .Data.HasPIN}}A PIN is set.{{else}}No PIN set.{{end}}</p>
+    <form class="stack" method="post" action="/admin/people/{{.Data.ID}}/pin">
+      <label class="field field--short">
+        <span>New PIN (4–6 digits)</span>
+        <input type="password" name="pin" required inputmode="numeric" pattern="[0-9]{4,6}" minlength="4" maxlength="6" autocomplete="off">
+        {{template "err" index .Errors "pin"}}
+      </label>
+      <label class="field field--short">
+        <span>Confirm PIN</span>
+        <input type="password" name="pin_confirm" required inputmode="numeric" pattern="[0-9]{4,6}" minlength="4" maxlength="6" autocomplete="off">
+        {{template "err" index .Errors "pin_confirm"}}
+      </label>
+      <button class="btn" type="submit">{{if .Data.HasPIN}}Change PIN{{else}}Set PIN{{end}}</button>
+    </form>
+    {{if .Data.HasPIN}}
+    <form method="post" action="/admin/people/{{.Data.ID}}/pin/clear"><button class="btn btn--danger" type="submit">Remove PIN</button></form>
+    {{end}}
+  </section>
+
+  <section class="card stack">
+    <h2>Sign-in</h2>
+    <p class="muted">Email and password for managing Domus from a phone or computer.</p>
+    <form class="stack" method="post" action="/admin/people/{{.Data.ID}}/login">
+      <label class="field">
+        <span>Email</span>
+        <input type="email" name="email" value="{{.Data.Email}}" required autocomplete="off">
+        {{template "err" index .Errors "email"}}
+      </label>
+      <label class="field">
+        <span>{{if .Data.HasLogin}}New password (leave blank to keep){{else}}Password{{end}}</span>
+        <input type="password" name="password" minlength="10" maxlength="128" autocomplete="new-password"{{if not .Data.HasLogin}} required{{end}}>
+        {{template "err" index .Errors "password"}}
+      </label>
+      <label class="field">
+        <span>Confirm password</span>
+        <input type="password" name="password_confirm" minlength="10" maxlength="128" autocomplete="new-password"{{if not .Data.HasLogin}} required{{end}}>
+        {{template "err" index .Errors "password_confirm"}}
+      </label>
+      <button class="btn" type="submit">Save sign-in</button>
+    </form>
+    {{if .Data.HasLogin}}
+    <form method="post" action="/admin/people/{{.Data.ID}}/login/clear"><button class="btn btn--danger" type="submit">Remove sign-in</button></form>
+    {{end}}
+  </section>
+  {{end}}
+
+  {{if and .Data.ID (not .Data.Archived)}}
+  <section class="card stack">
+    <h2>Archive</h2>
+    <p class="muted">Hides {{.Data.Name}} from the board. Their history and balance are kept, and you can restore them later.</p>
+    <form method="post" action="/admin/people/{{.Data.ID}}/archive"><button class="btn btn--danger" type="submit">Archive {{.Data.Name}}</button></form>
+  </section>
+  {{end}}
+</main>
+{{end}}

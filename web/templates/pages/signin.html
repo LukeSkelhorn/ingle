@@ -1,0 +1,19 @@
+{{define "bodyclass"}}page{{end}}
+{{define "content"}}
+<main class="card card--narrow">
+  <h1>Sign in</h1>
+  <p class="muted">Adults can sign in to manage the household from a phone or computer.</p>
+  {{template "flash" .}}
+  <form method="post" action="/signin" class="stack">
+    <label class="field">
+      <span>Email</span>
+      <input type="email" name="email" value="{{.Data.Email}}" required autocomplete="username" autofocus>
+    </label>
+    <label class="field">
+      <span>Password</span>
+      <input type="password" name="password" required autocomplete="current-password">
+    </label>
+    <button class="btn btn--primary btn--block" type="submit">Sign in</button>
+  </form>
+</main>
+{{end}}

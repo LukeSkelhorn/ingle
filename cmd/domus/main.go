@@ -8,13 +8,18 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
+	"github.com/lukeskelhorn/domus/internal/auth"
+	"github.com/lukeskelhorn/domus/internal/avatar"
 	"github.com/lukeskelhorn/domus/internal/chores"
 	"github.com/lukeskelhorn/domus/internal/config"
+	householdpkg "github.com/lukeskelhorn/domus/internal/household"
 	"github.com/lukeskelhorn/domus/internal/locale"
 	"github.com/lukeskelhorn/domus/internal/server"
+	"github.com/lukeskelhorn/domus/internal/settings"
 	"github.com/lukeskelhorn/domus/internal/store"
 )
 
@@ -46,14 +51,37 @@ func run(log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	go materialiseLoop(ctx, log, chores.New(st, cfg.Location), household.ID)
+	set := settings.New(st)
+	// DOMUS_TZ seeds the timezone for a new household; after that it is
+	// changed under Admin › Settings.
+	if err := set.Ensure(ctx, household.ID, cfg.Location); err != nil {
+		return err
+	}
+	avatars, err := avatar.NewStore(filepath.Join(filepath.Dir(cfg.DBPath), "avatars"))
+	if err != nil {
+		return err
+	}
+	authSvc := auth.New(st, set)
+	choreSvc := chores.New(st, set.Location)
 
-	srv, err := server.New(db, locale.Locale{
-		Location:   cfg.Location,
-		DateFormat: cfg.DateFormat,
-		WeekStart:  cfg.WeekStart,
-		Currency:   cfg.Currency,
-	}, log)
+	go maintenanceLoop(ctx, log, set, choreSvc, authSvc, household.ID)
+
+	srv, err := server.New(server.Deps{
+		Store:       st,
+		HouseholdID: household.ID,
+		Auth:        authSvc,
+		Settings:    set,
+		Chores:      choreSvc,
+		Household:   householdpkg.New(st),
+		Avatars:     avatars,
+		Locale: locale.Locale{
+			Location:   cfg.Location,
+			DateFormat: cfg.DateFormat,
+			WeekStart:  cfg.WeekStart,
+			Currency:   cfg.Currency,
+		},
+		Log: log,
+	})
 	if err != nil {
 		return err
 	}
@@ -85,22 +113,29 @@ func run(log *slog.Logger) error {
 	return httpSrv.Shutdown(shutdownCtx)
 }
 
-// materialiseWindow is how many days ahead chore occurrences are created.
-const materialiseWindow = 14
-
-// materialiseLoop keeps the rolling window of chore occurrences filled: once
-// at startup, then hourly so new days (and newly added chores) appear.
-func materialiseLoop(ctx context.Context, log *slog.Logger, svc *chores.Service, householdID int64) {
+// maintenanceLoop runs once at startup and then hourly: it keeps the rolling
+// window of chore occurrences filled (so new days and newly added chores
+// appear) from the household's current board day, and sweeps expired
+// sessions.
+func maintenanceLoop(ctx context.Context, log *slog.Logger, set *settings.Service, svc *chores.Service, authSvc *auth.Service, householdID int64) {
 	run := func() {
-		n, err := svc.Materialise(ctx, householdID, time.Now(), materialiseWindow)
+		s, err := set.Get(ctx, householdID)
+		if err != nil {
+			if ctx.Err() == nil {
+				log.Error("load settings", slog.Any("err", err))
+			}
+			return
+		}
+		n, err := svc.Materialise(ctx, householdID, s.BoardDay(time.Now()), chores.Window)
 		if err != nil {
 			if ctx.Err() == nil {
 				log.Error("materialise chores", slog.Any("err", err))
 			}
-			return
-		}
-		if n > 0 {
+		} else if n > 0 {
 			log.Info("materialised chore occurrences", slog.Int("created", n))
+		}
+		if _, err := authSvc.Sweep(ctx, householdID); err != nil && ctx.Err() == nil {
+			log.Error("sweep sessions", slog.Any("err", err))
 		}
 	}
 	run()

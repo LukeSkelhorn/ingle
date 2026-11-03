@@ -110,3 +110,28 @@ func (s *Store) EnsureHousehold(ctx context.Context, name string, now time.Time)
 	}
 	return h, nil
 }
+
+// Activity describes one row for the activity log.
+type Activity struct {
+	HouseholdID int64
+	ActorID     *int64
+	Verb        string // e.g. "person.created"
+	SubjectType string // e.g. "person"
+	SubjectID   int64
+	At          time.Time
+}
+
+// LogActivity writes an activity row using q (usually inside a transaction).
+func LogActivity(ctx context.Context, q *dbq.Queries, a Activity) error {
+	if err := q.InsertActivity(ctx, dbq.InsertActivityParams{
+		HouseholdID: a.HouseholdID,
+		ActorID:     a.ActorID,
+		Verb:        a.Verb,
+		SubjectType: a.SubjectType,
+		SubjectID:   a.SubjectID,
+		CreatedAt:   a.At.Unix(),
+	}); err != nil {
+		return fmt.Errorf("activity %s: %w", a.Verb, err)
+	}
+	return nil
+}

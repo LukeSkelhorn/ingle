@@ -47,3 +47,17 @@ func (q *Queries) GetHousehold(ctx context.Context, id int64) (Household, error)
 	err := row.Scan(&i.ID, &i.Name, &i.CreatedAt)
 	return i, err
 }
+
+const updateHouseholdName = `-- name: UpdateHouseholdName :exec
+UPDATE households SET name = ? WHERE id = ?
+`
+
+type UpdateHouseholdNameParams struct {
+	Name string `json:"name"`
+	ID   int64  `json:"id"`
+}
+
+func (q *Queries) UpdateHouseholdName(ctx context.Context, arg UpdateHouseholdNameParams) error {
+	_, err := q.db.ExecContext(ctx, updateHouseholdName, arg.Name, arg.ID)
+	return err
+}

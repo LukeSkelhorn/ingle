@@ -129,6 +129,44 @@ func (q *Queries) GetReward(ctx context.Context, arg GetRewardParams) (Reward, e
 	return i, err
 }
 
+const listArchivedRewards = `-- name: ListArchivedRewards :many
+SELECT id, household_id, title, description, cost_points, cost_pence, archived_at, created_at FROM rewards
+WHERE household_id = ? AND archived_at IS NOT NULL
+ORDER BY title
+`
+
+func (q *Queries) ListArchivedRewards(ctx context.Context, householdID int64) ([]Reward, error) {
+	rows, err := q.db.QueryContext(ctx, listArchivedRewards, householdID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Reward{}
+	for rows.Next() {
+		var i Reward
+		if err := rows.Scan(
+			&i.ID,
+			&i.HouseholdID,
+			&i.Title,
+			&i.Description,
+			&i.CostPoints,
+			&i.CostPence,
+			&i.ArchivedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPendingRedemptions = `-- name: ListPendingRedemptions :many
 SELECT id, household_id, reward_id, person_id, points, pence, status, requested_at, reviewed_by, reviewed_at FROM redemptions
 WHERE household_id = ? AND status = 'pending'
@@ -205,4 +243,56 @@ func (q *Queries) ListRewards(ctx context.Context, householdID int64) ([]Reward,
 		return nil, err
 	}
 	return items, nil
+}
+
+const unarchiveReward = `-- name: UnarchiveReward :exec
+UPDATE rewards SET archived_at = NULL WHERE household_id = ? AND id = ?
+`
+
+type UnarchiveRewardParams struct {
+	HouseholdID int64 `json:"household_id"`
+	ID          int64 `json:"id"`
+}
+
+func (q *Queries) UnarchiveReward(ctx context.Context, arg UnarchiveRewardParams) error {
+	_, err := q.db.ExecContext(ctx, unarchiveReward, arg.HouseholdID, arg.ID)
+	return err
+}
+
+const updateReward = `-- name: UpdateReward :one
+UPDATE rewards SET title = ?, description = ?, cost_points = ?, cost_pence = ?
+WHERE household_id = ? AND id = ?
+RETURNING id, household_id, title, description, cost_points, cost_pence, archived_at, created_at
+`
+
+type UpdateRewardParams struct {
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	CostPoints  int64  `json:"cost_points"`
+	CostPence   int64  `json:"cost_pence"`
+	HouseholdID int64  `json:"household_id"`
+	ID          int64  `json:"id"`
+}
+
+func (q *Queries) UpdateReward(ctx context.Context, arg UpdateRewardParams) (Reward, error) {
+	row := q.db.QueryRowContext(ctx, updateReward,
+		arg.Title,
+		arg.Description,
+		arg.CostPoints,
+		arg.CostPence,
+		arg.HouseholdID,
+		arg.ID,
+	)
+	var i Reward
+	err := row.Scan(
+		&i.ID,
+		&i.HouseholdID,
+		&i.Title,
+		&i.Description,
+		&i.CostPoints,
+		&i.CostPence,
+		&i.ArchivedAt,
+		&i.CreatedAt,
+	)
+	return i, err
 }

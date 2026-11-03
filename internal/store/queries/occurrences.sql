@@ -36,3 +36,14 @@ UPDATE chore_occurrences SET status = ? WHERE household_id = ? AND id = ?;
 UPDATE chore_occurrences
 SET status = CASE WHEN claimed_by IS NULL THEN 'open' ELSE 'claimed' END
 WHERE household_id = ? AND id = ?;
+
+-- name: DeleteFutureOpenOccurrences :execrows
+-- Drops not-yet-started occurrences of a chore from from_date onwards so an
+-- edited schedule or assignee can be re-materialised. Claimed, done and
+-- previously-completed occurrences are kept.
+DELETE FROM chore_occurrences
+WHERE chore_occurrences.household_id = sqlc.arg(household_id)
+  AND chore_occurrences.chore_id = sqlc.arg(chore_id)
+  AND chore_occurrences.due_on >= sqlc.arg(from_date)
+  AND chore_occurrences.status = 'open' AND chore_occurrences.claimed_by IS NULL
+  AND NOT EXISTS (SELECT 1 FROM completions c WHERE c.occurrence_id = chore_occurrences.id);

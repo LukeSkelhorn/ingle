@@ -62,10 +62,29 @@ type Completion struct {
 	Pence        int64  `json:"pence"`
 }
 
+type Device struct {
+	ID          int64  `json:"id"`
+	HouseholdID int64  `json:"household_id"`
+	Name        string `json:"name"`
+	TokenHash   []byte `json:"token_hash"`
+	CreatedBy   *int64 `json:"created_by"`
+	CreatedAt   int64  `json:"created_at"`
+	LastSeenAt  int64  `json:"last_seen_at"`
+	RevokedAt   *int64 `json:"revoked_at"`
+}
+
 type Household struct {
 	ID        int64  `json:"id"`
 	Name      string `json:"name"`
 	CreatedAt int64  `json:"created_at"`
+}
+
+type HouseholdSetting struct {
+	HouseholdID      int64  `json:"household_id"`
+	Timezone         string `json:"timezone"`
+	DayStartsAt      string `json:"day_starts_at"`
+	AdminIdleMinutes int64  `json:"admin_idle_minutes"`
+	UpdatedAt        int64  `json:"updated_at"`
 }
 
 type LedgerEntry struct {
@@ -83,16 +102,18 @@ type LedgerEntry struct {
 }
 
 type Person struct {
-	ID          int64   `json:"id"`
-	HouseholdID int64   `json:"household_id"`
-	Name        string  `json:"name"`
-	Kind        string  `json:"kind"`
-	Colour      string  `json:"colour"`
-	Avatar      *string `json:"avatar"`
-	PinHash     *string `json:"pin_hash"`
-	SortOrder   int64   `json:"sort_order"`
-	ArchivedAt  *int64  `json:"archived_at"`
-	CreatedAt   int64   `json:"created_at"`
+	ID           int64   `json:"id"`
+	HouseholdID  int64   `json:"household_id"`
+	Name         string  `json:"name"`
+	Kind         string  `json:"kind"`
+	Colour       string  `json:"colour"`
+	Avatar       *string `json:"avatar"`
+	PinHash      *string `json:"pin_hash"`
+	SortOrder    int64   `json:"sort_order"`
+	ArchivedAt   *int64  `json:"archived_at"`
+	CreatedAt    int64   `json:"created_at"`
+	Email        *string `json:"email"`
+	PasswordHash *string `json:"password_hash"`
 }
 
 type Redemption struct {
@@ -117,4 +138,15 @@ type Reward struct {
 	CostPence   int64  `json:"cost_pence"`
 	ArchivedAt  *int64 `json:"archived_at"`
 	CreatedAt   int64  `json:"created_at"`
+}
+
+type Session struct {
+	TokenHash   []byte `json:"token_hash"`
+	HouseholdID int64  `json:"household_id"`
+	PersonID    int64  `json:"person_id"`
+	Kind        string `json:"kind"`
+	DeviceID    *int64 `json:"device_id"`
+	UserAgent   string `json:"user_agent"`
+	CreatedAt   int64  `json:"created_at"`
+	LastSeenAt  int64  `json:"last_seen_at"`
 }

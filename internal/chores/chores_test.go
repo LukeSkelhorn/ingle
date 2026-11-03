@@ -46,7 +46,7 @@ func newFixture(t *testing.T) *fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc := New(st, london)
+	svc := New(st, FixedLocation(london))
 	svc.now = func() time.Time { return now }
 
 	f := &fixture{t: t, st: st, svc: svc, hh: h.ID}
@@ -360,4 +360,8 @@ func TestCrossHouseholdPersonRejected(t *testing.T) {
 	if err := f.svc.Claim(ctx, other.ID, occ.ID, f.kid.ID); !errors.Is(err, ErrNotFound) {
 		t.Errorf("err = %v, want ErrNotFound", err)
 	}
+}
+
+func dbqActivityParams(hh int64) dbq.ListRecentActivityParams {
+	return dbq.ListRecentActivityParams{HouseholdID: hh, Limit: 50}
 }

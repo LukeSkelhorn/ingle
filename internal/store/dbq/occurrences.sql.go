@@ -36,6 +36,32 @@ func (q *Queries) ClaimOccurrence(ctx context.Context, arg ClaimOccurrenceParams
 	return result.RowsAffected()
 }
 
+const deleteFutureOpenOccurrences = `-- name: DeleteFutureOpenOccurrences :execrows
+DELETE FROM chore_occurrences
+WHERE chore_occurrences.household_id = ?1
+  AND chore_occurrences.chore_id = ?2
+  AND chore_occurrences.due_on >= ?3
+  AND chore_occurrences.status = 'open' AND chore_occurrences.claimed_by IS NULL
+  AND NOT EXISTS (SELECT 1 FROM completions c WHERE c.occurrence_id = chore_occurrences.id)
+`
+
+type DeleteFutureOpenOccurrencesParams struct {
+	HouseholdID int64  `json:"household_id"`
+	ChoreID     int64  `json:"chore_id"`
+	FromDate    string `json:"from_date"`
+}
+
+// Drops not-yet-started occurrences of a chore from from_date onwards so an
+// edited schedule or assignee can be re-materialised. Claimed, done and
+// previously-completed occurrences are kept.
+func (q *Queries) DeleteFutureOpenOccurrences(ctx context.Context, arg DeleteFutureOpenOccurrencesParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteFutureOpenOccurrences, arg.HouseholdID, arg.ChoreID, arg.FromDate)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const getOccurrence = `-- name: GetOccurrence :one
 SELECT id, household_id, chore_id, due_on, assignee_id, claimed_by, claimed_at, status FROM chore_occurrences WHERE household_id = ? AND id = ?
 `

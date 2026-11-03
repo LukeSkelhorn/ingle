@@ -23,3 +23,16 @@ RETURNING *;
 SELECT * FROM redemptions
 WHERE household_id = ? AND status = 'pending'
 ORDER BY requested_at;
+
+-- name: UpdateReward :one
+UPDATE rewards SET title = ?, description = ?, cost_points = ?, cost_pence = ?
+WHERE household_id = ? AND id = ?
+RETURNING *;
+
+-- name: ListArchivedRewards :many
+SELECT * FROM rewards
+WHERE household_id = ? AND archived_at IS NOT NULL
+ORDER BY title;
+
+-- name: UnarchiveReward :exec
+UPDATE rewards SET archived_at = NULL WHERE household_id = ? AND id = ?;

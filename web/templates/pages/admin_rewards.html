@@ -1,0 +1,32 @@
+{{define "bodyclass"}}admin{{end}}
+{{define "content"}}
+{{template "admin_nav" .}}
+<main class="admin__main">
+  <div class="admin__head">
+    <h1>Rewards</h1>
+    <a class="btn btn--primary" href="/admin/rewards/new">Add a reward</a>
+  </div>
+  <ul class="list card">
+    {{range .Data.Rewards}}
+    <li><a class="list__row" href="/admin/rewards/{{.ID}}">
+      <span class="list__main"><strong>{{.Title}}</strong>{{with .Description}}<small class="muted">{{.}}</small>{{end}}</span>
+      <span class="list__value">{{if .CostPoints}}{{.CostPoints}} pts{{end}}{{if and .CostPoints .CostPence}} · {{end}}{{if .CostPence}}{{money .CostPence}}{{end}}</span>
+      <span aria-hidden="true">›</span>
+    </a></li>
+    {{else}}
+    <li class="list__empty muted">No rewards yet.</li>
+    {{end}}
+  </ul>
+  {{if .Data.Archived}}
+  <details class="card">
+    <summary>Archived ({{len .Data.Archived}})</summary>
+    <ul class="list">
+      {{range .Data.Archived}}
+      <li class="list__row"><span class="list__main">{{.Title}}</span>
+        <form method="post" action="/admin/rewards/{{.ID}}/restore"><button class="btn" type="submit">Restore</button></form></li>
+      {{end}}
+    </ul>
+  </details>
+  {{end}}
+</main>
+{{end}}

@@ -1,0 +1,359 @@
+package server
+
+import (
+	"errors"
+	"net/http"
+
+	"github.com/lukeskelhorn/domus/internal/avatar"
+	"github.com/lukeskelhorn/domus/internal/household"
+	"github.com/lukeskelhorn/domus/internal/store/dbq"
+	"github.com/lukeskelhorn/domus/internal/valid"
+)
+
+type peopleView struct {
+	People   []dbq.Person
+	Archived []dbq.Person
+}
+
+func (s *Server) handlePeople(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	people, err := s.Household.People(ctx, s.HouseholdID)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	archived, err := s.Household.ArchivedPeople(ctx, s.HouseholdID)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	v := s.view(r, "People", peopleView{People: people, Archived: archived})
+	v.Nav = "people"
+	s.render(w, r, http.StatusOK, "admin_people", v)
+}
+
+// personForm is the person edit page: the profile form plus, for adults,
+// their PIN and sign-in.
+type personForm struct {
+	ID         int64 // 0 when creating
+	Name       string
+	Kind       string
+	Colour     string
+	AvatarMode string // none, emoji, photo
+	Emoji      string
+	Photo      string // current photo URL
+	SortOrder  int64
+	Archived   bool
+
+	IsAdult  bool
+	HasPIN   bool
+	HasLogin bool
+	Email    string
+	IsMe     bool
+
+	Colours []string
+	Emojis  []string
+}
+
+func newPersonForm() personForm {
+	return personForm{
+		Kind: household.KindChild, Colour: household.Colours[0], AvatarMode: "emoji",
+		Emoji: avatar.Emojis[0], Colours: household.Colours, Emojis: avatar.Emojis,
+	}
+}
+
+func (s *Server) personFormFor(r *http.Request, p dbq.Person) personForm {
+	f := newPersonForm()
+	f.ID, f.Name, f.Kind, f.Colour, f.SortOrder = p.ID, p.Name, p.Kind, p.Colour, p.SortOrder
+	f.Archived = p.ArchivedAt != nil
+	f.IsAdult = p.Kind == household.KindAdult
+	f.HasPIN = p.PinHash != nil
+	f.HasLogin = p.PasswordHash != nil
+	if p.Email != nil {
+		f.Email = *p.Email
+	}
+	f.IsMe = actor(r).Person.ID == p.ID
+	f.AvatarMode, f.Emoji = "none", ""
+	switch kind, val := avatar.Parse(p.Avatar); kind {
+	case avatar.Emoji:
+		f.AvatarMode, f.Emoji = "emoji", val
+	case avatar.Photo:
+		f.AvatarMode, f.Photo = "photo", "/avatars/"+val
+	}
+	return f
+}
+
+func (s *Server) renderPerson(w http.ResponseWriter, r *http.Request, status int, f personForm, errs valid.Errors, flash string) {
+	title := "Add someone"
+	if f.ID != 0 {
+		title = f.Name
+	}
+	v := s.view(r, title, f)
+	v.Nav = "people"
+	v.Errors = errs
+	v.Flash = flash
+	s.render(w, r, status, "admin_person", v)
+}
+
+func (s *Server) handlePersonNew(w http.ResponseWriter, r *http.Request) {
+	s.renderPerson(w, r, http.StatusOK, newPersonForm(), nil, "")
+}
+
+func (s *Server) handlePersonEdit(w http.ResponseWriter, r *http.Request) {
+	p, ok := s.loadPerson(w, r)
+	if !ok {
+		return
+	}
+	s.renderPerson(w, r, http.StatusOK, s.personFormFor(r, p), nil, "")
+}
+
+func (s *Server) loadPerson(w http.ResponseWriter, r *http.Request) (dbq.Person, bool) {
+	id, ok := pathID(r)
+	if !ok {
+		http.NotFound(w, r)
+		return dbq.Person{}, false
+	}
+	p, err := s.Household.Person(r.Context(), s.HouseholdID, id)
+	if errors.Is(err, household.ErrNotFound) {
+		http.NotFound(w, r)
+		return dbq.Person{}, false
+	}
+	if err != nil {
+		s.serverError(w, r, err)
+		return dbq.Person{}, false
+	}
+	return p, true
+}
+
+// readPersonForm parses the (multipart) profile form. A newly uploaded
+// photo is saved and returned as newPhoto so the caller can delete it if the
+// save fails.
+func (s *Server) readPersonForm(w http.ResponseWriter, r *http.Request, f *personForm, current *string) (in household.PersonInput, newPhoto string, errs valid.Errors, err error) {
+	r.Body = http.MaxBytesReader(w, r.Body, avatar.MaxUpload+maxFormBytes)
+	//nolint:gosec // G120: the body is capped by MaxBytesReader on the line above
+	if err := r.ParseMultipartForm(1 << 20); err != nil && !errors.Is(err, http.ErrNotMultipart) {
+		return in, "", valid.Errors{"photo": "That upload was too large (8 MB maximum)."}, nil
+	}
+	fm := newForm(r)
+	f.Name = fm.str("name")
+	f.Kind = fm.str("kind")
+	f.Colour = fm.str("colour")
+	f.AvatarMode = fm.str("avatar_mode")
+	f.Emoji = fm.str("emoji")
+	f.SortOrder = fm.int("sort_order", "Use a number from 0 to 999.")
+
+	in = household.PersonInput{Name: f.Name, Kind: f.Kind, Colour: f.Colour, SortOrder: f.SortOrder}
+	switch f.AvatarMode {
+	case "emoji":
+		v, ok := avatar.EmojiValue(f.Emoji)
+		if !ok {
+			fm.errs.Add("emoji", "Choose an emoji.")
+		}
+		in.Avatar = &v
+	case "photo":
+		file, _, ferr := r.FormFile("photo")
+		if ferr == nil {
+			defer file.Close()
+			name, serr := s.Avatars.SavePhoto(file)
+			switch {
+			case errors.Is(serr, avatar.ErrTooLarge), errors.Is(serr, avatar.ErrNotAnImage):
+				fm.errs.Add("photo", serr.Error()+".")
+			case serr != nil:
+				return in, "", nil, serr
+			default:
+				v := avatar.PhotoValue(name)
+				in.Avatar, newPhoto = &v, name
+			}
+		} else {
+			// No new file: keep the current photo if there is one.
+			if kind, _ := avatar.Parse(current); kind == avatar.Photo {
+				in.Avatar = current
+			} else {
+				fm.errs.Add("photo", "Choose a photo to upload.")
+			}
+		}
+	default:
+		f.AvatarMode = "none"
+	}
+	return in, newPhoto, fm.errs, nil
+}
+
+func (s *Server) handlePersonCreate(w http.ResponseWriter, r *http.Request) {
+	f := newPersonForm()
+	in, newPhoto, errs, err := s.readPersonForm(w, r, &f, nil)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	if len(errs) > 0 {
+		_ = s.Avatars.Remove(newPhoto)
+		s.renderPerson(w, r, http.StatusUnprocessableEntity, f, errs, "")
+		return
+	}
+	p, err := s.Household.CreatePerson(r.Context(), s.HouseholdID, actor(r).Person.ID, in)
+	if err != nil {
+		_ = s.Avatars.Remove(newPhoto)
+		if errs, ok := validationErrors(err); ok {
+			s.renderPerson(w, r, http.StatusUnprocessableEntity, f, errs, "")
+			return
+		}
+		s.serverError(w, r, err)
+		return
+	}
+	redirect(w, r, "/admin/people/"+itoa(p.ID))
+}
+
+func (s *Server) handlePersonUpdate(w http.ResponseWriter, r *http.Request) {
+	cur, ok := s.loadPerson(w, r)
+	if !ok {
+		return
+	}
+	f := s.personFormFor(r, cur)
+	in, newPhoto, errs, err := s.readPersonForm(w, r, &f, cur.Avatar)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	if len(errs) > 0 {
+		_ = s.Avatars.Remove(newPhoto)
+		s.renderPerson(w, r, http.StatusUnprocessableEntity, f, errs, "")
+		return
+	}
+	p, err := s.Household.UpdatePerson(r.Context(), s.HouseholdID, actor(r).Person.ID, cur.ID, in)
+	if err != nil {
+		_ = s.Avatars.Remove(newPhoto)
+		if errs, ok := validationErrors(err); ok {
+			s.renderPerson(w, r, http.StatusUnprocessableEntity, f, errs, "")
+			return
+		}
+		if msg, ok := conflictMessage(err); ok {
+			s.renderPerson(w, r, http.StatusConflict, s.personFormFor(r, cur), nil, msg)
+			return
+		}
+		s.serverError(w, r, err)
+		return
+	}
+	// The old photo is no longer referenced.
+	if kind, name := avatar.Parse(cur.Avatar); kind == avatar.Photo && (p.Avatar == nil || *p.Avatar != *cur.Avatar) {
+		_ = s.Avatars.Remove(name)
+	}
+	s.renderPerson(w, r, http.StatusOK, s.personFormFor(r, p), nil, "Saved.")
+}
+
+func (s *Server) handlePersonArchive(w http.ResponseWriter, r *http.Request) {
+	p, ok := s.loadPerson(w, r)
+	if !ok {
+		return
+	}
+	err := s.Household.ArchivePerson(r.Context(), s.HouseholdID, actor(r).Person.ID, p.ID)
+	if msg, ok := conflictMessage(err); ok {
+		s.renderPerson(w, r, http.StatusConflict, s.personFormFor(r, p), nil, msg)
+		return
+	}
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	if actor(r).Person.ID == p.ID {
+		// Archiving yourself ends your own session.
+		s.clearCookie(w, r, sessionCookie)
+		redirect(w, r, "/")
+		return
+	}
+	redirect(w, r, "/admin/people")
+}
+
+func (s *Server) handlePersonRestore(w http.ResponseWriter, r *http.Request) {
+	p, ok := s.loadPerson(w, r)
+	if !ok {
+		return
+	}
+	if err := s.Household.RestorePerson(r.Context(), s.HouseholdID, actor(r).Person.ID, p.ID); err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	redirect(w, r, "/admin/people/"+itoa(p.ID))
+}
+
+// credentialAction handles the PIN and sign-in forms on the person page.
+func (s *Server) credentialAction(w http.ResponseWriter, r *http.Request, flash string, fn func(p dbq.Person, f *form) error) {
+	p, ok := s.loadPerson(w, r)
+	if !ok {
+		return
+	}
+	if err := parseForm(w, r); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	f := newForm(r)
+	err := fn(p, f)
+	if !f.ok() {
+		s.renderPerson(w, r, http.StatusUnprocessableEntity, s.personFormFor(r, p), f.errs, "")
+		return
+	}
+	if errs, ok := validationErrors(err); ok {
+		s.renderPerson(w, r, http.StatusUnprocessableEntity, s.personFormFor(r, p), errs, "")
+		return
+	}
+	if msg, ok := conflictMessage(err); ok {
+		s.renderPerson(w, r, http.StatusConflict, s.personFormFor(r, p), nil, msg)
+		return
+	}
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	p, err = s.Household.Person(r.Context(), s.HouseholdID, p.ID)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	s.renderPerson(w, r, http.StatusOK, s.personFormFor(r, p), nil, flash)
+}
+
+func (s *Server) handlePersonSetPIN(w http.ResponseWriter, r *http.Request) {
+	s.credentialAction(w, r, "PIN saved.", func(p dbq.Person, f *form) error {
+		if f.str("pin") != f.str("pin_confirm") {
+			f.errs.Add("pin_confirm", "The PINs don't match.")
+			return nil
+		}
+		return s.Household.SetPIN(r.Context(), s.HouseholdID, actor(r).Person.ID, p.ID, f.str("pin"), keepToken(r, p.ID))
+	})
+}
+
+func (s *Server) handlePersonClearPIN(w http.ResponseWriter, r *http.Request) {
+	s.credentialAction(w, r, "PIN removed.", func(p dbq.Person, _ *form) error {
+		return s.Household.ClearPIN(r.Context(), s.HouseholdID, actor(r).Person.ID, p.ID, keepToken(r, p.ID))
+	})
+}
+
+func (s *Server) handlePersonSetLogin(w http.ResponseWriter, r *http.Request) {
+	s.credentialAction(w, r, "Sign-in saved.", func(p dbq.Person, f *form) error {
+		if f.raw("password") != f.raw("password_confirm") {
+			f.errs.Add("password_confirm", "The passwords don't match.")
+			return nil
+		}
+		return s.Household.SetLogin(r.Context(), s.HouseholdID, actor(r).Person.ID, p.ID, f.str("email"), f.raw("password"), keepToken(r, p.ID))
+	})
+}
+
+func (s *Server) handlePersonClearLogin(w http.ResponseWriter, r *http.Request) {
+	s.credentialAction(w, r, "Sign-in removed.", func(p dbq.Person, _ *form) error {
+		return s.Household.ClearLogin(r.Context(), s.HouseholdID, actor(r).Person.ID, p.ID, keepToken(r, p.ID))
+	})
+}
+
+// conflictMessage maps domain rule violations to a message for the page.
+func conflictMessage(err error) (string, bool) {
+	switch {
+	case errors.Is(err, household.ErrHasAssignedChores):
+		return "They still have chores assigned. Reassign or archive those chores first.", true
+	case errors.Is(err, household.ErrLastAdmin):
+		return "At least one adult must be able to sign in, so this can't be done for the last one.", true
+	case errors.Is(err, household.ErrNotAdult):
+		return "Only adults can have a PIN or sign-in.", true
+	case errors.Is(err, household.ErrNotFound):
+		return "That person couldn't be found.", true
+	}
+	return "", false
+}

@@ -80,3 +80,62 @@ func (q *Queries) ListRecentActivity(ctx context.Context, arg ListRecentActivity
 	}
 	return items, nil
 }
+
+const listRecentActivityWithActor = `-- name: ListRecentActivityWithActor :many
+SELECT activity.id, activity.household_id, activity.actor_id, activity.verb, activity.subject_type, activity.subject_id, activity.data, activity.created_at, people.name AS actor_name
+FROM activity
+LEFT JOIN people ON people.id = activity.actor_id
+WHERE activity.household_id = ?
+ORDER BY activity.created_at DESC, activity.id DESC
+LIMIT ?
+`
+
+type ListRecentActivityWithActorParams struct {
+	HouseholdID int64 `json:"household_id"`
+	Limit       int64 `json:"limit"`
+}
+
+type ListRecentActivityWithActorRow struct {
+	ID          int64   `json:"id"`
+	HouseholdID int64   `json:"household_id"`
+	ActorID     *int64  `json:"actor_id"`
+	Verb        string  `json:"verb"`
+	SubjectType string  `json:"subject_type"`
+	SubjectID   int64   `json:"subject_id"`
+	Data        *string `json:"data"`
+	CreatedAt   int64   `json:"created_at"`
+	ActorName   *string `json:"actor_name"`
+}
+
+func (q *Queries) ListRecentActivityWithActor(ctx context.Context, arg ListRecentActivityWithActorParams) ([]ListRecentActivityWithActorRow, error) {
+	rows, err := q.db.QueryContext(ctx, listRecentActivityWithActor, arg.HouseholdID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListRecentActivityWithActorRow{}
+	for rows.Next() {
+		var i ListRecentActivityWithActorRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.HouseholdID,
+			&i.ActorID,
+			&i.Verb,
+			&i.SubjectType,
+			&i.SubjectID,
+			&i.Data,
+			&i.CreatedAt,
+			&i.ActorName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
