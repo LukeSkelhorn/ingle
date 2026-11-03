@@ -1,0 +1,14 @@
+# Git hooks: install with `task setup` (runs `lefthook install`).
+pre-commit:
+  parallel: false
+  commands:
+    fmt:
+      glob: "*.go"
+      run: golangci-lint fmt {staged_files}
+      stage_fixed: true
+    lint:
+      glob: "*.go"
+      run: golangci-lint run ./...
+    mod-tidy:
+      glob: "{go.mod,go.sum,*.go}"
+      run: go mod tidy -diff

@@ -1,0 +1,113 @@
+# https://taskfile.dev
+version: "3"
+
+dotenv: [".env"]
+
+vars:
+  BIN: bin/domus
+  IMAGE: domus:dev
+  MIGRATIONS: internal/store/migrations
+
+env:
+  DOMUS_DB_PATH: '{{.DOMUS_DB_PATH | default "./data/domus.db"}}'
+
+tasks:
+  default:
+    cmds: [task --list]
+    silent: true
+
+  setup:
+    desc: Install deps and git hooks (needs golangci-lint and lefthook, e.g. `brew install golangci-lint lefthook`)
+    preconditions:
+      - sh: command -v golangci-lint
+        msg: "golangci-lint not found: brew install golangci-lint"
+      - sh: command -v lefthook
+        msg: "lefthook not found: brew install lefthook"
+    cmds:
+      - go mod download
+      - lefthook install
+
+  build:
+    desc: Build the domus binary
+    sources: ["**/*.go", "web/**/*", "internal/store/migrations/*.sql", "go.mod", "go.sum"]
+    generates: ["{{.BIN}}"]
+    cmds:
+      - CGO_ENABLED=0 go build -trimpath -o {{.BIN}} ./cmd/domus
+
+  run:
+    desc: Build and run the server
+    deps: [build]
+    cmds:
+      - ./{{.BIN}}
+
+  dev:
+    desc: Run with go run (no build cache)
+    cmds:
+      - go run ./cmd/domus
+
+  test:
+    desc: Run tests with the race detector
+    cmds:
+      - go test -race ./...
+
+  lint:
+    desc: Run golangci-lint
+    cmds:
+      - golangci-lint run ./...
+
+  fmt:
+    desc: Format code (gofumpt + goimports via golangci-lint)
+    cmds:
+      - golangci-lint fmt
+
+  check:
+    desc: All local checks - go mod tidy diff, lint, race tests
+    cmds:
+      - go mod tidy -diff
+      - task: lint
+      - task: test
+
+  check:all:
+    desc: check plus a Docker image build (run before merging to main)
+    cmds:
+      - task: check
+      - task: docker:build
+
+  tidy:
+    desc: Tidy go.mod/go.sum
+    cmds:
+      - go mod tidy
+
+  docker:build:
+    desc: Build the Docker image
+    cmds:
+      - docker build -t {{.IMAGE}} .
+
+  docker:run:
+    desc: Run the Docker image with a local data volume
+    deps: [docker:build]
+    cmds:
+      - docker run --rm -it -p 8080:8080 -v domus-data:/data {{.IMAGE}}
+
+  migrate:up:
+    desc: Apply pending migrations (the server also does this on start)
+    cmds:
+      - mkdir -p "$(dirname "$DOMUS_DB_PATH")"
+      - goose -dir {{.MIGRATIONS}} sqlite3 "$DOMUS_DB_PATH" up
+
+  migrate:down:
+    desc: Roll back the last migration
+    cmds:
+      - goose -dir {{.MIGRATIONS}} sqlite3 "$DOMUS_DB_PATH" down
+
+  migrate:status:
+    desc: Show migration status
+    cmds:
+      - goose -dir {{.MIGRATIONS}} sqlite3 "$DOMUS_DB_PATH" status
+
+  migrate:create:
+    desc: "Create a new SQL migration: task migrate:create -- add_people"
+    requires:
+      vars: [CLI_ARGS]
+    cmds:
+      - goose -dir {{.MIGRATIONS}} -s create {{.CLI_ARGS}} sql
