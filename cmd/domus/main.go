@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/lukeskelhorn/domus/internal/chores"
 	"github.com/lukeskelhorn/domus/internal/config"
 	"github.com/lukeskelhorn/domus/internal/locale"
 	"github.com/lukeskelhorn/domus/internal/server"
@@ -39,6 +40,13 @@ func run(log *slog.Logger) error {
 		return err
 	}
 	defer db.Close()
+
+	st := store.New(db)
+	household, err := st.EnsureHousehold(ctx, "Home", time.Now())
+	if err != nil {
+		return err
+	}
+	go materialiseLoop(ctx, log, chores.New(st, cfg.Location), household.ID)
 
 	srv, err := server.New(db, locale.Locale{
 		Location:   cfg.Location,
@@ -75,4 +83,35 @@ func run(log *slog.Logger) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	return httpSrv.Shutdown(shutdownCtx)
+}
+
+// materialiseWindow is how many days ahead chore occurrences are created.
+const materialiseWindow = 14
+
+// materialiseLoop keeps the rolling window of chore occurrences filled: once
+// at startup, then hourly so new days (and newly added chores) appear.
+func materialiseLoop(ctx context.Context, log *slog.Logger, svc *chores.Service, householdID int64) {
+	run := func() {
+		n, err := svc.Materialise(ctx, householdID, time.Now(), materialiseWindow)
+		if err != nil {
+			if ctx.Err() == nil {
+				log.Error("materialise chores", slog.Any("err", err))
+			}
+			return
+		}
+		if n > 0 {
+			log.Info("materialised chore occurrences", slog.Int("created", n))
+		}
+	}
+	run()
+	t := time.NewTicker(time.Hour)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			run()
+		}
+	}
 }

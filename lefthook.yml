@@ -6,9 +6,15 @@ pre-commit:
       glob: "*.go"
       run: golangci-lint fmt {staged_files}
       stage_fixed: true
+    fmt-check:
+      glob: "*.go"
+      run: golangci-lint fmt --diff ./...
     lint:
       glob: "*.go"
       run: golangci-lint run ./...
     mod-tidy:
       glob: "{go.mod,go.sum,*.go}"
       run: go mod tidy -diff
+    sqlc:
+      glob: "{sqlc.yaml,internal/store/queries/*.sql,internal/store/migrations/*.sql,internal/store/dbq/*.go}"
+      run: sqlc diff

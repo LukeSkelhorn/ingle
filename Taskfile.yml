@@ -17,19 +17,21 @@ tasks:
     silent: true
 
   setup:
-    desc: Install deps and git hooks (needs golangci-lint and lefthook, e.g. `brew install golangci-lint lefthook`)
+    desc: Install deps and git hooks (needs golangci-lint, lefthook and sqlc, e.g. `brew install golangci-lint lefthook sqlc`)
     preconditions:
       - sh: command -v golangci-lint
         msg: "golangci-lint not found: brew install golangci-lint"
       - sh: command -v lefthook
         msg: "lefthook not found: brew install lefthook"
+      - sh: command -v sqlc
+        msg: "sqlc not found: brew install sqlc"
     cmds:
       - go mod download
       - lefthook install
 
   build:
     desc: Build the domus binary
-    sources: ["**/*.go", "web/**/*", "internal/store/migrations/*.sql", "go.mod", "go.sum"]
+    sources: ["**/*.go", "web/**/*", "internal/store/migrations/*.sql", "internal/store/queries/*.sql", "go.mod", "go.sum"]
     generates: ["{{.BIN}}"]
     cmds:
       - CGO_ENABLED=0 go build -trimpath -o {{.BIN}} ./cmd/domus
@@ -56,14 +58,26 @@ tasks:
       - golangci-lint run ./...
 
   fmt:
-    desc: Format code (gofumpt + goimports via golangci-lint)
+    desc: Format code (gofmt -s, gofumpt and goimports via golangci-lint)
     cmds:
       - golangci-lint fmt
 
-  check:
-    desc: All local checks - go mod tidy diff, lint, race tests
+  fmt:check:
+    desc: Fail if any Go file is not formatted (prints the diff)
     cmds:
+      - golangci-lint fmt --diff ./...
+
+  generate:
+    desc: Regenerate sqlc query code from internal/store/queries
+    cmds:
+      - sqlc generate
+
+  check:
+    desc: All local checks - sqlc diff, go mod tidy diff, formatting, lint, race tests
+    cmds:
+      - sqlc diff
       - go mod tidy -diff
+      - task: fmt:check
       - task: lint
       - task: test
 

@@ -45,9 +45,12 @@ linters:
 
 formatters:
   enable:
-    - gofumpt
+    - gofmt # go fmt, plus -s simplifications
+    - gofumpt # stricter superset of gofmt
     - goimports
   settings:
+    gofmt:
+      simplify: true
     goimports:
       local-prefixes:
         - github.com/lukeskelhorn/domus

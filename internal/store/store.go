@@ -5,13 +5,17 @@ import (
 	"context"
 	"database/sql"
 	"embed"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/pressly/goose/v3"
 	_ "modernc.org/sqlite" // registers the pure-Go "sqlite" driver
+
+	"github.com/lukeskelhorn/domus/internal/store/dbq"
 )
 
 //go:embed migrations/*.sql
@@ -60,4 +64,49 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("migrate up: %w", err)
 	}
 	return nil
+}
+
+// Store bundles the database handle with the sqlc-generated queries.
+type Store struct {
+	DB *sql.DB
+	Q  *dbq.Queries
+}
+
+// New wraps an open database.
+func New(db *sql.DB) *Store {
+	return &Store{DB: db, Q: dbq.New(db)}
+}
+
+// WithTx runs fn inside a transaction, committing if fn returns nil and
+// rolling back otherwise.
+func (s *Store) WithTx(ctx context.Context, fn func(q *dbq.Queries) error) error {
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	if err := fn(s.Q.WithTx(tx)); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
+	}
+	return nil
+}
+
+// EnsureHousehold returns the first household, creating one called name if
+// the database has none. Self-hosted installs have exactly one household.
+func (s *Store) EnsureHousehold(ctx context.Context, name string, now time.Time) (dbq.Household, error) {
+	h, err := s.Q.GetFirstHousehold(ctx)
+	if err == nil {
+		return h, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return dbq.Household{}, fmt.Errorf("get household: %w", err)
+	}
+	h, err = s.Q.CreateHousehold(ctx, dbq.CreateHouseholdParams{Name: name, CreatedAt: now.Unix()})
+	if err != nil {
+		return dbq.Household{}, fmt.Errorf("create household: %w", err)
+	}
+	return h, nil
 }
