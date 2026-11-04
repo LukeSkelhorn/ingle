@@ -303,48 +303,59 @@ func (s *Service) Reject(ctx context.Context, householdID, completionID, reviewe
 
 func (s *Service) review(ctx context.Context, householdID, completionID, reviewerID int64, status string) error {
 	return s.st.WithTx(ctx, func(q *dbq.Queries) error {
-		reviewer, err := getPerson(ctx, q, householdID, reviewerID)
-		if err != nil {
+		if err := requireAdult(ctx, q, householdID, reviewerID); err != nil {
 			return err
 		}
-		if reviewer.Kind != "adult" {
-			return ErrNotAdult
-		}
-		now := s.now().Unix()
-		n, err := q.ReviewCompletion(ctx, dbq.ReviewCompletionParams{
-			Status:      status,
-			ReviewedBy:  &reviewerID,
-			ReviewedAt:  &now,
-			HouseholdID: householdID,
-			ID:          completionID,
-		})
-		if err != nil {
-			return fmt.Errorf("review completion: %w", err)
-		}
-		if n == 0 {
-			if _, err := q.GetCompletion(ctx, dbq.GetCompletionParams{HouseholdID: householdID, ID: completionID}); err != nil {
-				return notFound(err)
-			}
-			return ErrNotPending
-		}
-		c, err := q.GetCompletion(ctx, dbq.GetCompletionParams{HouseholdID: householdID, ID: completionID})
-		if err != nil {
-			return fmt.Errorf("get completion: %w", err)
-		}
-
-		verb := "chore.approved"
-		if status == StatusApproved {
-			if err := creditCompletion(ctx, q, c, &reviewerID, now); err != nil {
-				return err
-			}
-		} else {
-			verb = "chore.rejected"
-			if err := q.ReopenOccurrence(ctx, dbq.ReopenOccurrenceParams{HouseholdID: householdID, ID: c.OccurrenceID}); err != nil {
-				return fmt.Errorf("reopen occurrence: %w", err)
-			}
-		}
-		return s.activity(ctx, q, householdID, reviewerID, verb, completionID)
+		return s.reviewTx(ctx, q, householdID, completionID, reviewerID, status)
 	})
+}
+
+func requireAdult(ctx context.Context, q *dbq.Queries, householdID, personID int64) error {
+	p, err := getPerson(ctx, q, householdID, personID)
+	if err != nil {
+		return err
+	}
+	if p.Kind != "adult" {
+		return ErrNotAdult
+	}
+	return nil
+}
+
+func (s *Service) reviewTx(ctx context.Context, q *dbq.Queries, householdID, completionID, reviewerID int64, status string) error {
+	now := s.now().Unix()
+	n, err := q.ReviewCompletion(ctx, dbq.ReviewCompletionParams{
+		Status:      status,
+		ReviewedBy:  &reviewerID,
+		ReviewedAt:  &now,
+		HouseholdID: householdID,
+		ID:          completionID,
+	})
+	if err != nil {
+		return fmt.Errorf("review completion: %w", err)
+	}
+	if n == 0 {
+		if _, err := q.GetCompletion(ctx, dbq.GetCompletionParams{HouseholdID: householdID, ID: completionID}); err != nil {
+			return notFound(err)
+		}
+		return ErrNotPending
+	}
+	c, err := q.GetCompletion(ctx, dbq.GetCompletionParams{HouseholdID: householdID, ID: completionID})
+	if err != nil {
+		return fmt.Errorf("get completion: %w", err)
+	}
+
+	verb := "chore.approved"
+	if status == StatusApproved {
+		if err := creditCompletion(ctx, q, c, &reviewerID, now); err != nil {
+			return err
+		}
+	} else {
+		verb = "chore.rejected"
+		if err := q.ReopenOccurrence(ctx, dbq.ReopenOccurrenceParams{HouseholdID: householdID, ID: c.OccurrenceID}); err != nil {
+			return fmt.Errorf("reopen occurrence: %w", err)
+		}
+	}
+	return s.activity(ctx, q, householdID, reviewerID, verb, completionID)
 }
 
 // Redeem spends personID's balance on a reward. It fails with
@@ -424,6 +435,7 @@ func (s *Service) activity(ctx context.Context, q *dbq.Queries, householdID, act
 		"chore.undone":    "occurrence",
 		"chore.approved":  "completion",
 		"chore.rejected":  "completion",
+		"chore.reversed":  "completion",
 		"reward.redeemed": "redemption",
 	}[verb]
 	if err := q.InsertActivity(ctx, dbq.InsertActivityParams{

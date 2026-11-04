@@ -58,6 +58,7 @@ The board has a column for each family member, adults included. Each column show
 - Tap one of your own chores to mark it done. Points are added straight away, unless the chore needs a grown-up to check it.
 - Tap a shared chore, pick who you are, then choose **I'll do it** (it moves to your column) or **It's done**. Use **Give back** to return a claimed chore to the pool.
 - Tapped the wrong thing? **Undo** appears for a few seconds after each completion.
+- **Grown-ups can put it right.** Completions run on the honour system: points count straight away. If something was marked done that wasn't, an adult (unlocked on the display, or signed in on a phone) taps the done chore and chooses **Reverse**. The points come off and the chore goes back on the board. Chores set to need a grown-up's check show **Approve** and **Not done yet** instead. Completions can be reversed for 7 days.
 - Missed chores stay up, marked **Overdue**, until they're done or the next one is due. A missed daily chore doesn't pile up.
 
 Every open board (the wall iPad, a second display, an adult's phone) updates live when anything changes. Behind a reverse proxy, don't buffer `/board/events`: it's a server-sent event stream. nginx is told this via `X-Accel-Buffering: no`.
@@ -70,6 +71,8 @@ Domus knows two kinds of device:
 - **Personal devices**: adults' phones, laptops and desktops. Sign in with **email and password** to manage everything from anywhere. You stay signed in for 30 days of inactivity, and sessions can be signed out from **Admin › Devices**.
 
 Any other device (not a display, not signed in) only sees the sign-in page: no board, names or photos.
+
+**Admin › Completions** lists everything waiting for a grown-up, plus the last 7 days of completions with a **Reverse** button. A reversal never deletes history: the points come back off through a separate ledger adjustment, so a balance can go negative if the reward has already been spent.
 
 Admin covers family members (with an emoji or photo, PINs and sign-ins), chores (assigned or shared, repeating daily/weekly/fortnightly/monthly, points and £), rewards, devices and settings (household name, timezone, when the board's day rolls over, admin auto-lock). Every change appears in the activity feed.
 
@@ -108,7 +111,7 @@ internal/auth/      PINs and passwords (argon2id), household displays, sessions,
 internal/settings/  per-household settings (timezone, day reset, admin idle timeout)
 internal/household/ people, credentials and rewards admin
 internal/avatar/    emoji picker and photo uploads
-internal/chores/    chore lifecycle: recurrence presets, admin edits, board, claim, complete, undo, approve, redeem
+internal/chores/    chore lifecycle: recurrence presets, admin edits, board, claim, complete, undo, approve, reverse, redeem
 internal/store/     SQLite, embedded goose migrations, sqlc queries
 internal/store/dbq/ sqlc-generated code (don't edit; run task generate)
 web/templates/      html/template layout, partials and pages

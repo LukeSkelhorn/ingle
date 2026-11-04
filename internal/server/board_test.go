@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -85,7 +86,7 @@ func TestBoardShowsColumnsAndPool(t *testing.T) {
 	_, wall, _ := boardHousehold(t)
 	r := wall.get("/")
 	expect(t, r, http.StatusOK, "Up for grabs", "Hoover the lounge", "5 pts · £0.50",
-		`id="board"`, "/board/events", "Who's doing this?")
+		`id="board"`, "/board/events", `id="sheet"`)
 	alfie := section(r.body, "Alfie")
 	for _, want := range []string{"🦖", "Feed the cat", "by 08:00", "0 of 1 done today", "0 pts"} {
 		if !strings.Contains(alfie, want) {
@@ -267,5 +268,159 @@ func TestBoardEvents(t *testing.T) {
 	}))
 	if ev := nextEvent(2 * time.Second); ev != "board" {
 		t.Fatalf("event after admin change = %q, want board", ev)
+	}
+}
+
+func TestBoardAdultReverse(t *testing.T) {
+	h, wall, phone := boardHousehold(t)
+	occ := h.occurrence("Feed the cat")
+	alfie := h.person("Alfie")
+	balance := func() int64 {
+		return must(h.st.Q.BalanceForPerson(t.Context(), dbq.BalanceForPersonParams{HouseholdID: h.hh, PersonID: alfie.ID})).Points
+	}
+
+	r := wall.post("/board/occurrences/"+itoa(occ.ID)+"/complete", nil)
+	expect(t, r, http.StatusOK)
+	review := strings.Replace(toastOf(t, r).Undo, "/undo", "/review", 1)
+	reverse := strings.Replace(review, "/review", "/reverse", 1)
+	h.advance(10 * time.Minute)
+
+	// Locked display: done chores aren't tappable and adult actions refuse.
+	if strings.Contains(section(wall.get("/board").body, "Alfie"), review) {
+		t.Error("locked display offers review")
+	}
+	r = wall.post(reverse, nil)
+	expect(t, r, http.StatusForbidden, "chore--done")
+	if tt := toastOf(t, r); !tt.Error || tt.Message != needAdult {
+		t.Errorf("toast = %+v", tt)
+	}
+	expect(t, wall.get(review), http.StatusConflict)
+
+	// Unlock on the wall: the done chore opens the review sheet.
+	expectRedirect(t, wall.post("/admin/unlock", url.Values{"person": {itoa(h.person("Mum").ID)}, "pin": {"2468"}}), "/admin")
+	if !strings.Contains(section(wall.get("/board").body, "Alfie"), review) {
+		t.Fatal("unlocked display doesn't offer review")
+	}
+	expect(t, wall.get(review), http.StatusOK, "Feed the cat", "Alfie", "Reverse", "2 pts")
+
+	// A phone is listening; reversing tells it.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	events := openEvents(t, ctx, phone)
+	r = wall.post(reverse, nil)
+	expect(t, r, http.StatusOK, "0 of 1 done today")
+	if tt := toastOf(t, r); tt.Message != "Reversed. Points taken back." {
+		t.Errorf("toast = %+v", tt)
+	}
+	if strings.Contains(section(r.body, "Alfie"), "chore--done") {
+		t.Error("still done after reverse")
+	}
+	if b := balance(); b != 0 {
+		t.Errorf("points = %d after reverse", b)
+	}
+	waitEvent(t, events)
+
+	// Again: already not counted.
+	r = wall.post(reverse, nil)
+	expect(t, r, http.StatusConflict)
+	if tt := toastOf(t, r); tt.Message != "That's already not counted." {
+		t.Errorf("toast = %+v", tt)
+	}
+}
+
+func TestAdminCompletions(t *testing.T) {
+	h, wall, phone := boardHousehold(t)
+	alfie := h.person("Alfie")
+	expectRedirect(t, phone.post("/admin/chores", url.Values{
+		"title": {"Tidy bedroom"}, "mode": {"assigned"}, "assignee_id": {itoa(alfie.ID)}, "repeat": {"once"},
+		"starts_on": {"2026-07-01"}, "points": {"3"}, "requires_approval": {"1"},
+	}), "/admin/chores")
+	cat := h.occurrence("Feed the cat")
+	tidy := h.occurrence("Tidy bedroom")
+	expect(t, wall.post("/board/occurrences/"+itoa(cat.ID)+"/complete", nil), http.StatusOK)
+	r := wall.post("/board/occurrences/"+itoa(tidy.ID)+"/complete", nil)
+	expect(t, r, http.StatusOK, "Waiting for a grown-up")
+
+	expect(t, wall.get("/admin/completions"), http.StatusSeeOther)
+	expect(t, phone.get("/admin"), http.StatusOK, `href="/admin/completions"`)
+	r = phone.get("/admin/completions")
+	expect(t, r, http.StatusOK, "Waiting for a grown-up", "Tidy bedroom", "Last 7 days", "Feed the cat", "Reverse")
+
+	ids := func(body, verb string) []string {
+		var out []string
+		for _, m := range regexp.MustCompile(`/admin/completions/(\d+)/`+verb).FindAllStringSubmatch(body, -1) {
+			out = append(out, m[1])
+		}
+		return out
+	}
+	pending := ids(r.body, "approve")
+	reversible := ids(r.body, "reverse")
+	if len(pending) != 1 || len(reversible) != 1 {
+		t.Fatalf("approve %v, reverse %v", pending, reversible)
+	}
+
+	expect(t, phone.post("/admin/completions/"+pending[0]+"/approve", nil), http.StatusOK, "Approved.")
+	balance := must(h.st.Q.BalanceForPerson(t.Context(), dbq.BalanceForPersonParams{HouseholdID: h.hh, PersonID: alfie.ID}))
+	if balance.Points != 5 {
+		t.Errorf("points = %d after approve, want 5", balance.Points)
+	}
+	expect(t, phone.post("/admin/completions/"+pending[0]+"/approve", nil), http.StatusConflict, "already checked")
+
+	r = phone.post("/admin/completions/"+reversible[0]+"/reverse", nil)
+	expect(t, r, http.StatusOK, "Reversed", "Not counted · Mum")
+	balance = must(h.st.Q.BalanceForPerson(t.Context(), dbq.BalanceForPersonParams{HouseholdID: h.hh, PersonID: alfie.ID}))
+	if balance.Points != 3 {
+		t.Errorf("points = %d after reverse, want 3", balance.Points)
+	}
+	expect(t, wall.get("/board"), http.StatusOK, "1 of 2 done today")
+	expect(t, phone.get("/admin"), http.StatusOK, "reversed a chore", "approved a chore")
+
+	// A week later it's too late to reverse the approved one.
+	h.advance(8 * 24 * time.Hour)
+	r = phone.get("/admin/completions")
+	if len(ids(r.body, "reverse")) != 0 {
+		t.Error("old completion still reversible")
+	}
+	expect(t, phone.post("/admin/completions/"+pending[0]+"/reverse", nil), http.StatusConflict, "over a week ago")
+}
+
+// openEvents subscribes d to the board's event stream and returns its event
+// names.
+func openEvents(t *testing.T, ctx context.Context, d *device) <-chan string {
+	t.Helper()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, d.h.ts.URL+"/board/events?client=listener", http.NoBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := d.c.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = res.Body.Close() })
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("stream: %d", res.StatusCode)
+	}
+	events := make(chan string, 16)
+	go func() {
+		defer close(events)
+		sc := bufio.NewScanner(res.Body)
+		for sc.Scan() {
+			if l := sc.Text(); strings.HasPrefix(l, "event: ") {
+				events <- strings.TrimPrefix(l, "event: ")
+			}
+		}
+	}()
+	return events
+}
+
+func waitEvent(t *testing.T, events <-chan string) {
+	t.Helper()
+	select {
+	case e := <-events:
+		if e != "board" {
+			t.Errorf("event = %q, want board", e)
+		}
+	case <-time.After(3 * time.Second):
+		t.Error("no board event")
 	}
 }

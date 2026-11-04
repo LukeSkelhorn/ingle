@@ -126,7 +126,11 @@ button.chore__main:active { background: var(--line); }
 .picker__person:has(input:focus-visible) { outline: 2px solid var(--accent); }
 .picker__actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .picker__actions .btn--ghost { grid-column: 1 / -1; }
-.picker:not(:has(input:checked)) [hx-post] { opacity: 0.4; pointer-events: none; }
+.picker__actions > p, .picker__actions .btn--danger { grid-column: 1 / -1; margin: 0; }
+.review__who { display: flex; align-items: center; gap: 12px; margin: 12px 0 16px; }
+.review__who p { margin: 0; color: var(--muted); }
+/* The "who's doing this?" form waits for someone to be picked. */
+form.picker:not(:has(input:checked)) [hx-post] { opacity: 0.4; pointer-events: none; }
 
 .toast {
   position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom)); transform: translateX(-50%);
@@ -296,6 +300,10 @@ input, select, textarea { -webkit-user-select: text; user-select: text; }
 .list__main small { font-size: 0.85rem; overflow-wrap: anywhere; }
 .list__value { white-space: nowrap; color: var(--muted); }
 .list__empty { padding: 16px; }
+.list__row--review { flex-wrap: wrap; }
+.list__row--review .list__main { flex: 1 1 180px; }
+.list__actions { display: flex; gap: 8px; margin-left: auto; }
+.list__actions .btn, .list__actions .tag { white-space: nowrap; }
 details.card summary { cursor: pointer; font-weight: 600; }
 details.card .list { margin: 8px -20px -20px; }
 

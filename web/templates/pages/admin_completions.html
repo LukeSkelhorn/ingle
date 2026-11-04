@@ -1,0 +1,52 @@
+{{define "bodyclass"}}admin{{end}}
+{{define "content"}}
+{{template "admin_nav" .}}
+<main class="admin__main">
+  <div class="admin__head">
+    <h1>Completions</h1>
+  </div>
+  {{template "flash" .}}
+
+  {{if .Data.Pending}}
+  <section>
+    <h2>Waiting for a grown-up</h2>
+    <ul class="list card">
+      {{range .Data.Pending}}
+      <li class="list__row list__row--review">
+        {{template "avatar" (avatar .Person "sm")}}
+        <span class="list__main"><strong>{{.Title}}</strong>
+          <small class="muted">{{.Person.Name}} · {{when .CompletedAt}}{{with worth .Points .Pence}} · {{.}}{{end}}</small></span>
+        <span class="list__actions">
+          <form method="post" action="/admin/completions/{{.ID}}/reject"><button class="btn btn--ghost" type="submit">Not done yet</button></form>
+          <form method="post" action="/admin/completions/{{.ID}}/approve"><button class="btn btn--primary" type="submit">Approve</button></form>
+        </span>
+      </li>
+      {{end}}
+    </ul>
+  </section>
+  {{end}}
+
+  <section>
+    <h2>Last 7 days</h2>
+    <p class="muted">Marked something done that wasn't? Reverse it: the points come off and the chore goes back on the board.</p>
+    <ul class="list card">
+      {{range .Data.Recent}}
+      <li class="list__row list__row--review">
+        {{template "avatar" (avatar .Person "sm")}}
+        <span class="list__main"><strong>{{.Title}}</strong>
+          <small class="muted">{{.Person.Name}} · {{when .CompletedAt}}{{with worth .Points .Pence}} · {{.}}{{end}}</small></span>
+        <span class="list__actions">
+          {{if .Counted}}
+          {{if .CanReverse}}<form method="post" action="/admin/completions/{{.ID}}/reverse"><button class="btn btn--danger" type="submit">Reverse</button></form>{{end}}
+          {{else}}
+          <span class="tag">Not counted{{with .ReviewerName}} · {{.}}{{end}}</span>
+          {{end}}
+        </span>
+      </li>
+      {{else}}
+      <li class="list__empty muted">Nothing completed in the last week.</li>
+      {{end}}
+    </ul>
+  </section>
+</main>
+{{end}}

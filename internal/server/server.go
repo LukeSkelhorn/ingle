@@ -102,6 +102,10 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /board/occurrences/{id}/complete", viewer(s.handleComplete))
 	mux.Handle("POST /board/occurrences/{id}/release", viewer(s.handleRelease))
 	mux.Handle("POST /board/completions/{id}/undo", viewer(s.handleUndo))
+	mux.Handle("GET /board/completions/{id}/review", viewer(s.handleReviewSheet))
+	mux.Handle("POST /board/completions/{id}/approve", viewer(s.boardReview(s.Chores.Approve, "Approved. Points added.")))
+	mux.Handle("POST /board/completions/{id}/reject", viewer(s.boardReview(s.Chores.Reject, "Not counted. It's back on the board.")))
+	mux.Handle("POST /board/completions/{id}/reverse", viewer(s.boardReview(s.Chores.Reverse, "Reversed. Points taken back.")))
 
 	// Admin routes: a signed-in adult (PIN on a display, password elsewhere).
 	// Any admin write may change what the board shows, so open boards are
@@ -135,6 +139,11 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /admin/rewards/{id}", admin(s.handleRewardUpdate))
 	mux.Handle("POST /admin/rewards/{id}/archive", admin(s.handleRewardArchive))
 	mux.Handle("POST /admin/rewards/{id}/restore", admin(s.handleRewardRestore))
+
+	mux.Handle("GET /admin/completions", admin(s.handleCompletions))
+	mux.Handle("POST /admin/completions/{id}/approve", admin(s.adminReview(s.Chores.Approve, "Approved.")))
+	mux.Handle("POST /admin/completions/{id}/reject", admin(s.adminReview(s.Chores.Reject, "Not counted; the chore is back on the board.")))
+	mux.Handle("POST /admin/completions/{id}/reverse", admin(s.adminReview(s.Chores.Reverse, "Reversed; points taken back and the chore is back on the board.")))
 
 	mux.Handle("GET /admin/devices", admin(s.handleDevices))
 	mux.Handle("POST /admin/devices/register", admin(s.handleDeviceRegister))

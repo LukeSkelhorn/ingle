@@ -81,6 +81,7 @@ var activityText = map[string]string{
 	"chore.archived":       "archived a chore",
 	"chore.claimed":        "claimed a chore",
 	"chore.released":       "gave back a chore",
+	"chore.reversed":       "reversed a chore",
 	"chore.completed":      "completed a chore",
 	"chore.undone":         "undid a chore",
 	"chore.approved":       "approved a chore",

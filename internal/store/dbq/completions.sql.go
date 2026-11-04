@@ -92,6 +92,142 @@ func (q *Queries) GetCompletion(ctx context.Context, arg GetCompletionParams) (C
 	return i, err
 }
 
+const getCompletionDetail = `-- name: GetCompletionDetail :one
+SELECT
+    c.id, c.occurrence_id, c.person_id, c.completed_at, c.status, c.reviewed_at, c.points, c.pence,
+    p.name AS person_name, p.colour AS person_colour, p.avatar AS person_avatar,
+    r.name AS reviewer_name,
+    ch.title, o.due_on
+FROM completions c
+JOIN chore_occurrences o ON o.id = c.occurrence_id
+JOIN chores ch ON ch.id = o.chore_id
+JOIN people p ON p.id = c.person_id
+LEFT JOIN people r ON r.id = c.reviewed_by
+WHERE c.household_id = ?1 AND c.id = ?2
+`
+
+type GetCompletionDetailParams struct {
+	HouseholdID int64 `json:"household_id"`
+	ID          int64 `json:"id"`
+}
+
+type GetCompletionDetailRow struct {
+	ID           int64   `json:"id"`
+	OccurrenceID int64   `json:"occurrence_id"`
+	PersonID     int64   `json:"person_id"`
+	CompletedAt  int64   `json:"completed_at"`
+	Status       string  `json:"status"`
+	ReviewedAt   *int64  `json:"reviewed_at"`
+	Points       int64   `json:"points"`
+	Pence        int64   `json:"pence"`
+	PersonName   string  `json:"person_name"`
+	PersonColour string  `json:"person_colour"`
+	PersonAvatar *string `json:"person_avatar"`
+	ReviewerName *string `json:"reviewer_name"`
+	Title        string  `json:"title"`
+	DueOn        string  `json:"due_on"`
+}
+
+func (q *Queries) GetCompletionDetail(ctx context.Context, arg GetCompletionDetailParams) (GetCompletionDetailRow, error) {
+	row := q.db.QueryRowContext(ctx, getCompletionDetail, arg.HouseholdID, arg.ID)
+	var i GetCompletionDetailRow
+	err := row.Scan(
+		&i.ID,
+		&i.OccurrenceID,
+		&i.PersonID,
+		&i.CompletedAt,
+		&i.Status,
+		&i.ReviewedAt,
+		&i.Points,
+		&i.Pence,
+		&i.PersonName,
+		&i.PersonColour,
+		&i.PersonAvatar,
+		&i.ReviewerName,
+		&i.Title,
+		&i.DueOn,
+	)
+	return i, err
+}
+
+const listCompletionDetails = `-- name: ListCompletionDetails :many
+SELECT
+    c.id, c.occurrence_id, c.person_id, c.completed_at, c.status, c.reviewed_at, c.points, c.pence,
+    p.name AS person_name, p.colour AS person_colour, p.avatar AS person_avatar,
+    r.name AS reviewer_name,
+    ch.title, o.due_on
+FROM completions c
+JOIN chore_occurrences o ON o.id = c.occurrence_id
+JOIN chores ch ON ch.id = o.chore_id
+JOIN people p ON p.id = c.person_id
+LEFT JOIN people r ON r.id = c.reviewed_by
+WHERE c.household_id = ?1
+  AND (c.status = 'pending' OR c.completed_at >= ?2)
+ORDER BY c.status = 'pending' DESC, c.completed_at DESC, c.id DESC
+`
+
+type ListCompletionDetailsParams struct {
+	HouseholdID int64 `json:"household_id"`
+	SinceUnix   int64 `json:"since_unix"`
+}
+
+type ListCompletionDetailsRow struct {
+	ID           int64   `json:"id"`
+	OccurrenceID int64   `json:"occurrence_id"`
+	PersonID     int64   `json:"person_id"`
+	CompletedAt  int64   `json:"completed_at"`
+	Status       string  `json:"status"`
+	ReviewedAt   *int64  `json:"reviewed_at"`
+	Points       int64   `json:"points"`
+	Pence        int64   `json:"pence"`
+	PersonName   string  `json:"person_name"`
+	PersonColour string  `json:"person_colour"`
+	PersonAvatar *string `json:"person_avatar"`
+	ReviewerName *string `json:"reviewer_name"`
+	Title        string  `json:"title"`
+	DueOn        string  `json:"due_on"`
+}
+
+// Completions for adults to review: every pending one, plus anything
+// completed since since_unix. Pending first, then newest first.
+func (q *Queries) ListCompletionDetails(ctx context.Context, arg ListCompletionDetailsParams) ([]ListCompletionDetailsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listCompletionDetails, arg.HouseholdID, arg.SinceUnix)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCompletionDetailsRow{}
+	for rows.Next() {
+		var i ListCompletionDetailsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OccurrenceID,
+			&i.PersonID,
+			&i.CompletedAt,
+			&i.Status,
+			&i.ReviewedAt,
+			&i.Points,
+			&i.Pence,
+			&i.PersonName,
+			&i.PersonColour,
+			&i.PersonAvatar,
+			&i.ReviewerName,
+			&i.Title,
+			&i.DueOn,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLiveCompletionsForRange = `-- name: ListLiveCompletionsForRange :many
 SELECT c.id, c.occurrence_id, c.person_id, c.completed_at, c.status
 FROM completions c
@@ -184,6 +320,34 @@ func (q *Queries) ListPendingCompletions(ctx context.Context, householdID int64)
 		return nil, err
 	}
 	return items, nil
+}
+
+const reverseCompletion = `-- name: ReverseCompletion :execrows
+UPDATE completions
+SET status = 'rejected', reviewed_by = ?1, reviewed_at = ?2
+WHERE household_id = ?3 AND id = ?4 AND status = 'approved'
+`
+
+type ReverseCompletionParams struct {
+	ReviewedBy  *int64 `json:"reviewed_by"`
+	ReviewedAt  *int64 `json:"reviewed_at"`
+	HouseholdID int64  `json:"household_id"`
+	ID          int64  `json:"id"`
+}
+
+// An adult takes back an approved completion; the ledger is corrected with a
+// separate adjustment entry.
+func (q *Queries) ReverseCompletion(ctx context.Context, arg ReverseCompletionParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, reverseCompletion,
+		arg.ReviewedBy,
+		arg.ReviewedAt,
+		arg.HouseholdID,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const reviewCompletion = `-- name: ReviewCompletion :execrows

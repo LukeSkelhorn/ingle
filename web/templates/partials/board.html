@@ -13,7 +13,7 @@
   <section class="pool" aria-labelledby="pool-h">
     <h2 id="pool-h" class="pool__title">Up for grabs</h2>
     {{if .Pool}}
-    <ul class="chores chores--pool">{{range .Pool}}{{template "card" .}}{{end}}</ul>
+    <ul class="chores chores--pool">{{range .Pool}}{{template "card" (dict "Card" . "Adult" $.Adult)}}{{end}}</ul>
     {{else}}
     <p class="pool__empty">Nothing up for grabs right now.</p>
     {{end}}
@@ -35,7 +35,7 @@
       </div>
       {{end}}
       {{if .Cards}}
-      <ul class="chores">{{range .Cards}}{{template "card" .}}{{end}}</ul>
+      <ul class="chores">{{range .Cards}}{{template "card" (dict "Card" . "Adult" $.Adult)}}{{end}}</ul>
       {{else}}
       <p class="column__empty">Nothing today.</p>
       {{end}}
@@ -46,18 +46,19 @@
 </div>
 {{end}}
 
-{{/* One chore. Pool chores open the picker; assigned and claimed chores are
-     completed with one tap; done chores are not interactive. */}}
+{{/* One chore: dict "Card" chores.Card "Adult" bool. Pool chores open the
+     picker; assigned and claimed chores are completed with one tap; done
+     chores open the review sheet for an adult, and are inert otherwise. */}}
 {{define "card"}}
+{{- $adult := .Adult}}{{with .Card}}
 <li class="chore{{if .Done}} chore--done{{if .JustDone}} chore--just{{end}}{{end}}{{if .Overdue}} chore--overdue{{end}}{{if .Claimed}} chore--claimed{{end}}">
-  {{if .Done}}
-  <div class="chore__main">
-    <span class="chore__check chore__check--on" aria-hidden="true">✓</span>
-    <span class="chore__text">
-      <span class="chore__title">{{.Title}}</span>
-      <span class="chore__meta">{{if .Pending}}<span class="tag tag--wait">Waiting for a grown-up</span>{{else}}Done{{end}}</span>
-    </span>
-  </div>
+  {{if and .Done $adult .CompletionID}}
+  <button class="chore__main" type="button"
+          hx-get="/board/completions/{{.CompletionID}}/review" hx-target="#sheet-body" hx-swap="innerHTML">
+    {{template "done_body" .}}
+  </button>
+  {{else if .Done}}
+  <div class="chore__main">{{template "done_body" .}}</div>
   {{else if and .Pool (not .Claimed)}}
   <button class="chore__main" type="button"
           hx-get="/board/occurrences/{{.OccurrenceID}}/pick" hx-target="#sheet-body" hx-swap="innerHTML">
@@ -82,6 +83,15 @@
   {{end}}
   {{end}}
 </li>
+{{end}}
+{{- end}}
+
+{{define "done_body"}}
+<span class="chore__check chore__check--on" aria-hidden="true">✓</span>
+<span class="chore__text">
+  <span class="chore__title">{{.Title}}</span>
+  <span class="chore__meta">{{if .Pending}}<span class="tag tag--wait">Waiting for a grown-up</span>{{else}}Done{{end}}</span>
+</span>
 {{end}}
 
 {{define "chore_meta"}}
@@ -116,4 +126,35 @@
     <button class="btn btn--ghost btn--block" type="button" data-close>Cancel</button>
   </div>
 </form>
+{{end}}
+
+{{/* An adult's sheet for a done chore: approve or reject if it's waiting,
+     reverse if it counted. */}}
+{{define "review"}}
+{{with .C}}
+<div class="picker" hx-target="#board" hx-swap="outerHTML">
+  <h2 class="picker__title" tabindex="-1" autofocus>{{.Title}}</h2>
+  <div class="review__who">
+    {{template "avatar" (avatar .Person "md")}}
+    <p>{{.Person.Name}} · {{when .CompletedAt}}{{with worth .Points .Pence}}<br><span class="chip">{{.}}</span>{{end}}</p>
+  </div>
+  <div class="picker__actions">
+    {{if .Pending}}
+    <button class="btn btn--block" type="button" hx-disabled-elt="this"
+            hx-post="/board/completions/{{.ID}}/reject">Not done yet</button>
+    <button class="btn btn--primary btn--block" type="button" hx-disabled-elt="this"
+            hx-post="/board/completions/{{.ID}}/approve">Approve</button>
+    {{else if .CanReverse}}
+    <p class="muted">Reversing takes the points back and puts the chore back on the board.</p>
+    <button class="btn btn--danger btn--block" type="button" hx-disabled-elt="this"
+            hx-post="/board/completions/{{.ID}}/reverse">Reverse</button>
+    {{else if .Counted}}
+    <p class="muted">That was over a week ago, so it can't be reversed.</p>
+    {{else}}
+    <p class="muted">This one isn't counted.</p>
+    {{end}}
+    <button class="btn btn--ghost btn--block" type="button" data-close>Cancel</button>
+  </div>
+</div>
+{{end}}
 {{end}}

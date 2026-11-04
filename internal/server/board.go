@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -12,7 +13,9 @@ import (
 // boardView is what the "board" partial renders.
 type boardView struct {
 	chores.Board
-	// Adult is set when an adult is signed in, for the empty-state admin link.
+	// Adult is set when an adult is signed in (or unlocked on a display): it
+	// shows the admin link on an empty board and makes done chores tappable
+	// for review.
 	Adult bool
 }
 
@@ -162,6 +165,60 @@ func (s *Server) handleUndo(w http.ResponseWriter, r *http.Request) {
 	s.boardDone(w, r, toast{Message: "Undone."})
 }
 
+// reviewView is the adult's sheet for a done chore.
+type reviewView struct {
+	C chores.CompletionDetail
+}
+
+// boardAdult is the adult on this request's session, if any.
+func boardAdult(r *http.Request) *dbq.Person {
+	if sess := identityFrom(r.Context()).Session; sess != nil {
+		return &sess.Person
+	}
+	return nil
+}
+
+func (s *Server) handleReviewSheet(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	if boardAdult(r) == nil {
+		s.boardFailed(w, r, needAdult)
+		return
+	}
+	c, err := s.Chores.Completion(r.Context(), s.HouseholdID, id)
+	if err != nil {
+		s.boardError(w, r, err)
+		return
+	}
+	s.renderPartial(w, r, "review", reviewView{C: c})
+}
+
+const needAdult = "Ask a grown-up to unlock admin."
+
+// boardReview runs an adult action (approve, reject, reverse) from the board.
+func (s *Server) boardReview(fn func(ctx context.Context, hh, completionID, reviewerID int64) error, msg string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, _, ok := s.boardAction(w, r)
+		if !ok {
+			return
+		}
+		adult := boardAdult(r)
+		if adult == nil {
+			setToast(w, toast{Message: needAdult, Error: true})
+			s.renderBoard(w, r, http.StatusForbidden)
+			return
+		}
+		if err := fn(r.Context(), s.HouseholdID, id, adult.ID); err != nil {
+			s.boardError(w, r, err)
+			return
+		}
+		s.boardDone(w, r, toast{Message: msg})
+	}
+}
+
 // boardAction parses a board POST: the {id} path value and optional person.
 func (s *Server) boardAction(w http.ResponseWriter, r *http.Request) (int64, *int64, bool) {
 	id, ok := pathID(r)
@@ -229,6 +286,14 @@ func boardErrorText(err error) (string, bool) {
 		return "That's not claimed any more.", true
 	case errors.Is(err, chores.ErrUndoExpired):
 		return "Too late to undo. Ask a grown-up.", true
+	case errors.Is(err, chores.ErrTooOld):
+		return "That was over a week ago, so it can't be reversed.", true
+	case errors.Is(err, chores.ErrNotCounted):
+		return "That's already not counted.", true
+	case errors.Is(err, chores.ErrNotPending):
+		return "Someone has already checked that one.", true
+	case errors.Is(err, chores.ErrNotAdult):
+		return needAdult, true
 	case errors.Is(err, chores.ErrNotFound):
 		return "That chore has gone.", true
 	}
