@@ -13,9 +13,11 @@ import (
 
 	"github.com/lukeskelhorn/domus/internal/auth"
 	"github.com/lukeskelhorn/domus/internal/avatar"
+	"github.com/lukeskelhorn/domus/internal/calendar"
 	"github.com/lukeskelhorn/domus/internal/chores"
 	"github.com/lukeskelhorn/domus/internal/household"
 	"github.com/lukeskelhorn/domus/internal/locale"
+	"github.com/lukeskelhorn/domus/internal/photos"
 	"github.com/lukeskelhorn/domus/internal/settings"
 	"github.com/lukeskelhorn/domus/internal/store"
 	"github.com/lukeskelhorn/domus/web"
@@ -30,6 +32,8 @@ type Deps struct {
 	Chores      *chores.Service
 	Household   *household.Service
 	Avatars     *avatar.Store
+	Photos      *photos.Library
+	Calendars   *calendar.Service
 	Locale      locale.Locale
 	Log         *slog.Logger
 }
@@ -95,6 +99,9 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /{$}", viewer(s.handleIndex))
 	mux.Handle("GET /clock", viewer(s.handleClock))
 	mux.Handle("GET /avatars/{name}", viewer(s.handleAvatar))
+	mux.Handle("GET /photos/{kind}/{name}", viewer(s.handlePhoto))
+	mux.Handle("GET /screensaver", viewer(s.handleScreensaver))
+	mux.Handle("GET /screensaver/photos", viewer(s.handleSlides))
 	mux.Handle("GET /board", viewer(s.handleBoard))
 	mux.Handle("GET /board/events", viewer(s.handleBoardEvents))
 	mux.Handle("GET /board/occurrences/{id}/pick", viewer(s.handlePick))
@@ -144,6 +151,15 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /admin/completions/{id}/approve", admin(s.adminReview(s.Chores.Approve, "Approved.")))
 	mux.Handle("POST /admin/completions/{id}/reject", admin(s.adminReview(s.Chores.Reject, "Not counted; the chore is back on the board.")))
 	mux.Handle("POST /admin/completions/{id}/reverse", admin(s.adminReview(s.Chores.Reverse, "Reversed; points taken back and the chore is back on the board.")))
+
+	mux.Handle("GET /admin/photos", admin(s.handlePhotos))
+	mux.Handle("POST /admin/photos", admin(s.handlePhotoUpload))
+	mux.Handle("POST /admin/photos/{id}/delete", admin(s.handlePhotoDelete))
+
+	mux.Handle("GET /admin/calendars", admin(s.handleCalendars))
+	mux.Handle("POST /admin/calendars", admin(s.handleCalendarAdd))
+	mux.Handle("POST /admin/calendars/refresh", admin(s.handleCalendarRefresh))
+	mux.Handle("POST /admin/calendars/{id}/delete", admin(s.handleCalendarDelete))
 
 	mux.Handle("GET /admin/devices", admin(s.handleDevices))
 	mux.Handle("POST /admin/devices/register", admin(s.handleDeviceRegister))

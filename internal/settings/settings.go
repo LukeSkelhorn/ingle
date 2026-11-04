@@ -1,5 +1,5 @@
 // Package settings stores per-household preferences (name, timezone, when
-// the board day rolls over, admin idle timeout) and caches them so hot paths
+// the board day rolls over, admin and screensaver idle timeouts) and caches them so hot paths
 // such as session checks and board rendering don't hit the database.
 package settings
 
@@ -25,6 +25,9 @@ type Settings struct {
 	Location         *time.Location
 	DayStartsAt      string // "HH:MM"
 	AdminIdleMinutes int64
+	// ScreensaverIdleMinutes is how long a household display waits before
+	// showing the screensaver; 0 means never.
+	ScreensaverIdleMinutes int64
 
 	dayStart time.Duration
 }
@@ -33,6 +36,12 @@ type Settings struct {
 // without activity.
 func (s Settings) AdminIdle() time.Duration {
 	return time.Duration(s.AdminIdleMinutes) * time.Minute
+}
+
+// ScreensaverIdle is how long a household display waits, untouched, before
+// showing the screensaver. Zero means never.
+func (s Settings) ScreensaverIdle() time.Duration {
+	return time.Duration(s.ScreensaverIdleMinutes) * time.Minute
 }
 
 // BoardDay returns midnight (local) of the board's current day. Before
@@ -59,10 +68,11 @@ func (s Settings) Today(now time.Time) string {
 
 // Input is an update from the settings form.
 type Input struct {
-	HouseholdName    string
-	Timezone         string
-	DayStartsAt      string
-	AdminIdleMinutes int64
+	HouseholdName          string
+	Timezone               string
+	DayStartsAt            string
+	AdminIdleMinutes       int64
+	ScreensaverIdleMinutes int64
 }
 
 // Service loads, caches and updates settings.
@@ -147,6 +157,9 @@ func (s *Service) Update(ctx context.Context, householdID, actorID int64, in Inp
 	if in.AdminIdleMinutes < 1 || in.AdminIdleMinutes > 60 {
 		errs.Add("admin_idle_minutes", "Choose between 1 and 60 minutes.")
 	}
+	if in.ScreensaverIdleMinutes < 0 || in.ScreensaverIdleMinutes > 120 {
+		errs.Add("screensaver_idle_minutes", "Choose between 0 (never) and 120 minutes.")
+	}
 	if err := errs.Err(); err != nil {
 		return err
 	}
@@ -157,11 +170,12 @@ func (s *Service) Update(ctx context.Context, householdID, actorID int64, in Inp
 			return fmt.Errorf("update household name: %w", err)
 		}
 		if _, err := q.UpdateSettings(ctx, dbq.UpdateSettingsParams{
-			Timezone:         in.Timezone,
-			DayStartsAt:      in.DayStartsAt,
-			AdminIdleMinutes: in.AdminIdleMinutes,
-			UpdatedAt:        now.Unix(),
-			HouseholdID:      householdID,
+			Timezone:               in.Timezone,
+			DayStartsAt:            in.DayStartsAt,
+			AdminIdleMinutes:       in.AdminIdleMinutes,
+			ScreensaverIdleMinutes: in.ScreensaverIdleMinutes,
+			UpdatedAt:              now.Unix(),
+			HouseholdID:            householdID,
 		}); err != nil {
 			return fmt.Errorf("update settings: %w", err)
 		}
@@ -192,12 +206,13 @@ func resolve(name string, row dbq.HouseholdSetting) (Settings, error) {
 		return Settings{}, fmt.Errorf("stored day_starts_at %q: %w", row.DayStartsAt, err)
 	}
 	return Settings{
-		HouseholdID:      row.HouseholdID,
-		HouseholdName:    name,
-		Location:         loc,
-		DayStartsAt:      row.DayStartsAt,
-		AdminIdleMinutes: row.AdminIdleMinutes,
-		dayStart:         dayStart,
+		HouseholdID:            row.HouseholdID,
+		HouseholdName:          name,
+		Location:               loc,
+		DayStartsAt:            row.DayStartsAt,
+		AdminIdleMinutes:       row.AdminIdleMinutes,
+		ScreensaverIdleMinutes: row.ScreensaverIdleMinutes,
+		dayStart:               dayStart,
 	}, nil
 }
 

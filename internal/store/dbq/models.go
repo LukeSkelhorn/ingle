@@ -20,6 +20,16 @@ type AppMetum struct {
 	Value string `json:"value"`
 }
 
+type CalendarFeed struct {
+	ID          int64  `json:"id"`
+	HouseholdID int64  `json:"household_id"`
+	Name        string `json:"name"`
+	Url         string `json:"url"`
+	Colour      string `json:"colour"`
+	CreatedBy   *int64 `json:"created_by"`
+	CreatedAt   int64  `json:"created_at"`
+}
+
 type Chore struct {
 	ID               int64   `json:"id"`
 	HouseholdID      int64   `json:"household_id"`
@@ -80,11 +90,12 @@ type Household struct {
 }
 
 type HouseholdSetting struct {
-	HouseholdID      int64  `json:"household_id"`
-	Timezone         string `json:"timezone"`
-	DayStartsAt      string `json:"day_starts_at"`
-	AdminIdleMinutes int64  `json:"admin_idle_minutes"`
-	UpdatedAt        int64  `json:"updated_at"`
+	HouseholdID            int64  `json:"household_id"`
+	Timezone               string `json:"timezone"`
+	DayStartsAt            string `json:"day_starts_at"`
+	AdminIdleMinutes       int64  `json:"admin_idle_minutes"`
+	UpdatedAt              int64  `json:"updated_at"`
+	ScreensaverIdleMinutes int64  `json:"screensaver_idle_minutes"`
 }
 
 type LedgerEntry struct {
@@ -114,6 +125,16 @@ type Person struct {
 	CreatedAt    int64   `json:"created_at"`
 	Email        *string `json:"email"`
 	PasswordHash *string `json:"password_hash"`
+}
+
+type Photo struct {
+	ID          int64  `json:"id"`
+	HouseholdID int64  `json:"household_id"`
+	File        string `json:"file"`
+	Width       int64  `json:"width"`
+	Height      int64  `json:"height"`
+	CreatedBy   *int64 `json:"created_by"`
+	CreatedAt   int64  `json:"created_at"`
 }
 
 type Redemption struct {

@@ -25,6 +25,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Currency != "GBP" {
 		t.Errorf("Currency = %q, want GBP", cfg.Currency)
 	}
+	if cfg.PhotosDir != "" {
+		t.Errorf("PhotosDir = %q, want none", cfg.PhotosDir)
+	}
 }
 
 func TestLoadOverrides(t *testing.T) {
@@ -33,13 +36,14 @@ func TestLoadOverrides(t *testing.T) {
 		"DOMUS_TZ":         "Europe/Dublin",
 		"DOMUS_WEEK_START": "Sunday",
 		"DOMUS_CURRENCY":   "eur",
+		"DOMUS_PHOTOS_DIR": "/photos",
 	}
 	cfg, err := load(func(k string) string { return env[k] })
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
 	if cfg.Addr != "127.0.0.1:9000" || cfg.Location.String() != "Europe/Dublin" ||
-		cfg.WeekStart != time.Sunday || cfg.Currency != "EUR" {
+		cfg.WeekStart != time.Sunday || cfg.Currency != "EUR" || cfg.PhotosDir != "/photos" {
 		t.Errorf("unexpected config: %+v", cfg)
 	}
 }

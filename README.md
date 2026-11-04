@@ -50,6 +50,7 @@ Set these as environment variables, or copy `.env.example` to `.env`. Task loads
 | `DOMUS_DATE_FORMAT` | `02/01/2006`      | Go layout; the default is DD/MM/YYYY   |
 | `DOMUS_WEEK_START`  | `monday`          | Day name                               |
 | `DOMUS_CURRENCY`    | `GBP`             | ISO code; amounts are stored in pence  |
+| `DOMUS_PHOTOS_DIR`  | (none)            | Optional read-only folder of photos for the screensaver |
 
 ## The board
 
@@ -61,7 +62,15 @@ The board has a column for each family member, adults included. Each column show
 - **Grown-ups can put it right.** Completions run on the honour system: points count straight away. If something was marked done that wasn't, an adult (unlocked on the display, or signed in on a phone) taps the done chore and chooses **Reverse**. The points come off and the chore goes back on the board. Chores set to need a grown-up's check show **Approve** and **Not done yet** instead. Completions can be reversed for 7 days.
 - Missed chores stay up, marked **Overdue**, until they're done or the next one is due. A missed daily chore doesn't pile up.
 
-Every open board (the wall iPad, a second display, an adult's phone) updates live when anything changes. Behind a reverse proxy, don't buffer `/board/events`: it's a server-sent event stream. nginx is told this via `X-Accel-Buffering: no`.
+Every open board (the wall iPad, a second display, an adult's phone) updates live when anything changes.
+
+### Screensaver
+
+When a household display has been left alone for 5 minutes (change this, or turn it off, in **Admin › Settings**), it shows a screensaver. Family photos fade from one to the next, with the time and date, what's on today and tomorrow from your calendars, and how everyone's getting on with today's chores. Tap anywhere to get the board back. That tap only wakes the screen, so nobody ticks off a chore by accident. The 🌙 button starts the screensaver straight away on any board, phones included. If admin is unlocked on the display, it locks before the screensaver starts.
+
+- **Photos:** upload them in **Admin › Photos**, or point `DOMUS_PHOTOS_DIR` at a folder (a NAS share, say). Domus only reads that folder, checks it for new photos every 10 minutes, and shows both sets mixed together. In Docker, mount it read-only: `-v /path/to/photos:/photos:ro -e DOMUS_PHOTOS_DIR=/photos`.
+- **Calendars:** add the secret iCal address of a Google, iCloud or Outlook calendar in **Admin › Calendars**. Domus reads it every 15 minutes and never shows the address again after you save it.
+- **Always on:** set the iPad's **Settings → Display & Brightness → Auto-Lock** to **Never** (Guided Access helps too), so the screensaver stays up instead of the screen going dark. Behind a reverse proxy, don't buffer `/board/events`: it's a server-sent event stream. nginx is told this via `X-Accel-Buffering: no`.
 
 ## Devices, sign-in and admin
 
@@ -74,9 +83,9 @@ Any other device (not a display, not signed in) only sees the sign-in page: no b
 
 **Admin › Completions** lists everything waiting for a grown-up, plus the last 7 days of completions with a **Reverse** button. A reversal never deletes history: the points come back off through a separate ledger adjustment, so a balance can go negative if the reward has already been spent.
 
-Admin covers family members (with an emoji or photo, PINs and sign-ins), chores (assigned or shared, repeating daily/weekly/fortnightly/monthly, points and £), rewards, devices and settings (household name, timezone, when the board's day rolls over, admin auto-lock). Every change appears in the activity feed.
+Admin covers family members (with an emoji or photo, PINs and sign-ins), chores (assigned or shared, repeating daily/weekly/fortnightly/monthly, points and £), rewards, screensaver photos and calendars, devices and settings (household name, timezone, when the board's day rolls over, admin auto-lock, screensaver delay). Every change appears in the activity feed.
 
-If Domus is reachable from outside your home network, put it behind a reverse proxy with HTTPS (e.g. Caddy or Traefik) and forward `X-Forwarded-Proto` so cookies are marked `Secure`. Photos are stored next to the database, in `avatars/`.
+If Domus is reachable from outside your home network, put it behind a reverse proxy with HTTPS (e.g. Caddy or Traefik) and forward `X-Forwarded-Proto` so cookies are marked `Secure`. Photos are stored next to the database: avatars in `avatars/`, screensaver uploads in `photos/`, and resized copies of folder photos in `photo-cache/`.
 
 ## Install on iPad
 
@@ -108,9 +117,12 @@ internal/config/    env config + UK defaults
 internal/locale/    date, week and money formatting
 internal/server/    HTTP routes, middleware and handlers (board + live events, setup, sign-in, admin)
 internal/auth/      PINs and passwords (argon2id), household displays, sessions, rate limits
-internal/settings/  per-household settings (timezone, day reset, admin idle timeout)
+internal/settings/  per-household settings (timezone, day reset, admin and screensaver idle timeouts)
 internal/household/ people, credentials and rewards admin
 internal/avatar/    emoji picker and photo uploads
+internal/picture/   safe image decoding and JPEG writing, shared by avatars and photos
+internal/photos/    screensaver slideshow: uploaded photos plus the read-only photos folder
+internal/calendar/  ICS feeds: fetch, parse and expand recurring events for the screensaver
 internal/chores/    chore lifecycle: recurrence presets, admin edits, board, claim, complete, undo, approve, reverse, redeem
 internal/store/     SQLite, embedded goose migrations, sqlc queries
 internal/store/dbq/ sqlc-generated code (don't edit; run task generate)
@@ -122,12 +134,14 @@ web/static/         htmx, CSS, PWA manifest, service worker, icons
 
 Every table has a `household_id`, so one database can hold several households. A self-hosted install has just one.
 
-- **households** and **household_settings**: name, timezone, when the board's day rolls over and the admin idle timeout.
+- **households** and **household_settings**: name, timezone, when the board's day rolls over, and the admin and screensaver idle timeouts.
 - **people**: adults and children, each with a colour and an avatar (an emoji or an uploaded photo). Adults can have a PIN and an email + password, all stored as argon2id hashes.
 - **devices** are registered household displays, and **sessions** are adult sign-ins (PIN on a display, or password elsewhere). Only sha256 hashes of their tokens are stored.
 - **chores** are either *assigned* to one person or sit in the shared *pool*. Recurrence is an iCal `RRULE` evaluated in the household timezone. A chore can award points, pence or both, and can require an adult's approval.
 - **chore_occurrences**: the concrete instances that appear on the board. They're materialised 14 days ahead on startup, then refreshed every hour. Each pool occurrence can be claimed by one person.
 - **completions** are pending, approved or rejected. Only approved completions credit the **ledger_entries** table, and balances are the sum of a person's entries. Rewards are bought from the ledger through **redemptions**.
+- **photos** are the screensaver photos uploaded in admin. Folder photos are indexed in memory and never stored.
+- **calendar_feeds** are the ICS addresses for the screensaver. Events are fetched into memory and not stored.
 - **activity** is an append-only feed and audit log.
 
 Timestamps are stored as unix seconds (UTC), local dates as `YYYY-MM-DD`, and money as integer pence.

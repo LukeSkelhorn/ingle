@@ -28,6 +28,12 @@
       <input type="number" name="admin_idle_minutes" value="{{.Data.AdminIdleMinutes}}" min="1" max="60" required inputmode="numeric">
       {{template "err" index .Errors "admin_idle_minutes"}}
     </label>
+    <label class="field field--short">
+      <span>Show the screensaver on displays after (minutes idle)</span>
+      <input type="number" name="screensaver_idle_minutes" value="{{.Data.ScreensaverIdleMinutes}}" min="0" max="120" required inputmode="numeric">
+      <small class="muted">Photos, the clock and what's on today. 0 turns it off; the 🌙 button on the board still works.</small>
+      {{template "err" index .Errors "screensaver_idle_minutes"}}
+    </label>
     <button class="btn btn--primary" type="submit">Save settings</button>
   </form>
 </main>

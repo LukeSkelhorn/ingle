@@ -1,0 +1,54 @@
+{{define "bodyclass"}}admin{{end}}
+{{define "content"}}
+{{template "admin_nav" .}}
+<main class="admin__main">
+  <div class="admin__head">
+    <h1>Calendars</h1>
+    {{if .Data.Feeds}}
+    <form method="post" action="/admin/calendars/refresh"><button class="btn btn--ghost" type="submit">Refresh now</button></form>
+    {{end}}
+  </div>
+  {{template "flash" .}}
+  <p class="muted">The screensaver shows what's on today and tomorrow from these calendars. Domus only reads them, every 15 minutes.</p>
+
+  {{if .Data.Feeds}}
+  <ul class="list card">
+    {{range .Data.Feeds}}
+    <li class="list__row list__row--review">
+      <span class="dot" style="--dot: {{.Colour}}" aria-hidden="true"></span>
+      <span class="list__main"><strong>{{.Name}}</strong>
+        <small class="muted">{{.Masked}}{{with .Updated}} · {{.}}{{end}}</small>
+        {{with .Error}}<small class="field__err">Last try failed: {{.}}</small>{{end}}</span>
+      <span class="list__actions">
+        <form method="post" action="/admin/calendars/{{.ID}}/delete"><button class="btn btn--ghost btn--danger" type="submit">Remove</button></form>
+      </span>
+    </li>
+    {{end}}
+  </ul>
+  {{end}}
+
+  <form class="card stack" method="post" action="/admin/calendars">
+    <h2>Add a calendar</h2>
+    <label class="field">
+      <span>Name</span>
+      <input name="name" value="{{.Data.Name}}" required maxlength="50" placeholder="Family">
+      {{template "err" index .Errors "name"}}
+    </label>
+    <label class="field">
+      <span>Calendar address (iCal)</span>
+      <input name="url" value="{{.Data.URL}}" required inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://… or webcal://…">
+      {{template "err" index .Errors "url"}}
+    </label>
+    <details class="help">
+      <summary>Where do I find this?</summary>
+      <ul>
+        <li><strong>Google Calendar:</strong> on a computer, open Settings › choose the calendar › Integrate calendar › copy <em>Secret address in iCal format</em>.</li>
+        <li><strong>iCloud:</strong> in the Calendar app, tap ⓘ next to the calendar, turn on <em>Public Calendar</em> and share the link.</li>
+        <li><strong>Outlook:</strong> Settings › Calendar › Shared calendars › Publish a calendar › copy the ICS link.</li>
+      </ul>
+      <p class="muted">Treat the address like a password: anyone with it can read the calendar. Domus never shows it again after saving.</p>
+    </details>
+    <button class="btn btn--primary" type="submit">Add calendar</button>
+  </form>
+</main>
+{{end}}

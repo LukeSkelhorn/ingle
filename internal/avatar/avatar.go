@@ -4,15 +4,10 @@
 package avatar
 
 import (
-	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"image"
-	_ "image/gif" // register decoders for DecodeConfig
-	"image/jpeg"
-	_ "image/png"
 	"io"
 	"os"
 	"path/filepath"
@@ -21,6 +16,8 @@ import (
 	"strings"
 
 	"github.com/disintegration/imaging"
+
+	"github.com/lukeskelhorn/domus/internal/picture"
 )
 
 // Size is the width and height of stored photos, in pixels.
@@ -28,10 +25,6 @@ const Size = 256
 
 // MaxUpload is the largest accepted upload, in bytes.
 const MaxUpload = 8 << 20
-
-// maxPixels guards against decompression bombs (a tiny file that decodes to
-// a huge image).
-const maxPixels = 50_000_000
 
 // Value prefixes stored in people.avatar.
 const (
@@ -109,41 +102,19 @@ func NewStore(dir string) (*Store, error) {
 // SavePhoto reads an uploaded image, auto-orients it from EXIF, centre crops
 // it to Size×Size and stores it as JPEG. It returns the stored file name.
 func (s *Store) SavePhoto(r io.Reader) (string, error) {
-	data, err := io.ReadAll(io.LimitReader(r, MaxUpload+1))
-	if err != nil {
-		return "", fmt.Errorf("read upload: %w", err)
-	}
-	if len(data) > MaxUpload {
+	img, err := picture.Decode(r, MaxUpload)
+	switch {
+	case errors.Is(err, picture.ErrTooLarge):
 		return "", ErrTooLarge
-	}
-	cfg, format, err := image.DecodeConfig(bytes.NewReader(data))
-	if err != nil || (format != "jpeg" && format != "png" && format != "gif") {
+	case errors.Is(err, picture.ErrNotAnImage):
 		return "", ErrNotAnImage
-	}
-	if cfg.Width <= 0 || cfg.Height <= 0 || cfg.Width*cfg.Height > maxPixels {
-		return "", ErrTooLarge
-	}
-	img, err := imaging.Decode(bytes.NewReader(data), imaging.AutoOrientation(true))
-	if err != nil {
-		return "", ErrNotAnImage
+	case err != nil:
+		return "", err
 	}
 	thumb := imaging.Fill(img, Size, Size, imaging.Center, imaging.Lanczos)
-
 	name := randomName()
-	tmp, err := os.CreateTemp(s.dir, ".upload-*")
-	if err != nil {
-		return "", fmt.Errorf("create temp: %w", err)
-	}
-	defer os.Remove(tmp.Name()) // no-op after a successful rename
-	if err := jpeg.Encode(tmp, thumb, &jpeg.Options{Quality: 85}); err != nil {
-		_ = tmp.Close()
-		return "", fmt.Errorf("encode jpeg: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		return "", fmt.Errorf("close temp: %w", err)
-	}
-	if err := os.Rename(tmp.Name(), filepath.Join(s.dir, name)); err != nil {
-		return "", fmt.Errorf("store photo: %w", err)
+	if err := picture.WriteJPEG(filepath.Join(s.dir, name), thumb, 85); err != nil {
+		return "", err
 	}
 	return name, nil
 }

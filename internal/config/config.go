@@ -31,6 +31,9 @@ type Config struct {
 	DateFormat string
 	WeekStart  time.Weekday
 	Currency   string
+	// PhotosDir is an optional read-only folder of photos (e.g. a NAS
+	// share) mixed into the screensaver slideshow. Empty means none.
+	PhotosDir string
 }
 
 // Load reads configuration from the environment.
@@ -64,6 +67,7 @@ func load(getenv func(string) string) (Config, error) {
 		DateFormat: get("DOMUS_DATE_FORMAT", DefaultDateFormat),
 		WeekStart:  ws,
 		Currency:   strings.ToUpper(get("DOMUS_CURRENCY", DefaultCurrency)),
+		PhotosDir:  get("DOMUS_PHOTOS_DIR", ""),
 	}, nil
 }
 

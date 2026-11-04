@@ -14,10 +14,12 @@ import (
 
 	"github.com/lukeskelhorn/domus/internal/auth"
 	"github.com/lukeskelhorn/domus/internal/avatar"
+	"github.com/lukeskelhorn/domus/internal/calendar"
 	"github.com/lukeskelhorn/domus/internal/chores"
 	"github.com/lukeskelhorn/domus/internal/config"
 	householdpkg "github.com/lukeskelhorn/domus/internal/household"
 	"github.com/lukeskelhorn/domus/internal/locale"
+	"github.com/lukeskelhorn/domus/internal/photos"
 	"github.com/lukeskelhorn/domus/internal/server"
 	"github.com/lukeskelhorn/domus/internal/settings"
 	"github.com/lukeskelhorn/domus/internal/store"
@@ -57,14 +59,21 @@ func run(log *slog.Logger) error {
 	if err := set.Ensure(ctx, household.ID, cfg.Location); err != nil {
 		return err
 	}
-	avatars, err := avatar.NewStore(filepath.Join(filepath.Dir(cfg.DBPath), "avatars"))
+	dataDir := filepath.Dir(cfg.DBPath)
+	avatars, err := avatar.NewStore(filepath.Join(dataDir, "avatars"))
 	if err != nil {
 		return err
 	}
+	library, err := photos.New(st, dataDir, cfg.PhotosDir, log)
+	if err != nil {
+		return err
+	}
+	cals := calendar.New(st, set.Location, nil, log)
 	authSvc := auth.New(st, set)
 	choreSvc := chores.New(st, set.Location)
 
 	go maintenanceLoop(ctx, log, set, choreSvc, authSvc, household.ID)
+	go screensaverLoop(ctx, log, library, cals)
 
 	srv, err := server.New(server.Deps{
 		Store:       st,
@@ -74,6 +83,8 @@ func run(log *slog.Logger) error {
 		Chores:      choreSvc,
 		Household:   householdpkg.New(st),
 		Avatars:     avatars,
+		Photos:      library,
+		Calendars:   cals,
 		Locale: locale.Locale{
 			Location:   cfg.Location,
 			DateFormat: cfg.DateFormat,
@@ -95,7 +106,8 @@ func run(log *slog.Logger) error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		log.Info("domus listening", slog.String("addr", cfg.Addr), slog.String("db", cfg.DBPath), slog.String("tz", cfg.Location.String()))
+		log.Info("domus listening", slog.String("addr", cfg.Addr), slog.String("db", cfg.DBPath), slog.String("tz", cfg.Location.String()),
+			slog.String("photos_dir", cfg.PhotosDir))
 		errCh <- httpSrv.ListenAndServe()
 	}()
 
@@ -148,6 +160,38 @@ func maintenanceLoop(ctx context.Context, log *slog.Logger, set *settings.Servic
 			return
 		case <-t.C:
 			run()
+		}
+	}
+}
+
+// screensaverLoop keeps the screensaver's sources fresh: calendar feeds are
+// re-fetched every calendar.RefreshEvery and the photos folder is
+// re-indexed every 10 minutes. Both run once at startup.
+func screensaverLoop(ctx context.Context, log *slog.Logger, library *photos.Library, cals *calendar.Service) {
+	rescan := func() {
+		if err := library.Rescan(ctx); err != nil && ctx.Err() == nil {
+			log.Error("scan photos folder", slog.Any("err", err))
+		}
+	}
+	refresh := func() {
+		if err := cals.Refresh(ctx); err != nil && ctx.Err() == nil {
+			log.Error("refresh calendars", slog.Any("err", err))
+		}
+	}
+	rescan()
+	refresh()
+	photoTick := time.NewTicker(10 * time.Minute)
+	defer photoTick.Stop()
+	calTick := time.NewTicker(calendar.RefreshEvery)
+	defer calTick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-photoTick.C:
+			rescan()
+		case <-calTick.C:
+			refresh()
 		}
 	}
 }

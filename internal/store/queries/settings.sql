@@ -8,6 +8,6 @@ ON CONFLICT (household_id) DO NOTHING;
 
 -- name: UpdateSettings :one
 UPDATE household_settings
-SET timezone = ?, day_starts_at = ?, admin_idle_minutes = ?, updated_at = ?
+SET timezone = ?, day_starts_at = ?, admin_idle_minutes = ?, screensaver_idle_minutes = ?, updated_at = ?
 WHERE household_id = ?
 RETURNING *;

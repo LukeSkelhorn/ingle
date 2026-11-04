@@ -91,24 +91,30 @@ var activityText = map[string]string{
 	"reward.archived":      "archived a reward",
 	"reward.restored":      "restored a reward",
 	"reward.redeemed":      "redeemed a reward",
+	"photo.added":          "added a photo",
+	"photo.removed":        "removed a photo",
+	"calendar.added":       "added a calendar",
+	"calendar.removed":     "removed a calendar",
 }
 
 // Settings.
 
 type settingsForm struct {
-	HouseholdName    string
-	Timezone         string
-	DayStartsAt      string
-	AdminIdleMinutes int64
-	Timezones        []string
+	HouseholdName          string
+	Timezone               string
+	DayStartsAt            string
+	AdminIdleMinutes       int64
+	ScreensaverIdleMinutes int64
+	Timezones              []string
 }
 
 func (s *Server) settingsForm(set settings.Settings) settingsForm {
 	return settingsForm{
-		HouseholdName:    set.HouseholdName,
-		Timezone:         set.Location.String(),
-		DayStartsAt:      set.DayStartsAt,
-		AdminIdleMinutes: set.AdminIdleMinutes,
+		HouseholdName:          set.HouseholdName,
+		Timezone:               set.Location.String(),
+		DayStartsAt:            set.DayStartsAt,
+		AdminIdleMinutes:       set.AdminIdleMinutes,
+		ScreensaverIdleMinutes: set.ScreensaverIdleMinutes,
 	}
 }
 
@@ -137,10 +143,11 @@ func (s *Server) handleSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	f := newForm(r)
 	data := settingsForm{
-		HouseholdName:    f.str("household_name"),
-		Timezone:         f.str("timezone"),
-		DayStartsAt:      f.str("day_starts_at"),
-		AdminIdleMinutes: f.int("admin_idle_minutes", "Choose between 1 and 60 minutes."),
+		HouseholdName:          f.str("household_name"),
+		Timezone:               f.str("timezone"),
+		DayStartsAt:            f.str("day_starts_at"),
+		AdminIdleMinutes:       f.int("admin_idle_minutes", "Choose between 1 and 60 minutes."),
+		ScreensaverIdleMinutes: f.int("screensaver_idle_minutes", "Choose between 0 (never) and 120 minutes."),
 	}
 	if !f.ok() {
 		s.renderSettings(w, r, http.StatusUnprocessableEntity, data, f.errs, "")
@@ -149,6 +156,7 @@ func (s *Server) handleSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 	err := s.Settings.Update(r.Context(), s.HouseholdID, actor(r).Person.ID, settings.Input{
 		HouseholdName: data.HouseholdName, Timezone: data.Timezone,
 		DayStartsAt: data.DayStartsAt, AdminIdleMinutes: data.AdminIdleMinutes,
+		ScreensaverIdleMinutes: data.ScreensaverIdleMinutes,
 	})
 	if errs, ok := validationErrors(err); ok {
 		s.renderSettings(w, r, http.StatusUnprocessableEntity, data, errs, "")

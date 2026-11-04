@@ -4,6 +4,7 @@ go 1.27.1
 
 require (
 	github.com/disintegration/imaging v1.6.2
+	github.com/emersion/go-ical v0.0.0-20250609112844-439c63cef608
 	github.com/pressly/goose/v3 v3.29.0
 	github.com/teambition/rrule-go v1.8.2
 	golang.org/x/crypto v0.58.0

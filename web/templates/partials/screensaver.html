@@ -1,0 +1,39 @@
+{{/* The screensaver's information panel, over the slideshow. The board
+     page re-fetches it every minute while the screensaver is showing, and
+     when the board changes. */}}
+{{define "screensaver"}}
+<div class="saver__clock">
+  <span class="saver__time">{{.Clock.Time}}</span>
+  <span class="saver__date">{{.Clock.Weekday}} {{.Clock.Date}}</span>
+</div>
+{{if or .Today .Tomorrow .HasCalendars}}
+<div class="saver__events">
+  {{if .Today}}
+  <h2 class="saver__h">Today</h2>
+  <ul class="saver__list">{{range .Today}}{{template "saver_event" .}}{{end}}</ul>
+  {{else if .HasCalendars}}
+  <h2 class="saver__h">Today</h2>
+  <p class="saver__none">Nothing else on today.</p>
+  {{end}}
+  {{if .Tomorrow}}
+  <h2 class="saver__h">Tomorrow</h2>
+  <ul class="saver__list">{{range .Tomorrow}}{{template "saver_event" .}}{{end}}</ul>
+  {{end}}
+</div>
+{{end}}
+{{if .People}}
+<ul class="saver__people" aria-label="Chores today">
+  {{range .People}}
+  <li class="saver__person" style="--person: {{.Person.Colour}}">
+    {{template "avatar" (avatar .Person "sm")}}
+    <span>{{if eq .Done .Total}}All done ✓{{else}}{{.Done}} of {{.Total}}{{end}}{{if .Overdue}} <span class="tag tag--late">{{.Overdue}} late</span>{{end}}</span>
+  </li>
+  {{end}}
+</ul>
+{{end}}
+<p class="saver__hint">Tap anywhere for the chores board</p>
+{{end}}
+
+{{define "saver_event"}}
+<li class="saver__event"><span class="saver__dot" style="--dot: {{.Colour}}" aria-hidden="true"></span><span class="saver__when">{{.When}}</span> <span class="saver__title">{{.Title}}</span></li>
+{{end}}

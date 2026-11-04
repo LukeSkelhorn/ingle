@@ -10,7 +10,7 @@ import (
 )
 
 const getSettings = `-- name: GetSettings :one
-SELECT household_id, timezone, day_starts_at, admin_idle_minutes, updated_at FROM household_settings WHERE household_id = ?
+SELECT household_id, timezone, day_starts_at, admin_idle_minutes, updated_at, screensaver_idle_minutes FROM household_settings WHERE household_id = ?
 `
 
 func (q *Queries) GetSettings(ctx context.Context, householdID int64) (HouseholdSetting, error) {
@@ -22,6 +22,7 @@ func (q *Queries) GetSettings(ctx context.Context, householdID int64) (Household
 		&i.DayStartsAt,
 		&i.AdminIdleMinutes,
 		&i.UpdatedAt,
+		&i.ScreensaverIdleMinutes,
 	)
 	return i, err
 }
@@ -45,17 +46,18 @@ func (q *Queries) InsertDefaultSettings(ctx context.Context, arg InsertDefaultSe
 
 const updateSettings = `-- name: UpdateSettings :one
 UPDATE household_settings
-SET timezone = ?, day_starts_at = ?, admin_idle_minutes = ?, updated_at = ?
+SET timezone = ?, day_starts_at = ?, admin_idle_minutes = ?, screensaver_idle_minutes = ?, updated_at = ?
 WHERE household_id = ?
-RETURNING household_id, timezone, day_starts_at, admin_idle_minutes, updated_at
+RETURNING household_id, timezone, day_starts_at, admin_idle_minutes, updated_at, screensaver_idle_minutes
 `
 
 type UpdateSettingsParams struct {
-	Timezone         string `json:"timezone"`
-	DayStartsAt      string `json:"day_starts_at"`
-	AdminIdleMinutes int64  `json:"admin_idle_minutes"`
-	UpdatedAt        int64  `json:"updated_at"`
-	HouseholdID      int64  `json:"household_id"`
+	Timezone               string `json:"timezone"`
+	DayStartsAt            string `json:"day_starts_at"`
+	AdminIdleMinutes       int64  `json:"admin_idle_minutes"`
+	ScreensaverIdleMinutes int64  `json:"screensaver_idle_minutes"`
+	UpdatedAt              int64  `json:"updated_at"`
+	HouseholdID            int64  `json:"household_id"`
 }
 
 func (q *Queries) UpdateSettings(ctx context.Context, arg UpdateSettingsParams) (HouseholdSetting, error) {
@@ -63,6 +65,7 @@ func (q *Queries) UpdateSettings(ctx context.Context, arg UpdateSettingsParams) 
 		arg.Timezone,
 		arg.DayStartsAt,
 		arg.AdminIdleMinutes,
+		arg.ScreensaverIdleMinutes,
 		arg.UpdatedAt,
 		arg.HouseholdID,
 	)
@@ -73,6 +76,7 @@ func (q *Queries) UpdateSettings(ctx context.Context, arg UpdateSettingsParams) 
 		&i.DayStartsAt,
 		&i.AdminIdleMinutes,
 		&i.UpdatedAt,
+		&i.ScreensaverIdleMinutes,
 	)
 	return i, err
 }

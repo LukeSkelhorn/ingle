@@ -21,9 +21,11 @@ import (
 
 	"github.com/lukeskelhorn/domus/internal/auth"
 	"github.com/lukeskelhorn/domus/internal/avatar"
+	"github.com/lukeskelhorn/domus/internal/calendar"
 	"github.com/lukeskelhorn/domus/internal/chores"
 	"github.com/lukeskelhorn/domus/internal/household"
 	"github.com/lukeskelhorn/domus/internal/locale"
+	"github.com/lukeskelhorn/domus/internal/photos"
 	"github.com/lukeskelhorn/domus/internal/settings"
 	"github.com/lukeskelhorn/domus/internal/store"
 	"github.com/lukeskelhorn/domus/internal/store/dbq"
@@ -35,9 +37,21 @@ type harness struct {
 	st   *store.Store
 	hh   int64
 	auth *auth.Service
+	// photoDir is the read-only photos folder (DOMUS_PHOTOS_DIR).
+	photoDir string
+	lib      *photos.Library
+	// ics serves calendar feeds: icsBody at any path.
+	ics *httptest.Server
 
-	mu  sync.Mutex
-	now time.Time
+	mu      sync.Mutex
+	now     time.Time
+	icsBody string
+}
+
+func (h *harness) setICS(body string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.icsBody = body
 }
 
 func (h *harness) clock() time.Time {
@@ -86,10 +100,29 @@ func newHarness(t *testing.T) *harness {
 	choreSvc.SetClock(h.clock)
 	hhSvc := household.New(st)
 	hhSvc.SetClock(h.clock)
+	log := slog.New(slog.DiscardHandler)
+	h.photoDir = t.TempDir()
+	if h.lib, err = photos.New(st, dir, h.photoDir, log); err != nil {
+		t.Fatal(err)
+	}
+	h.ics = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h.mu.Lock()
+		body := h.icsBody
+		h.mu.Unlock()
+		if body == "" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/calendar")
+		_, _ = io.WriteString(w, body)
+	}))
+	t.Cleanup(h.ics.Close)
+	cals := calendar.New(st, set.Location, h.ics.Client(), log)
+	cals.SetClock(h.clock)
 
 	srv, err := New(Deps{
 		Store: st, HouseholdID: hh.ID, Auth: h.auth, Settings: set, Chores: choreSvc,
-		Household: hhSvc, Avatars: avatars, Locale: uk, Log: slog.New(slog.DiscardHandler),
+		Household: hhSvc, Avatars: avatars, Photos: h.lib, Calendars: cals, Locale: uk, Log: log,
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)

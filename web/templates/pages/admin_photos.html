@@ -1,0 +1,44 @@
+{{define "bodyclass"}}admin{{end}}
+{{define "content"}}
+{{template "admin_nav" .}}
+<main class="admin__main">
+  <div class="admin__head">
+    <h1>Photos</h1>
+  </div>
+  {{template "flash" .}}
+  {{with .Data.Problems}}
+  <div class="field__err" role="alert">
+    <ul class="problems">{{range .}}<li>{{.}}</li>{{end}}</ul>
+  </div>
+  {{end}}
+
+  <p class="muted">Family photos for the screensaver, which household displays show when nobody's using them.</p>
+  <form class="card stack" method="post" action="/admin/photos" enctype="multipart/form-data">
+    <label class="field">
+      <span>Add photos</span>
+      <input type="file" name="photos" accept="image/jpeg,image/png,image/gif,image/*" multiple required>
+      <small class="muted">JPEG, PNG or GIF, up to 20 MB each and 20 at a time. Photos from an iPhone are converted automatically.</small>
+    </label>
+    <button class="btn btn--primary" type="submit">Upload</button>
+  </form>
+
+  {{if .Data.HasFolder}}
+  <p class="muted">Also showing {{.Data.FolderCount}} photo{{if ne .Data.FolderCount 1}}s{{end}} from the photos folder on the server. Add or remove those in the folder itself.</p>
+  {{end}}
+
+  {{if .Data.Photos}}
+  <ul class="photo-grid">
+    {{range .Data.Photos}}
+    <li class="photo-grid__item">
+      <a href="{{.Full}}" target="_blank" rel="noopener"><img src="{{.Thumb}}" alt="Uploaded {{when .Uploaded}}" loading="lazy" width="200" height="200"></a>
+      <form method="post" action="/admin/photos/{{.ID}}/delete">
+        <button class="btn btn--ghost btn--danger photo-grid__remove" type="submit" aria-label="Remove photo uploaded {{when .Uploaded}}">Remove</button>
+      </form>
+    </li>
+    {{end}}
+  </ul>
+  {{else if not .Data.FolderCount}}
+  <p class="card list__empty muted">No photos yet. Without any, the screensaver shows just the clock.</p>
+  {{end}}
+</main>
+{{end}}

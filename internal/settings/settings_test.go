@@ -66,22 +66,23 @@ func TestServiceUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err := svc.Get(ctx, h.ID)
-	if err != nil || got.Location.String() != "Europe/London" || got.AdminIdleMinutes != 2 || got.DayStartsAt != "00:00" {
+	if err != nil || got.Location.String() != "Europe/London" || got.AdminIdleMinutes != 2 || got.DayStartsAt != "00:00" ||
+		got.ScreensaverIdle() != 5*time.Minute {
 		t.Fatalf("defaults = %+v, %v", got, err)
 	}
 
-	err = svc.Update(ctx, h.ID, mum.ID, Input{HouseholdName: "", Timezone: "Local", DayStartsAt: "25:00", AdminIdleMinutes: 0})
+	err = svc.Update(ctx, h.ID, mum.ID, Input{HouseholdName: "", Timezone: "Local", DayStartsAt: "25:00", AdminIdleMinutes: 0, ScreensaverIdleMinutes: 121})
 	var ve valid.Errors
-	if !errors.As(err, &ve) || len(ve) != 4 {
+	if !errors.As(err, &ve) || len(ve) != 5 {
 		t.Fatalf("Update(bad) = %v", err)
 	}
 
-	if err := svc.Update(ctx, h.ID, mum.ID, Input{HouseholdName: "Smiths", Timezone: "America/New_York", DayStartsAt: "04:30", AdminIdleMinutes: 10}); err != nil {
+	if err := svc.Update(ctx, h.ID, mum.ID, Input{HouseholdName: "Smiths", Timezone: "America/New_York", DayStartsAt: "04:30", AdminIdleMinutes: 10, ScreensaverIdleMinutes: 0}); err != nil {
 		t.Fatal(err)
 	}
 	got, err = svc.Get(ctx, h.ID)
 	if err != nil || got.HouseholdName != "Smiths" || got.Location.String() != "America/New_York" ||
-		got.AdminIdle() != 10*time.Minute || got.DayStartsAt != "04:30" {
+		got.AdminIdle() != 10*time.Minute || got.DayStartsAt != "04:30" || got.ScreensaverIdle() != 0 {
 		t.Fatalf("after update = %+v, %v", got, err)
 	}
 	if loc := svc.Location(ctx, h.ID); loc.String() != "America/New_York" {

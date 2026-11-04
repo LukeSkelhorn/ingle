@@ -80,6 +80,9 @@ type viewer struct {
 	Kind        string // auth.KindDisplay or auth.KindPersonal when Adult is set
 	// IdleSeconds is the client-side auto-lock for admin on a display.
 	IdleSeconds int
+	// ScreensaverSeconds is how long a display waits, untouched, before
+	// showing the screensaver; 0 means never (always 0 off a display).
+	ScreensaverSeconds int
 }
 
 // OnDisplayAdmin reports whether an adult is unlocked on a household display
