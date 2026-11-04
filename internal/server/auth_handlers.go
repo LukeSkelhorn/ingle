@@ -4,7 +4,9 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"net/netip"
 	"strconv"
+	"strings"
 
 	"github.com/lukeskelhorn/domus/internal/auth"
 	"github.com/lukeskelhorn/domus/internal/avatar"
@@ -162,7 +164,7 @@ func (s *Server) handleSignIn(w http.ResponseWriter, r *http.Request) {
 	}
 	f := newForm(r)
 	data := signInForm{Email: f.str("email")}
-	token, _, err := s.Auth.SignIn(r.Context(), data.Email, f.raw("password"), r.UserAgent(), clientAddr(r))
+	token, _, err := s.Auth.SignIn(r.Context(), data.Email, f.raw("password"), r.UserAgent(), s.clientAddr(r))
 	if err != nil {
 		v := s.view(r, "Sign in", data)
 		switch {
@@ -294,12 +296,39 @@ func (s *Server) handleAdminUnlock(w http.ResponseWriter, r *http.Request) {
 	redirect(w, r, "/admin")
 }
 
-// clientAddr is the TCP peer address, used only to rate-limit sign-in. Proxy
-// headers are deliberately ignored because they can be forged.
-func clientAddr(r *http.Request) string {
+// clientAddr is the client's address, used only to rate-limit sign-in and
+// unlocking. It is the TCP peer, unless that peer is a trusted reverse
+// proxy (DOMUS_TRUSTED_PROXIES): then it is the rightmost X-Forwarded-For
+// hop that isn't a trusted proxy. The header is ignored from anyone else
+// because it can be forged.
+func (s *Server) clientAddr(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
-		return r.RemoteAddr
+		host = r.RemoteAddr
+	}
+	peer, err := netip.ParseAddr(host)
+	if err != nil || !s.trusted(peer) {
+		return host
+	}
+	hops := strings.Split(strings.Join(r.Header.Values("X-Forwarded-For"), ","), ",")
+	for i := len(hops) - 1; i >= 0; i-- {
+		a, err := netip.ParseAddr(strings.TrimSpace(hops[i]))
+		if err != nil {
+			break // a mangled hop: trust nothing to its left
+		}
+		if !s.trusted(a) {
+			return a.Unmap().String()
+		}
 	}
 	return host
+}
+
+func (s *Server) trusted(a netip.Addr) bool {
+	a = a.Unmap()
+	for _, p := range s.TrustedProxies {
+		if p.Contains(a) {
+			return true
+		}
+	}
+	return false
 }

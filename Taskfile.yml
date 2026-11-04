@@ -6,6 +6,9 @@ dotenv: [".env"]
 vars:
   BIN: bin/domus
   IMAGE: domus:dev
+  REGISTRY_IMAGE: ghcr.io/lukeskelhorn/domus
+  PLATFORMS: linux/amd64,linux/arm64
+  BUILDER: domus-multiarch
   MIGRATIONS: internal/store/migrations
 
 env:
@@ -82,10 +85,10 @@ tasks:
       - task: test
 
   check:all:
-    desc: check plus a Docker image build (run before merging to main)
+    desc: check plus a multi-arch Docker image build (run before merging to main)
     cmds:
       - task: check
-      - task: docker:build
+      - task: docker:buildx
 
   tidy:
     desc: Tidy go.mod/go.sum
@@ -96,6 +99,37 @@ tasks:
     desc: Build the Docker image
     cmds:
       - docker build -t {{.IMAGE}} .
+
+  docker:builder:
+    internal: true
+    desc: Create the buildx builder for multi-arch images (once)
+    status:
+      - docker buildx inspect {{.BUILDER}}
+    cmds:
+      - docker buildx create --name {{.BUILDER}} --driver docker-container
+
+  docker:buildx:
+    desc: Build the image for amd64 and arm64 without pushing (checks both compile)
+    deps: [docker:builder]
+    cmds:
+      - docker buildx build --builder {{.BUILDER}} --platform {{.PLATFORMS}} --output type=cacheonly .
+
+  docker:push:
+    desc: "Build and push the multi-arch image to GHCR: VERSION=v0.1.0 task docker:push (needs docker login ghcr.io)"
+    deps: [docker:builder]
+    requires:
+      vars: [VERSION]
+    preconditions:
+      - sh: '[[ "{{.VERSION}}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]'
+        msg: "VERSION must look like v1.2.3"
+      - sh: test -z "$(git status --porcelain)"
+        msg: "Commit or stash your changes first: the image should match a commit"
+    cmds:
+      - >-
+        docker buildx build --builder {{.BUILDER}} --platform {{.PLATFORMS}} --push
+        --label org.opencontainers.image.version={{.VERSION}}
+        --label org.opencontainers.image.revision=$(git rev-parse HEAD)
+        -t {{.REGISTRY_IMAGE}}:{{.VERSION}} -t {{.REGISTRY_IMAGE}}:latest .
 
   docker:run:
     desc: Run the Docker image with a local data volume

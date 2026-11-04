@@ -1,0 +1,65 @@
+# Domus for a home lab: Domus plus Caddy for HTTPS.
+# Setup and day-to-day use: see README.md in this folder.
+name: domus
+
+services:
+  domus:
+    image: ghcr.io/lukeskelhorn/domus:${DOMUS_TAG:-latest}
+    # Or build from this checkout instead of pulling:
+    # build: ..
+    restart: unless-stopped
+    environment:
+      DOMUS_TZ: ${DOMUS_TZ:-Europe/London}
+      TZ: ${DOMUS_TZ:-Europe/London}
+      DOMUS_DATE_FORMAT: ${DOMUS_DATE_FORMAT:-02/01/2006}
+      DOMUS_WEEK_START: ${DOMUS_WEEK_START:-monday}
+      DOMUS_CURRENCY: ${DOMUS_CURRENCY:-GBP}
+      DOMUS_BACKUP_KEEP: ${DOMUS_BACKUP_KEEP:-14}
+      DOMUS_BACKUP_AT: ${DOMUS_BACKUP_AT:-03:00}
+      # Only set when PHOTOS_PATH is mounted below.
+      DOMUS_PHOTOS_DIR: ${DOMUS_PHOTOS_DIR:-}
+      # Caddy's address: believe its X-Forwarded-For, so sign-in and unlock
+      # attempts are rate-limited per device, not for the whole house.
+      DOMUS_TRUSTED_PROXIES: ${DOMUS_PROXY_IP:-172.30.40.2}
+    volumes:
+      - domus-data:/data
+      - ${BACKUP_PATH:-./backups}:/backups
+      # A read-only photos folder (e.g. a NAS share) for the screensaver.
+      # Uncomment, set PHOTOS_PATH and DOMUS_PHOTOS_DIR=/photos in .env.
+      # - ${PHOTOS_PATH}:/photos:ro
+    networks: [domus]
+    # No published port: everything goes through Caddy. For plain HTTP on
+    # the LAN without Caddy, see README.md.
+
+  caddy:
+    build: ./caddy
+    restart: unless-stopped
+    depends_on:
+      domus:
+        condition: service_healthy
+    environment:
+      DOMUS_HOSTNAME: ${DOMUS_HOSTNAME:?set DOMUS_HOSTNAME in .env}
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:?set CLOUDFLARE_API_TOKEN in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      domus:
+        # Fixed, so Domus can trust exactly this address.
+        ipv4_address: ${DOMUS_PROXY_IP:-172.30.40.2}
+
+networks:
+  domus:
+    ipam:
+      config:
+        - subnet: ${DOMUS_SUBNET:-172.30.40.0/24}
+
+volumes:
+  domus-data:
+  caddy-data:
+  caddy-config:

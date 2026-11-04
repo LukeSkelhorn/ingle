@@ -5,3 +5,5 @@ data
 *.db
 *.db-*
 .env
+deploy/.env
+deploy/backups

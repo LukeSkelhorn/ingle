@@ -39,3 +39,5 @@ go.work.sum
 *.db-shm
 *.db-wal
 /.task/
+/deploy/.env
+/deploy/backups/

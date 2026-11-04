@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"sync/atomic"
 	"time"
 
@@ -38,6 +39,8 @@ type Deps struct {
 	Lock        *lock.Service
 	Locale      locale.Locale
 	Log         *slog.Logger
+	// TrustedProxies are reverse proxies whose X-Forwarded-For is believed.
+	TrustedProxies []netip.Prefix
 }
 
 // Server serves the Domus web UI.

@@ -169,7 +169,7 @@ func (s *Server) handleUnlock(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad form", http.StatusBadRequest)
 		return
 	}
-	who, err := s.Auth.CheckUnlockCode(r.Context(), id.Device, r.PostFormValue("code"), clientAddr(r))
+	who, err := s.Auth.CheckUnlockCode(r.Context(), id.Device, r.PostFormValue("code"), s.clientAddr(r))
 	switch {
 	case errors.Is(err, auth.ErrLockedOut):
 		keypadError(w, http.StatusTooManyRequests, "Too many tries. Try again in 5 minutes.")

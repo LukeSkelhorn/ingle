@@ -32,6 +32,8 @@ With Docker:
 task docker:run   # or: docker run -p 8080:8080 -v domus-data:/data domus:dev
 ```
 
+**Running it for real on a home server** (Docker Compose, HTTPS with Caddy, nightly backups, iPad setup): see [deploy/README.md](deploy/README.md).
+
 The database is a single SQLite file, `./data/domus.db` (`/data/domus.db` in Docker). Migrations run automatically when the server starts.
 
 On first start, open Domus in a browser. You'll be taken to a one-off **setup** page where you name the household and create the first adult (name, email, password and PIN). Tick "use this device as the household display" if you're on the wall tablet.
@@ -51,6 +53,10 @@ Set these as environment variables, or copy `.env.example` to `.env`. Task loads
 | `DOMUS_WEEK_START`  | `monday`          | Day name                               |
 | `DOMUS_CURRENCY`    | `GBP`             | ISO code; amounts are stored in pence  |
 | `DOMUS_PHOTOS_DIR`  | (none)            | Optional read-only folder of photos for the screensaver |
+| `DOMUS_BACKUP_DIR`  | `./data/backups`  | Nightly backups go here (`/backups` in Docker) |
+| `DOMUS_BACKUP_KEEP` | `14`              | How many backups to keep; `0` turns backups off |
+| `DOMUS_BACKUP_AT`   | `03:00`           | When the nightly backup runs, household time |
+| `DOMUS_TRUSTED_PROXIES` | (none)        | Reverse proxies (CIDRs or IPs) whose `X-Forwarded-For` is believed, so rate limits apply per device |
 
 ## The board
 
@@ -109,7 +115,7 @@ If Domus is reachable from outside your home network, put it behind a reverse pr
 task            # list all tasks
 task check      # sqlc diff, go mod tidy diff, formatting, lint, race tests
 task generate   # regenerate sqlc code after editing queries or migrations
-task check:all  # check + Docker image build (run before merging)
+task check:all  # check + amd64/arm64 Docker image build (run before merging)
 task fmt        # gofmt -s, gofumpt and goimports
 task migrate:create -- add_people
 task migrate:status
@@ -121,7 +127,7 @@ task migrate:status
 ### Layout
 
 ```
-cmd/domus/          entry point
+cmd/domus/          entry point (also `domus healthcheck` and `domus backup`)
 internal/config/    env config + UK defaults
 internal/locale/    date, week and money formatting
 internal/server/    HTTP routes, middleware and handlers (board + live events, setup, sign-in, admin)
@@ -134,10 +140,12 @@ internal/lock/      locking the displays: state, schedule and idle lock
 internal/photos/    screensaver slideshow: uploaded photos plus the read-only photos folder
 internal/calendar/  ICS feeds: fetch, parse and expand recurring events for the screensaver
 internal/chores/    chore lifecycle: recurrence presets, admin edits, board, claim, complete, undo, approve, reverse, redeem
+internal/backup/    nightly backups: database snapshot plus photos and avatars
 internal/store/     SQLite, embedded goose migrations, sqlc queries
 internal/store/dbq/ sqlc-generated code (don't edit; run task generate)
 web/templates/      html/template layout, partials and pages
 web/static/         htmx, CSS, PWA manifest, service worker, icons
+deploy/             Docker Compose + Caddy for a home server
 ```
 
 ### Data model

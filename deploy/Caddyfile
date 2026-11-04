@@ -1,0 +1,13 @@
+# HTTPS in front of Domus. The iPad needs HTTPS for the home-screen app
+# and offline cache; the certificate comes from Let's Encrypt via your DNS
+# provider, so nothing needs to be open to the internet.
+{$DOMUS_HOSTNAME} {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+	encode zstd gzip
+	# Sets X-Forwarded-For/-Proto; Domus trusts them from this network
+	# only (DOMUS_TRUSTED_PROXIES). Server-sent events (/board/events)
+	# are streamed, not buffered.
+	reverse_proxy domus:8080
+}
