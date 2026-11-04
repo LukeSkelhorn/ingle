@@ -41,3 +41,4 @@ go.work.sum
 /.task/
 /deploy/.env
 /deploy/backups/
+/dist/

@@ -127,6 +127,7 @@ func newHarness(t *testing.T) *harness {
 	srv, err := New(Deps{
 		Store: st, HouseholdID: hh.ID, Auth: h.auth, Settings: set, Chores: choreSvc,
 		Household: hhSvc, Avatars: avatars, Photos: h.lib, Calendars: cals, Lock: h.lock, Locale: uk, Log: log,
+		Version: "v9.8.7",
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -279,7 +280,7 @@ func TestOpenRoutes(t *testing.T) {
 		contentType string
 		contains    string
 	}{
-		{"/healthz", "text/plain", "ok"},
+		{"/healthz", "text/plain", "ok v9.8.7"},
 		{"/manifest.webmanifest", "application/manifest+json", `"display": "standalone"`},
 		{"/sw.js", "text/javascript", "domus-static"},
 		{"/static/htmx.min.js", "javascript", "htmx"},

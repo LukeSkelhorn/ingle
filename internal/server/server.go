@@ -41,6 +41,8 @@ type Deps struct {
 	Log         *slog.Logger
 	// TrustedProxies are reverse proxies whose X-Forwarded-For is believed.
 	TrustedProxies []netip.Prefix
+	// Version is the build's version ("dev" when not built for a release).
+	Version string
 }
 
 // Server serves the Domus web UI.
@@ -229,7 +231,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	_, _ = w.Write([]byte("ok\n"))
+	_, _ = w.Write([]byte("ok " + s.version() + "\n"))
 }
 
 func (s *Server) handleAvatar(w http.ResponseWriter, r *http.Request) {
@@ -307,4 +309,11 @@ func serveFile(fsys fs.FS, name, contentType string) http.HandlerFunc {
 		w.Header().Set("Cache-Control", "no-cache")
 		_, _ = w.Write(b)
 	}
+}
+
+func (s *Server) version() string {
+	if s.Version == "" {
+		return "dev"
+	}
+	return s.Version
 }

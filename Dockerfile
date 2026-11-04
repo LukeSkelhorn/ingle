@@ -4,6 +4,7 @@
 # cross-compiles, so a multi-arch build needs no emulation.
 FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS build
 ARG TARGETOS TARGETARCH
+ARG VERSION=dev
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
@@ -11,7 +12,7 @@ COPY . .
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
-    go build -trimpath -ldflags="-s -w" -o /out/domus ./cmd/domus
+    go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/domus ./cmd/domus
 # Empty data and backup dirs, copied below owned by nonroot (65532) so a
 # fresh named volume mounted there inherits write access.
 RUN mkdir -p /out/data /out/backups

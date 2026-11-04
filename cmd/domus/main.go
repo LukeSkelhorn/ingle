@@ -30,6 +30,9 @@ import (
 	"github.com/lukeskelhorn/domus/internal/store"
 )
 
+// version is set at build time: -ldflags "-X main.version=v1.2.3".
+var version = "dev"
+
 func main() {
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	cmd := ""
@@ -45,8 +48,10 @@ func main() {
 		err = healthcheck()
 	case "backup":
 		err = backupNow()
+	case "version", "--version", "-v":
+		fmt.Println("domus", version)
 	default:
-		fmt.Fprintf(os.Stderr, "usage: domus [healthcheck|backup]\n")
+		fmt.Fprintf(os.Stderr, "usage: domus [healthcheck|backup|version]\n")
 		os.Exit(2)
 	}
 	if err != nil {
@@ -173,6 +178,7 @@ func run(log *slog.Logger) error {
 		},
 		Log:            log,
 		TrustedProxies: cfg.TrustedProxies,
+		Version:        version,
 	})
 	if err != nil {
 		return err
@@ -187,7 +193,7 @@ func run(log *slog.Logger) error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		log.Info("domus listening", slog.String("addr", cfg.Addr), slog.String("db", cfg.DBPath), slog.String("tz", cfg.Location.String()),
+		log.Info("domus listening", slog.String("version", version), slog.String("addr", cfg.Addr), slog.String("db", cfg.DBPath), slog.String("tz", cfg.Location.String()),
 			slog.String("photos_dir", cfg.PhotosDir), slog.String("backup_dir", cfg.BackupDir), slog.Int("backup_keep", cfg.BackupKeep),
 			slog.Int("trusted_proxies", len(cfg.TrustedProxies)))
 		errCh <- httpSrv.ListenAndServe()

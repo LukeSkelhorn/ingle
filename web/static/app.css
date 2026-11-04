@@ -350,6 +350,7 @@ input, select, textarea { -webkit-user-select: text; user-select: text; }
   position: sticky; top: 0; z-index: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px;
   padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--line);
 }
+.admin__version { margin-top: 24px; text-align: center; font-size: 0.85rem; }
 .admin__brand { font-weight: 700; color: var(--fg); text-decoration: none; }
 .admin__nav { display: flex; gap: 4px; overflow-x: auto; flex: 1 1 auto; min-width: 0; -webkit-overflow-scrolling: touch; }
 .admin__nav a { padding: 8px 12px; border-radius: 8px; text-decoration: none; color: var(--fg); white-space: nowrap; }

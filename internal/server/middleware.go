@@ -178,7 +178,7 @@ func (s *Server) clearCookie(w http.ResponseWriter, r *http.Request, name string
 // view builds the common page data for r.
 func (s *Server) view(r *http.Request, title string, data any) view {
 	id := identityFrom(r.Context())
-	v := view{Title: title, Data: data}
+	v := view{Title: title, Data: data, Version: s.version()}
 	screensaverSeconds := 0
 	if s.Settings != nil {
 		if set, err := s.Settings.Get(r.Context(), s.HouseholdID); err == nil {

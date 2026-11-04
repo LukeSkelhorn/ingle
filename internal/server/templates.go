@@ -70,6 +70,7 @@ type view struct {
 	Flash     string
 	Errors    valid.Errors
 	Data      any
+	Version   string // the Domus build, shown in admin
 }
 
 // viewer describes who is looking at the page.

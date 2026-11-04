@@ -10,6 +10,12 @@ vars:
   PLATFORMS: linux/amd64,linux/arm64
   BUILDER: domus-multiarch
   MIGRATIONS: internal/store/migrations
+  # The version baked into builds: VERSION=v1.2.3 when releasing, otherwise
+  # what git describe says (e.g. v0.1.0-3-gabc123-dirty), or "dev".
+  BUILD_VERSION:
+    sh: echo "${VERSION:-$(git describe --tags --always --dirty 2>/dev/null || echo dev)}"
+  LDFLAGS: -s -w -X main.version={{.BUILD_VERSION}}
+  DIST: dist
 
 env:
   DOMUS_DB_PATH: '{{.DOMUS_DB_PATH | default "./data/domus.db"}}'
@@ -37,7 +43,7 @@ tasks:
     sources: ["**/*.go", "web/**/*", "internal/store/migrations/*.sql", "internal/store/queries/*.sql", "go.mod", "go.sum"]
     generates: ["{{.BIN}}"]
     cmds:
-      - CGO_ENABLED=0 go build -trimpath -o {{.BIN}} ./cmd/domus
+      - CGO_ENABLED=0 go build -trimpath -ldflags="{{.LDFLAGS}}" -o {{.BIN}} ./cmd/domus
 
   run:
     desc: Build and run the server
@@ -98,7 +104,7 @@ tasks:
   docker:build:
     desc: Build the Docker image
     cmds:
-      - docker build -t {{.IMAGE}} .
+      - docker build --build-arg VERSION={{.BUILD_VERSION}} -t {{.IMAGE}} .
 
   docker:builder:
     internal: true
@@ -112,7 +118,7 @@ tasks:
     desc: Build the image for amd64 and arm64 without pushing (checks both compile)
     deps: [docker:builder]
     cmds:
-      - docker buildx build --builder {{.BUILDER}} --platform {{.PLATFORMS}} --output type=cacheonly .
+      - docker buildx build --builder {{.BUILDER}} --platform {{.PLATFORMS}} --build-arg VERSION={{.BUILD_VERSION}} --output type=cacheonly .
 
   docker:push:
     desc: "Build and push the multi-arch image to GHCR: VERSION=v0.1.0 task docker:push (needs docker login ghcr.io)"
@@ -127,9 +133,68 @@ tasks:
     cmds:
       - >-
         docker buildx build --builder {{.BUILDER}} --platform {{.PLATFORMS}} --push
+        --build-arg VERSION={{.VERSION}}
         --label org.opencontainers.image.version={{.VERSION}}
         --label org.opencontainers.image.revision=$(git rev-parse HEAD)
         -t {{.REGISTRY_IMAGE}}:{{.VERSION}} -t {{.REGISTRY_IMAGE}}:latest .
+
+  dist:
+    desc: "Build release archives and checksums into dist/: VERSION=v0.1.0 task dist"
+    requires:
+      vars: [VERSION]
+    cmds:
+      - rm -rf {{.DIST}} && mkdir -p {{.DIST}}
+      - for: [linux/amd64, linux/arm64, darwin/amd64, darwin/arm64]
+        cmd: scripts/dist.sh "{{.VERSION}}" "{{.ITEM}}" "{{.DIST}}" "{{.LDFLAGS}}"
+      - cd {{.DIST}} && shasum -a 256 *.tar.gz > checksums.txt && cat checksums.txt
+
+  release:notes:
+    desc: "Print a version's section of CHANGELOG.md: VERSION=v0.1.0 task release:notes"
+    requires:
+      vars: [VERSION]
+    cmds:
+      - scripts/release-notes.sh "{{.VERSION}}"
+    silent: true
+
+  release:dry:
+    desc: "Everything a release does except tag and publish: VERSION=v0.1.0 task release:dry"
+    requires:
+      vars: [VERSION]
+    cmds:
+      - scripts/release-notes.sh "{{.VERSION}}" > /dev/null
+      - task: check:all
+      - task: dist
+      - tar -xzf {{.DIST}}/domus_{{.VERSION}}_{{OS}}_{{ARCH}}.tar.gz -C {{.DIST}} && {{.DIST}}/domus_{{.VERSION}}_{{OS}}_{{ARCH}}/domus version
+      - echo "Dry run OK. Notes for {{.VERSION}}:" && scripts/release-notes.sh "{{.VERSION}}"
+
+  release:
+    desc: "Cut a release: checks, binaries, GHCR image, git tag and GitHub release. VERSION=v0.1.0 task release"
+    requires:
+      vars: [VERSION]
+    preconditions:
+      - sh: '[[ "{{.VERSION}}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]'
+        msg: "VERSION must look like v1.2.3"
+      - sh: test "$(git branch --show-current)" = main
+        msg: "Release from main"
+      - sh: test -z "$(git status --porcelain)"
+        msg: "Commit or stash your changes first"
+      - sh: git fetch -q origin main && test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+        msg: "main isn't the same as origin/main: pull or push first"
+      - sh: "! git rev-parse -q --verify refs/tags/{{.VERSION}} >/dev/null && ! git ls-remote --exit-code --tags origin {{.VERSION}} >/dev/null"
+        msg: "Tag {{.VERSION}} already exists"
+      - sh: scripts/release-notes.sh "{{.VERSION}}" > /dev/null
+        msg: "CHANGELOG.md has no section for {{.VERSION}}: move Unreleased under ## [{{.VERSION}}] - YYYY-MM-DD first"
+      - sh: gh auth status > /dev/null 2>&1
+        msg: "Not signed in to GitHub: gh auth login"
+    cmds:
+      - task: check:all
+      - task: dist
+      - task: docker:push
+      - git tag -a {{.VERSION}} -m "Domus {{.VERSION}}"
+      - git push origin {{.VERSION}}
+      - scripts/release-notes.sh "{{.VERSION}}" > {{.DIST}}/NOTES.md
+      - gh release create {{.VERSION}} --verify-tag --title "Domus {{.VERSION}}" --notes-file {{.DIST}}/NOTES.md {{if contains "-" .VERSION}}--prerelease{{end}} {{.DIST}}/*.tar.gz {{.DIST}}/checksums.txt
+      - echo "Released {{.VERSION}}. Now mark the Linear release complete and update the docs site."
 
   docker:run:
     desc: Run the Docker image with a local data volume

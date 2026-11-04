@@ -343,7 +343,7 @@ func TestAdminCompletions(t *testing.T) {
 	expect(t, r, http.StatusOK, "Waiting for a grown-up")
 
 	expect(t, wall.get("/admin/completions"), http.StatusSeeOther)
-	expect(t, phone.get("/admin"), http.StatusOK, `href="/admin/completions"`)
+	expect(t, phone.get("/admin"), http.StatusOK, `href="/admin/completions"`, "Domus v9.8.7")
 	r = phone.get("/admin/completions")
 	expect(t, r, http.StatusOK, "Waiting for a grown-up", "Tidy bedroom", "Last 7 days", "Feed the cat", "Reverse")
 
