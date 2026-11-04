@@ -72,6 +72,15 @@ When a household display has been left alone for 5 minutes (change this, or turn
 - **Calendars:** add the secret iCal address of a Google, iCloud or Outlook calendar in **Admin › Calendars**. Domus reads it every 15 minutes and never shows the address again after you save it.
 - **Always on:** set the iPad's **Settings → Display & Brightness → Auto-Lock** to **Never** (Guided Access helps too), so the screensaver stays up instead of the screen going dark. Behind a reverse proxy, don't buffer `/board/events`: it's a server-sent event stream. nginx is told this via `X-Accel-Buffering: no`.
 
+### Locking the board
+
+When the house is empty, lock the displays so names, chores and the calendar aren't on show through a window. A locked display shows only the photos and the clock: no family name, no people, no chores, no events. The server serves nothing personal to it either. Locking applies to every household display at once, and they all change live.
+
+- **Lock:** tap 🔒 on the board, or use **Lock the displays** on your phone (on the board or in **Admin**). The displays can also lock on a weekly schedule, e.g. weekdays 09:00–15:00, or after a number of hours with nobody using them. Set both up in **Admin › Settings**.
+- **Unlock:** tap a locked display and enter the **household unlock code**, set in **Admin › Settings**. Anyone can know it, kids included. Any adult's PIN works too. An adult can also unlock from their phone. Unlocking the board never unlocks admin. After 5 wrong codes, the keypad waits 5 minutes.
+- **Schedule:** if someone gets home early and unlocks, the displays stay unlocked until the next scheduled lock. When a scheduled lock ends, the displays unlock, but only if the schedule locked them. A lock you set yourself stays until you unlock it.
+- Locking also locks admin on every display. The 🔒 button only shows on a display once there's a code or an adult PIN to unlock it again.
+
 ## Devices, sign-in and admin
 
 Domus knows two kinds of device:
@@ -83,7 +92,7 @@ Any other device (not a display, not signed in) only sees the sign-in page: no b
 
 **Admin › Completions** lists everything waiting for a grown-up, plus the last 7 days of completions with a **Reverse** button. A reversal never deletes history: the points come back off through a separate ledger adjustment, so a balance can go negative if the reward has already been spent.
 
-Admin covers family members (with an emoji or photo, PINs and sign-ins), chores (assigned or shared, repeating daily/weekly/fortnightly/monthly, points and £), rewards, screensaver photos and calendars, devices and settings (household name, timezone, when the board's day rolls over, admin auto-lock, screensaver delay). Every change appears in the activity feed.
+Admin covers family members (with an emoji or photo, PINs and sign-ins), chores (assigned or shared, repeating daily/weekly/fortnightly/monthly, points and £), rewards, screensaver photos and calendars, devices and settings (household name, timezone, when the board's day rolls over, admin auto-lock, screensaver delay, the lock schedule, idle lock and household unlock code). Every change appears in the activity feed.
 
 If Domus is reachable from outside your home network, put it behind a reverse proxy with HTTPS (e.g. Caddy or Traefik) and forward `X-Forwarded-Proto` so cookies are marked `Secure`. Photos are stored next to the database: avatars in `avatars/`, screensaver uploads in `photos/`, and resized copies of folder photos in `photo-cache/`.
 
@@ -121,6 +130,7 @@ internal/settings/  per-household settings (timezone, day reset, admin and scree
 internal/household/ people, credentials and rewards admin
 internal/avatar/    emoji picker and photo uploads
 internal/picture/   safe image decoding and JPEG writing, shared by avatars and photos
+internal/lock/      locking the displays: state, schedule and idle lock
 internal/photos/    screensaver slideshow: uploaded photos plus the read-only photos folder
 internal/calendar/  ICS feeds: fetch, parse and expand recurring events for the screensaver
 internal/chores/    chore lifecycle: recurrence presets, admin edits, board, claim, complete, undo, approve, reverse, redeem
@@ -140,6 +150,7 @@ Every table has a `household_id`, so one database can hold several households. A
 - **chores** are either *assigned* to one person or sit in the shared *pool*. Recurrence is an iCal `RRULE` evaluated in the household timezone. A chore can award points, pence or both, and can require an adult's approval.
 - **chore_occurrences**: the concrete instances that appear on the board. They're materialised 14 days ahead on startup, then refreshed every hour. Each pool occurrence can be claimed by one person.
 - **completions** are pending, approved or rejected. Only approved completions credit the **ledger_entries** table, and balances are the sum of a person's entries. Rewards are bought from the ledger through **redemptions**.
+- **household_lock** says whether the displays are locked, why, and which schedule window was last applied. The unlock code (hashed), lock schedule and idle hours live in **household_settings**.
 - **photos** are the screensaver photos uploaded in admin. Folder photos are indexed in memory and never stored.
 - **calendar_feeds** are the ICS addresses for the screensaver. Events are fetched into memory and not stored.
 - **activity** is an append-only feed and audit log.

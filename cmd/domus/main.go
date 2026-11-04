@@ -19,6 +19,7 @@ import (
 	"github.com/lukeskelhorn/domus/internal/config"
 	householdpkg "github.com/lukeskelhorn/domus/internal/household"
 	"github.com/lukeskelhorn/domus/internal/locale"
+	"github.com/lukeskelhorn/domus/internal/lock"
 	"github.com/lukeskelhorn/domus/internal/photos"
 	"github.com/lukeskelhorn/domus/internal/server"
 	"github.com/lukeskelhorn/domus/internal/settings"
@@ -74,6 +75,8 @@ func run(log *slog.Logger) error {
 
 	go maintenanceLoop(ctx, log, set, choreSvc, authSvc, household.ID)
 	go screensaverLoop(ctx, log, library, cals)
+	lockSvc := lock.New(st, set, authSvc.EndDisplaySessions)
+	go lockLoop(ctx, log, lockSvc, household.ID)
 
 	srv, err := server.New(server.Deps{
 		Store:       st,
@@ -85,6 +88,7 @@ func run(log *slog.Logger) error {
 		Avatars:     avatars,
 		Photos:      library,
 		Calendars:   cals,
+		Lock:        lockSvc,
 		Locale: locale.Locale{
 			Location:   cfg.Location,
 			DateFormat: cfg.DateFormat,
@@ -192,6 +196,22 @@ func screensaverLoop(ctx context.Context, log *slog.Logger, library *photos.Libr
 			rescan()
 		case <-calTick.C:
 			refresh()
+		}
+	}
+}
+
+// lockLoop applies the displays' lock schedule and idle lock every minute.
+func lockLoop(ctx context.Context, log *slog.Logger, svc *lock.Service, householdID int64) {
+	t := time.NewTicker(time.Minute)
+	defer t.Stop()
+	for {
+		if err := svc.Tick(ctx, householdID); err != nil && ctx.Err() == nil {
+			log.Error("lock tick", slog.Any("err", err))
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
 		}
 	}
 }

@@ -83,7 +83,9 @@ func boardClient(v string) string {
 func (s *Server) CloseStreams() { s.events.close() }
 
 // handleBoardEvents streams server-sent events: "board" whenever the board
-// may have changed. The page reacts by re-fetching /board.
+// may have changed (the page re-fetches /board), and "lock" with "locked"
+// or "unlocked", first on connect and then whenever the displays lock or
+// unlock.
 func (s *Server) handleBoardEvents(w http.ResponseWriter, r *http.Request) {
 	rc := http.NewResponseController(w)
 	// The stream is long-lived; don't let a server write timeout cut it.
@@ -96,10 +98,25 @@ func (s *Server) handleBoardEvents(w http.ResponseWriter, r *http.Request) {
 
 	ch, unsubscribe := s.events.subscribe(s.HouseholdID, boardClient(r.URL.Query().Get("client")))
 	defer unsubscribe()
+	lockCh, unsubscribeLock := s.lockEvents.subscribe(s.HouseholdID, "")
+	defer unsubscribeLock()
+	// lockEvent says whether the displays are locked; the page compares it
+	// with what it shows and reloads if they differ (so a reconnect catches
+	// a missed change).
+	lockEvent := func() string {
+		st, err := s.locked(r)
+		if err != nil {
+			return ""
+		}
+		if st.Locked {
+			return "event: lock\ndata: locked\n\n"
+		}
+		return "event: lock\ndata: unlocked\n\n"
+	}
 
 	// Tell the client how long to wait before reconnecting, and flush the
 	// headers so EventSource fires "open" straight away.
-	if _, err := w.Write([]byte("retry: 3000\n\n")); err != nil {
+	if _, err := w.Write([]byte("retry: 3000\n\n" + lockEvent())); err != nil {
 		return
 	}
 	if err := rc.Flush(); err != nil {
@@ -117,6 +134,8 @@ func (s *Server) handleBoardEvents(w http.ResponseWriter, r *http.Request) {
 			return
 		case <-ch:
 			msg = "event: board\ndata: changed\n\n"
+		case <-lockCh:
+			msg = lockEvent()
 		case <-ping.C:
 			msg = ": ping\n\n"
 		}

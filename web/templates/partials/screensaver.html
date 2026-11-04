@@ -2,10 +2,7 @@
      page re-fetches it every minute while the screensaver is showing, and
      when the board changes. */}}
 {{define "screensaver"}}
-<div class="saver__clock">
-  <span class="saver__time">{{.Clock.Time}}</span>
-  <span class="saver__date">{{.Clock.Weekday}} {{.Clock.Date}}</span>
-</div>
+<div class="saver__clock">{{template "big_clock" .Clock}}</div>
 {{if or .Today .Tomorrow .HasCalendars}}
 <div class="saver__events">
   {{if .Today}}

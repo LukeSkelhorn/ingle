@@ -34,7 +34,45 @@
       <small class="muted">Photos, the clock and what's on today. 0 turns it off; the 🌙 button on the board still works.</small>
       {{template "err" index .Errors "screensaver_idle_minutes"}}
     </label>
+    <fieldset class="field">
+      <legend>Lock the displays on a schedule</legend>
+      <div class="segmented">
+        {{range .Data.LockWeekdays}}<label><input type="checkbox" name="lock_day" value="{{.Bit}}"{{if .Checked}} checked{{end}}><span>{{.Name}}</span></label>{{end}}
+      </div>
+      <div class="row">
+        <label class="field"><span>Lock at</span><input type="time" name="lock_from" value="{{.Data.LockFrom}}" required>{{template "err" index .Errors "lock_from"}}</label>
+        <label class="field"><span>Unlock at</span><input type="time" name="lock_until" value="{{.Data.LockUntil}}" required>{{template "err" index .Errors "lock_until"}}</label>
+      </div>
+      <small class="muted">For when the house is empty, like school and work hours. Unlock at an earlier time than lock to run overnight. Unlocking early keeps them unlocked until the next time. No days ticked turns this off.</small>
+      {{template "err" index .Errors "lock_days"}}
+    </fieldset>
+    <label class="field field--short">
+      <span>Lock the displays after (hours with nobody using them)</span>
+      <input type="number" name="lock_idle_hours" value="{{.Data.LockIdleHours}}" min="0" max="72" required inputmode="numeric">
+      <small class="muted">0 turns this off.</small>
+      {{template "err" index .Errors "lock_idle_hours"}}
+    </label>
     <button class="btn btn--primary" type="submit">Save settings</button>
   </form>
+
+  <section class="card stack" id="unlock-code">
+    <h2>Household unlock code</h2>
+    <p class="muted">A locked display shows photos and the clock only. Anyone can unlock it with this code (share it with the kids) or with an adult's PIN. Unlocking the board never opens admin.</p>
+    <p>{{if .Data.HasUnlockCode}}✓ A code is set.{{else}}No code yet. Only adult PINs unlock the displays.{{end}}</p>
+    <form class="stack" method="post" action="/admin/settings/unlock-code">
+      <div class="row">
+        <label class="field"><span>{{if .Data.HasUnlockCode}}New code{{else}}Code{{end}} (4 to 6 digits)</span>
+          <input name="code" type="password" inputmode="numeric" pattern="[0-9]{4,6}" autocomplete="off" required>{{template "err" index .Errors "code"}}</label>
+        <label class="field"><span>Code again</span>
+          <input name="code_confirm" type="password" inputmode="numeric" pattern="[0-9]{4,6}" autocomplete="off" required>{{template "err" index .Errors "code_confirm"}}</label>
+      </div>
+      <button class="btn btn--primary" type="submit">Save code</button>
+    </form>
+    {{if .Data.HasUnlockCode}}
+    <form method="post" action="/admin/settings/unlock-code/clear">
+      <button class="btn btn--danger" type="submit">Remove code</button>
+    </form>
+    {{end}}
+  </section>
 </main>
 {{end}}

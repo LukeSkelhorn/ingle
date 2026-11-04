@@ -23,6 +23,7 @@ type boardView struct {
 type boardPage struct {
 	Clock clockView
 	Board boardView
+	Lock  lockView
 }
 
 // pickerView is the "who's doing this?" sheet for a pool chore.
@@ -40,12 +41,21 @@ func (s *Server) loadBoard(r *http.Request) (boardView, error) {
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
+	lv, err := s.boardLock(r)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	if lv.Locked && identityFrom(r.Context()).Device != nil {
+		s.renderLocked(w, r)
+		return
+	}
 	b, err := s.loadBoard(r)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	s.render(w, r, http.StatusOK, "board", s.view(r, "", boardPage{Clock: s.clock(r.Context()), Board: b}))
+	s.render(w, r, http.StatusOK, "board", s.view(r, "", boardPage{Clock: s.clock(r.Context()), Board: b, Lock: lv}))
 }
 
 func (s *Server) handleBoard(w http.ResponseWriter, r *http.Request) {

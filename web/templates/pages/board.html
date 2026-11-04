@@ -1,7 +1,13 @@
 {{define "title"}}{{if .Household}}{{.Household}} · {{end}}Domus{{end}}
 {{define "bodyclass"}}is-board{{end}}
 {{define "content"}}
-<main class="board" id="board-page">
+<main class="board" id="board-page" data-locked="{{if .Data.Lock.Locked}}1{{else}}0{{end}}">
+  {{if .Data.Lock.Locked}}
+  <form class="board__locked" method="post" action="/unlock">
+    <span>🔒 The displays are locked{{with .Data.Lock.Since}} (since {{.}}){{end}}.</span>
+    <button class="btn btn--primary" type="submit">Unlock</button>
+  </form>
+  {{end}}
   <header class="board__header">
     <h1>{{if .Household}}{{.Household}}{{else}}Domus{{end}}</h1>
     <div class="board__clock" hx-get="/clock" hx-trigger="every 30s" hx-swap="innerHTML">
@@ -14,7 +20,14 @@
   <dialog id="sheet" class="sheet" aria-label="Chore"><div id="sheet-body"></div></dialog>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
-  <button class="board__saver" type="button" data-screensaver aria-label="Start the screensaver">🌙</button>
+  <div class="board__corner">
+    {{if and .Data.Lock.CanLock (not .Data.Lock.Locked)}}
+    <form method="post" action="/lock" data-lock-form>
+      <button class="board__btn" type="submit" aria-label="Lock the displays" title="Lock the displays">🔒</button>
+    </form>
+    {{end}}
+    <button class="board__btn" type="button" data-screensaver aria-label="Start the screensaver" title="Screensaver">🌙</button>
+  </div>
   {{if .Viewer.Adult}}
   <a class="board__admin" href="/admin" aria-label="Admin">⚙︎</a>
   {{else if .Viewer.IsDisplay}}
@@ -25,7 +38,7 @@
 {{/* Screensaver: photos, the clock, what's on and chore progress. It
      covers the board (which stays live underneath) and any tap brings the
      board back; that tap is swallowed so it can't tick a chore. */}}
-<div id="screensaver" class="saver" hidden aria-label="Screensaver. Tap anywhere to return to the board.">
+<div id="screensaver" class="saver" hidden role="button" aria-label="Screensaver. Tap anywhere to return to the board.">
   <div class="saver__photos"></div>
   <div class="saver__scrim"></div>
   <div id="saver-info" class="saver__info"></div>
@@ -91,6 +104,11 @@
         refresh();
         document.dispatchEvent(new Event("domus:board"));
       });
+      // Locking or unlocking reloads the page: a display shows the locked
+      // screen, a phone shows or hides the banner.
+      es.addEventListener("lock", function (e) {
+        if (e.data !== (page.dataset.locked === "1" ? "locked" : "unlocked")) location.replace("/");
+      });
       // After a reconnect (server restart, network blip) we may have missed
       // events, so refresh once.
       es.addEventListener("open", function () { if (connected) refresh(); connected = true; });
@@ -99,81 +117,43 @@
     document.addEventListener("visibilitychange", function () { if (!document.hidden) refresh(); });
   })();
 </script>
+<script src="/static/saver.js"></script>
 <script>
   // Screensaver. On a household display it starts after
   // {{.Viewer.ScreensaverSeconds}}s without a tap (0 = never); the moon
   // button starts it anywhere.
   (function () {
-    var saver = document.getElementById("screensaver"),
-        layer = saver.querySelector(".saver__photos"),
-        info = document.getElementById("saver-info"),
+    var el = document.getElementById("screensaver"),
         sheet = document.getElementById("sheet"),
         idleMs = {{.Viewer.ScreensaverSeconds}} * 1000,
+        isDisplay = {{.Viewer.IsDisplay}},
         adminOnDisplay = {{.Viewer.OnDisplayAdmin}},
-        SLIDE_MS = 20000,
-        showing = false, idleTimer, slideTimer, infoTimer,
-        slides = [], at = 0, failures = 0, wakeLock = null, swallowUntil = 0;
+        idleTimer, swallowUntil = 0, lastPing = 0,
+        saver = DomusSaver(el, {
+          info: function (panel) {
+            if (window.htmx) htmx.ajax("GET", "/screensaver", { target: panel, swap: "innerHTML" });
+          },
+        });
 
     function resetIdle() {
       clearTimeout(idleTimer);
-      if (idleMs > 0 && !showing) idleTimer = setTimeout(start, idleMs);
+      if (idleMs > 0 && !saver.showing()) idleTimer = setTimeout(start, idleMs);
     }
     ["pointerdown", "keydown", "input", "scroll", "wheel"].forEach(function (e) {
-      document.addEventListener(e, function () { if (!showing) resetIdle(); }, { passive: true, capture: true });
+      document.addEventListener(e, function () { if (!saver.showing()) resetIdle(); }, { passive: true, capture: true });
     });
-
-    function loadInfo() {
-      // Drift the text a little each minute: kinder to an always-on panel.
-      info.style.setProperty("--dx", Math.round(Math.random() * 40 - 20) + "px");
-      info.style.setProperty("--dy", Math.round(Math.random() * 30) + "px");
-      if (window.htmx) htmx.ajax("GET", "/screensaver", { target: info, swap: "innerHTML" });
-    }
-
-    function shuffle(a) {
-      for (var i = a.length - 1; i > 0; i--) {
-        var j = Math.floor(Math.random() * (i + 1)), t = a[i];
-        a[i] = a[j]; a[j] = t;
-      }
-      return a;
-    }
-    function loadSlides() {
-      fetch("/screensaver/photos", { credentials: "same-origin" })
-        .then(function (r) { return r.ok ? r.json() : { photos: [] }; })
-        .then(function (d) { slides = shuffle(d.photos || []); at = 0; failures = 0; next(); })
-        .catch(function () { slides = []; next(); });
-    }
-    function next() {
-      if (!showing) return;
-      saver.classList.toggle("saver--empty", !slides.length);
-      if (!slides.length || failures >= slides.length) return;
-      if (at >= slides.length) { loadSlides(); return; } // new pass, new order, new photos
-      var img = new Image();
-      img.className = "saver__photo";
-      img.alt = "";
-      img.onload = function () {
-        if (!showing) return;
-        failures = 0;
-        var old = layer.querySelectorAll(".saver__photo");
-        layer.appendChild(img);
-        void img.offsetWidth; // start the crossfade from transparent
-        img.classList.add("is-shown");
-        old.forEach(function (o) { o.classList.remove("is-shown"); setTimeout(function () { o.remove(); }, 2000); });
-        slideTimer = setTimeout(next, SLIDE_MS);
-      };
-      img.onerror = function () { failures++; slideTimer = setTimeout(next, 500); };
-      img.src = slides[at++];
-    }
-
-    function requestWakeLock() {
-      if (!navigator.wakeLock || wakeLock) return;
-      navigator.wakeLock.request("screen").then(function (l) {
-        wakeLock = l;
-        l.addEventListener("release", function () { wakeLock = null; });
-      }).catch(function () {});
+    // A tap on a display holds off the household's idle lock; tell the
+    // server at most every five minutes.
+    if (isDisplay) {
+      document.addEventListener("pointerdown", function () {
+        if (Date.now() - lastPing < 300000) return;
+        lastPing = Date.now();
+        fetch("/activity", { method: "POST", credentials: "same-origin" }).catch(function () {});
+      }, { passive: true, capture: true });
     }
 
     function start() {
-      if (showing) return;
+      if (saver.showing()) return;
       if (adminOnDisplay) {
         // Never leave admin unlocked behind the photos: lock, then come
         // back to a locked board with the screensaver already on.
@@ -181,30 +161,14 @@
           .finally(function () { location.replace("/?screensaver=1"); });
         return;
       }
-      showing = true;
       clearTimeout(idleTimer);
       if (sheet.open) sheet.close();
-      saver.hidden = false;
-      void saver.offsetWidth;
-      saver.classList.add("is-on");
-      loadInfo();
-      infoTimer = setInterval(loadInfo, 60000);
-      loadSlides();
-      requestWakeLock();
+      saver.start();
     }
 
     function stop() {
-      if (!showing) return;
-      showing = false;
-      clearTimeout(slideTimer);
-      clearInterval(infoTimer);
-      saver.classList.remove("is-on");
-      setTimeout(function () {
-        if (showing) return;
-        saver.hidden = true;
-        layer.textContent = ""; // free the decoded photos
-      }, 400);
-      if (wakeLock) { wakeLock.release().catch(function () {}); wakeLock = null; }
+      if (!saver.showing()) return;
+      saver.stop();
       var b = document.getElementById("board");
       if (b && window.htmx) htmx.trigger(b, "refresh");
       resetIdle();
@@ -213,23 +177,20 @@
     // Wake on any tap, and swallow it: the click that follows would
     // otherwise land on whatever chore is under the finger.
     function swallow(e) { swallowUntil = Date.now() + 700; e.preventDefault(); }
-    saver.addEventListener("touchstart", swallow, { passive: false });
-    saver.addEventListener("pointerdown", swallow);
-    saver.addEventListener("pointerup", function (e) { e.preventDefault(); stop(); });
+    el.addEventListener("touchstart", swallow, { passive: false });
+    el.addEventListener("pointerdown", swallow);
+    el.addEventListener("pointerup", function (e) { e.preventDefault(); stop(); });
     ["click", "mousedown", "mouseup", "touchend"].forEach(function (t) {
       window.addEventListener(t, function (e) {
         if (Date.now() < swallowUntil) { e.preventDefault(); e.stopPropagation(); }
       }, { capture: true, passive: false });
     });
     document.addEventListener("keydown", function (e) {
-      if (showing) { e.preventDefault(); stop(); }
+      if (saver.showing()) { e.preventDefault(); stop(); }
     }, { capture: true });
 
     document.querySelector("[data-screensaver]").addEventListener("click", function () { start(); });
-    document.addEventListener("domus:board", function () { if (showing) loadInfo(); });
-    document.addEventListener("visibilitychange", function () {
-      if (!document.hidden && showing) { requestWakeLock(); loadInfo(); }
-    });
+    document.addEventListener("domus:board", saver.refresh);
 
     if (/[?&]screensaver=1/.test(location.search)) {
       history.replaceState(null, "", "/");

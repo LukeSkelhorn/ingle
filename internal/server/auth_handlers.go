@@ -247,7 +247,7 @@ func (s *Server) handleUnlockForm(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, http.StatusOK, "unlock", s.view(r, "Unlock admin", data))
 }
 
-func (s *Server) handleUnlock(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleAdminUnlock(w http.ResponseWriter, r *http.Request) {
 	id := identityFrom(r.Context())
 	if id.Device == nil {
 		redirect(w, r, "/signin")

@@ -2,10 +2,13 @@ package server
 
 import (
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 
+	"github.com/lukeskelhorn/domus/internal/auth"
 	"github.com/lukeskelhorn/domus/internal/settings"
 	"github.com/lukeskelhorn/domus/internal/store/dbq"
 )
@@ -15,6 +18,7 @@ type adminHome struct {
 	Chores   int
 	Rewards  int
 	Pending  int
+	Lock     lockView
 	Activity []dbq.ListRecentActivityWithActorRow
 }
 
@@ -45,11 +49,25 @@ func (s *Server) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
+	lv, err := s.boardLock(r)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
 	v := s.view(r, "Admin", adminHome{
-		People: len(people), Chores: len(chs), Rewards: len(rewards), Pending: len(pending), Activity: act,
+		People: len(people), Chores: len(chs), Rewards: len(rewards), Pending: len(pending), Lock: lv, Activity: act,
 	})
 	v.Nav = "home"
 	s.render(w, r, http.StatusOK, "admin_home", v)
+}
+
+// activityActor names who did something when no person did (the schedule
+// or idle lock, the household code).
+func activityActor(verb string) string {
+	if strings.HasPrefix(verb, "board.") && verb != "board.unlocked_code" {
+		return "Domus"
+	}
+	return "Someone"
 }
 
 // describeActivity turns an activity verb into a short phrase for the feed.
@@ -61,40 +79,48 @@ func describeActivity(verb string) string {
 }
 
 var activityText = map[string]string{
-	"household.setup":      "set up the household",
-	"settings.updated":     "changed settings",
-	"admin.unlocked":       "unlocked admin on a display",
-	"admin.signed_in":      "signed in",
-	"device.registered":    "registered a household display",
-	"device.revoked":       "removed a household display",
-	"session.revoked":      "signed out a device",
-	"person.created":       "added a family member",
-	"person.updated":       "edited a family member",
-	"person.archived":      "archived a family member",
-	"person.restored":      "restored a family member",
-	"person.pin_set":       "set a PIN",
-	"person.pin_cleared":   "removed a PIN",
-	"person.login_set":     "set a sign-in",
-	"person.login_cleared": "removed a sign-in",
-	"chore.created":        "added a chore",
-	"chore.updated":        "edited a chore",
-	"chore.archived":       "archived a chore",
-	"chore.claimed":        "claimed a chore",
-	"chore.released":       "gave back a chore",
-	"chore.reversed":       "reversed a chore",
-	"chore.completed":      "completed a chore",
-	"chore.undone":         "undid a chore",
-	"chore.approved":       "approved a chore",
-	"chore.rejected":       "sent a chore back",
-	"reward.created":       "added a reward",
-	"reward.updated":       "edited a reward",
-	"reward.archived":      "archived a reward",
-	"reward.restored":      "restored a reward",
-	"reward.redeemed":      "redeemed a reward",
-	"photo.added":          "added a photo",
-	"photo.removed":        "removed a photo",
-	"calendar.added":       "added a calendar",
-	"calendar.removed":     "removed a calendar",
+	"household.setup":         "set up the household",
+	"settings.updated":        "changed settings",
+	"admin.unlocked":          "unlocked admin on a display",
+	"admin.signed_in":         "signed in",
+	"device.registered":       "registered a household display",
+	"device.revoked":          "removed a household display",
+	"session.revoked":         "signed out a device",
+	"person.created":          "added a family member",
+	"person.updated":          "edited a family member",
+	"person.archived":         "archived a family member",
+	"person.restored":         "restored a family member",
+	"person.pin_set":          "set a PIN",
+	"person.pin_cleared":      "removed a PIN",
+	"person.login_set":        "set a sign-in",
+	"person.login_cleared":    "removed a sign-in",
+	"chore.created":           "added a chore",
+	"chore.updated":           "edited a chore",
+	"chore.archived":          "archived a chore",
+	"chore.claimed":           "claimed a chore",
+	"chore.released":          "gave back a chore",
+	"chore.reversed":          "reversed a chore",
+	"chore.completed":         "completed a chore",
+	"chore.undone":            "undid a chore",
+	"chore.approved":          "approved a chore",
+	"chore.rejected":          "sent a chore back",
+	"reward.created":          "added a reward",
+	"reward.updated":          "edited a reward",
+	"reward.archived":         "archived a reward",
+	"reward.restored":         "restored a reward",
+	"reward.redeemed":         "redeemed a reward",
+	"photo.added":             "added a photo",
+	"photo.removed":           "removed a photo",
+	"calendar.added":          "added a calendar",
+	"calendar.removed":        "removed a calendar",
+	"lock.code_set":           "set the household unlock code",
+	"lock.code_cleared":       "removed the household unlock code",
+	"board.locked":            "locked the displays",
+	"board.locked_schedule":   "locked the displays on schedule",
+	"board.locked_idle":       "locked the displays after a long idle",
+	"board.unlocked":          "unlocked the displays",
+	"board.unlocked_code":     "unlocked the displays with the household code",
+	"board.unlocked_schedule": "unlocked the displays on schedule",
 }
 
 // Settings.
@@ -105,7 +131,29 @@ type settingsForm struct {
 	DayStartsAt            string
 	AdminIdleMinutes       int64
 	ScreensaverIdleMinutes int64
+	LockDays               int64
+	LockFrom               string
+	LockUntil              string
+	LockIdleHours          int64
+	HasUnlockCode          bool
 	Timezones              []string
+}
+
+// weekdayOption is one checkbox of the lock schedule.
+type weekdayOption struct {
+	Bit     int
+	Name    string
+	Checked bool
+}
+
+// LockWeekdays lists Monday to Sunday for the schedule checkboxes.
+func (f settingsForm) LockWeekdays() []weekdayOption {
+	names := []string{"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"}
+	out := make([]weekdayOption, 0, 7)
+	for _, d := range []int{1, 2, 3, 4, 5, 6, 0} {
+		out = append(out, weekdayOption{Bit: d, Name: names[d], Checked: f.LockDays&(1<<d) != 0})
+	}
+	return out
 }
 
 func (s *Server) settingsForm(set settings.Settings) settingsForm {
@@ -115,6 +163,11 @@ func (s *Server) settingsForm(set settings.Settings) settingsForm {
 		DayStartsAt:            set.DayStartsAt,
 		AdminIdleMinutes:       set.AdminIdleMinutes,
 		ScreensaverIdleMinutes: set.ScreensaverIdleMinutes,
+		LockDays:               set.LockDays,
+		LockFrom:               set.LockFrom,
+		LockUntil:              set.LockUntil,
+		LockIdleHours:          set.LockIdleHours,
+		HasUnlockCode:          set.HasUnlockCode(),
 	}
 }
 
@@ -148,6 +201,13 @@ func (s *Server) handleSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 		DayStartsAt:            f.str("day_starts_at"),
 		AdminIdleMinutes:       f.int("admin_idle_minutes", "Choose between 1 and 60 minutes."),
 		ScreensaverIdleMinutes: f.int("screensaver_idle_minutes", "Choose between 0 (never) and 120 minutes."),
+		LockDays:               weekdayMask(r.PostForm["lock_day"]),
+		LockFrom:               f.str("lock_from"),
+		LockUntil:              f.str("lock_until"),
+		LockIdleHours:          f.int("lock_idle_hours", "Choose between 0 (never) and 72 hours."),
+	}
+	if set, err := s.Settings.Get(r.Context(), s.HouseholdID); err == nil {
+		data.HasUnlockCode = set.HasUnlockCode()
 	}
 	if !f.ok() {
 		s.renderSettings(w, r, http.StatusUnprocessableEntity, data, f.errs, "")
@@ -157,6 +217,7 @@ func (s *Server) handleSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 		HouseholdName: data.HouseholdName, Timezone: data.Timezone,
 		DayStartsAt: data.DayStartsAt, AdminIdleMinutes: data.AdminIdleMinutes,
 		ScreensaverIdleMinutes: data.ScreensaverIdleMinutes,
+		LockDays:               data.LockDays, LockFrom: data.LockFrom, LockUntil: data.LockUntil, LockIdleHours: data.LockIdleHours,
 	})
 	if errs, ok := validationErrors(err); ok {
 		s.renderSettings(w, r, http.StatusUnprocessableEntity, data, errs, "")
@@ -167,6 +228,64 @@ func (s *Server) handleSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.renderSettings(w, r, http.StatusOK, data, nil, "Settings saved.")
+}
+
+// weekdayMask turns the schedule's checked weekdays ("0" = Sunday … "6")
+// into a bitmask, ignoring anything else.
+func weekdayMask(days []string) int64 {
+	var mask int64
+	for _, d := range days {
+		if n, err := strconv.Atoi(d); err == nil && n >= 0 && n <= 6 {
+			mask |= 1 << n
+		}
+	}
+	return mask
+}
+
+// handleUnlockCodeSet sets the household unlock code.
+func (s *Server) handleUnlockCodeSet(w http.ResponseWriter, r *http.Request) {
+	if err := parseForm(w, r); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	f := newForm(r)
+	set, err := s.Settings.Get(r.Context(), s.HouseholdID)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	if f.str("code") != f.str("code_confirm") {
+		s.renderSettings(w, r, http.StatusUnprocessableEntity, s.settingsForm(set), map[string]string{"code_confirm": "The codes don't match."}, "")
+		return
+	}
+	err = s.Auth.SetUnlockCode(r.Context(), s.HouseholdID, actor(r).Person.ID, f.str("code"))
+	if errors.Is(err, auth.ErrInvalidPIN) {
+		s.renderSettings(w, r, http.StatusUnprocessableEntity, s.settingsForm(set), map[string]string{"code": "Use 4 to 6 digits."}, "")
+		return
+	}
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	s.settingsSaved(w, r, "Unlock code saved.")
+}
+
+// handleUnlockCodeClear removes the household unlock code.
+func (s *Server) handleUnlockCodeClear(w http.ResponseWriter, r *http.Request) {
+	if err := s.Auth.ClearUnlockCode(r.Context(), s.HouseholdID, actor(r).Person.ID); err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	s.settingsSaved(w, r, "Unlock code removed. Adult PINs still unlock the displays.")
+}
+
+func (s *Server) settingsSaved(w http.ResponseWriter, r *http.Request, flash string) {
+	set, err := s.Settings.Get(r.Context(), s.HouseholdID)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	s.renderSettings(w, r, http.StatusOK, s.settingsForm(set), nil, flash)
 }
 
 // commonTimezones is the curated timezone list (the IANA database embedded

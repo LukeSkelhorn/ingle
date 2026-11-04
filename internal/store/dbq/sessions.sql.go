@@ -39,6 +39,15 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) er
 	return err
 }
 
+const deleteDisplaySessions = `-- name: DeleteDisplaySessions :exec
+DELETE FROM sessions WHERE household_id = ? AND kind = 'display'
+`
+
+func (q *Queries) DeleteDisplaySessions(ctx context.Context, householdID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteDisplaySessions, householdID)
+	return err
+}
+
 const deleteExpiredSessions = `-- name: DeleteExpiredSessions :execrows
 DELETE FROM sessions
 WHERE (kind = 'personal' AND last_seen_at < ?1)

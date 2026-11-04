@@ -28,8 +28,62 @@ type Settings struct {
 	// ScreensaverIdleMinutes is how long a household display waits before
 	// showing the screensaver; 0 means never.
 	ScreensaverIdleMinutes int64
+	// Lock schedule: on the weekdays in LockDays (bit 0 = Sunday) the
+	// displays lock at LockFrom and unlock at LockUntil (local "HH:MM"; the
+	// window runs overnight when LockFrom > LockUntil). LockDays 0 is off.
+	LockDays  int64
+	LockFrom  string
+	LockUntil string
+	// LockIdleHours locks the displays after that long untouched; 0 is off.
+	LockIdleHours int64
+	// UnlockCodeHash is the household unlock code's argon2id hash, or "".
+	UnlockCodeHash string
 
-	dayStart time.Duration
+	dayStart, lockFrom, lockUntil time.Duration
+}
+
+// HasUnlockCode reports whether a household unlock code is set.
+func (s Settings) HasUnlockCode() bool { return s.UnlockCodeHash != "" }
+
+// LockIdle is how long the displays may go untouched before locking; zero
+// means never.
+func (s Settings) LockIdle() time.Duration { return time.Duration(s.LockIdleHours) * time.Hour }
+
+// LockWindow returns the lock-schedule window containing now, or the most
+// recent one that started before it, and whether now is inside it. ok is
+// false when the schedule is off. Windows start on a LockDays weekday at
+// LockFrom (local) and end at the next LockUntil.
+func (s Settings) LockWindow(now time.Time) (start, end time.Time, in, ok bool) {
+	if s.LockDays == 0 || s.lockFrom == s.lockUntil {
+		return time.Time{}, time.Time{}, false, false
+	}
+	local := now.In(s.Location)
+	y, m, d := local.Date()
+	// The latest start at or before now is at most 7 days back (8 covers an
+	// overnight window that began the day before a full week ago).
+	for back := 0; back <= 7; back++ {
+		day := time.Date(y, m, d-back, 0, 0, 0, 0, s.Location)
+		if s.LockDays&(1<<int(day.Weekday())) == 0 {
+			continue
+		}
+		start = atClock(day, s.lockFrom, s.Location)
+		if start.After(now) {
+			continue
+		}
+		endDay := day
+		if s.lockUntil <= s.lockFrom {
+			endDay = time.Date(day.Year(), day.Month(), day.Day()+1, 0, 0, 0, 0, s.Location)
+		}
+		end = atClock(endDay, s.lockUntil, s.Location)
+		return start, end, now.Before(end), true
+	}
+	return time.Time{}, time.Time{}, false, true
+}
+
+// atClock is the wall-clock time off (from midnight) on day, built from
+// hours and minutes so days with a clock change land on the right time.
+func atClock(day time.Time, off time.Duration, loc *time.Location) time.Time {
+	return time.Date(day.Year(), day.Month(), day.Day(), int(off/time.Hour), int(off%time.Hour/time.Minute), 0, 0, loc)
 }
 
 // AdminIdle is how long an admin unlock on a household display lasts
@@ -73,6 +127,10 @@ type Input struct {
 	DayStartsAt            string
 	AdminIdleMinutes       int64
 	ScreensaverIdleMinutes int64
+	LockDays               int64
+	LockFrom               string
+	LockUntil              string
+	LockIdleHours          int64
 }
 
 // Service loads, caches and updates settings.
@@ -160,6 +218,23 @@ func (s *Service) Update(ctx context.Context, householdID, actorID int64, in Inp
 	if in.ScreensaverIdleMinutes < 0 || in.ScreensaverIdleMinutes > 120 {
 		errs.Add("screensaver_idle_minutes", "Choose between 0 (never) and 120 minutes.")
 	}
+	if in.LockDays < 0 || in.LockDays > 127 {
+		errs.Add("lock_days", "Choose the days to lock.")
+	}
+	from, ferr := ParseClock(in.LockFrom)
+	if ferr != nil {
+		errs.Add("lock_from", "Enter a time like 09:00.")
+	}
+	until, uerr := ParseClock(in.LockUntil)
+	if uerr != nil {
+		errs.Add("lock_until", "Enter a time like 15:00.")
+	}
+	if ferr == nil && uerr == nil && from == until && in.LockDays != 0 {
+		errs.Add("lock_until", "Choose a different time to unlock.")
+	}
+	if in.LockIdleHours < 0 || in.LockIdleHours > 72 {
+		errs.Add("lock_idle_hours", "Choose between 0 (never) and 72 hours.")
+	}
 	if err := errs.Err(); err != nil {
 		return err
 	}
@@ -174,6 +249,10 @@ func (s *Service) Update(ctx context.Context, householdID, actorID int64, in Inp
 			DayStartsAt:            in.DayStartsAt,
 			AdminIdleMinutes:       in.AdminIdleMinutes,
 			ScreensaverIdleMinutes: in.ScreensaverIdleMinutes,
+			LockDays:               in.LockDays,
+			LockFrom:               in.LockFrom,
+			LockUntil:              in.LockUntil,
+			LockIdleHours:          in.LockIdleHours,
 			UpdatedAt:              now.Unix(),
 			HouseholdID:            householdID,
 		}); err != nil {
@@ -205,6 +284,18 @@ func resolve(name string, row dbq.HouseholdSetting) (Settings, error) {
 	if err != nil {
 		return Settings{}, fmt.Errorf("stored day_starts_at %q: %w", row.DayStartsAt, err)
 	}
+	lockFrom, err := ParseClock(row.LockFrom)
+	if err != nil {
+		return Settings{}, fmt.Errorf("stored lock_from %q: %w", row.LockFrom, err)
+	}
+	lockUntil, err := ParseClock(row.LockUntil)
+	if err != nil {
+		return Settings{}, fmt.Errorf("stored lock_until %q: %w", row.LockUntil, err)
+	}
+	code := ""
+	if row.UnlockCodeHash != nil {
+		code = *row.UnlockCodeHash
+	}
 	return Settings{
 		HouseholdID:            row.HouseholdID,
 		HouseholdName:          name,
@@ -212,7 +303,14 @@ func resolve(name string, row dbq.HouseholdSetting) (Settings, error) {
 		DayStartsAt:            row.DayStartsAt,
 		AdminIdleMinutes:       row.AdminIdleMinutes,
 		ScreensaverIdleMinutes: row.ScreensaverIdleMinutes,
+		LockDays:               row.LockDays,
+		LockFrom:               row.LockFrom,
+		LockUntil:              row.LockUntil,
+		LockIdleHours:          row.LockIdleHours,
+		UnlockCodeHash:         code,
 		dayStart:               dayStart,
+		lockFrom:               lockFrom,
+		lockUntil:              lockUntil,
 	}, nil
 }
 

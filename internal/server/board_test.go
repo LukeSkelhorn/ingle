@@ -234,7 +234,8 @@ func TestBoardEvents(t *testing.T) {
 				if !ok {
 					return "closed"
 				}
-				if strings.HasPrefix(l, "event: ") {
+				// Lock events have their own tests.
+				if strings.HasPrefix(l, "event: ") && l != "event: lock" {
 					return strings.TrimPrefix(l, "event: ")
 				}
 			case <-timeout:
@@ -405,7 +406,7 @@ func openEvents(t *testing.T, ctx context.Context, d *device) <-chan string {
 		defer close(events)
 		sc := bufio.NewScanner(res.Body)
 		for sc.Scan() {
-			if l := sc.Text(); strings.HasPrefix(l, "event: ") {
+			if l := sc.Text(); strings.HasPrefix(l, "event: ") && l != "event: lock" {
 				events <- strings.TrimPrefix(l, "event: ")
 			}
 		}

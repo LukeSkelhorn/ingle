@@ -58,6 +58,7 @@ type Service struct {
 	now      func() time.Time
 
 	pinLimiter  *Limiter
+	codeLimiter *Limiter
 	pwLimiter   *Limiter
 	addrLimiter *Limiter
 }
@@ -69,6 +70,7 @@ func New(st *store.Store, set *settings.Service) *Service {
 		settings:    set,
 		now:         time.Now,
 		pinLimiter:  NewLimiter(MaxFailures, LockoutPeriod),
+		codeLimiter: NewLimiter(MaxFailures, LockoutPeriod),
 		pwLimiter:   NewLimiter(MaxFailures, LockoutPeriod),
 		addrLimiter: NewLimiter(MaxAddressFailures, LockoutPeriod),
 	}
@@ -78,6 +80,7 @@ func New(st *store.Store, set *settings.Service) *Service {
 func (s *Service) SetClock(now func() time.Time) {
 	s.now = now
 	s.pinLimiter.now = now
+	s.codeLimiter.now = now
 	s.pwLimiter.now = now
 	s.addrLimiter.now = now
 }

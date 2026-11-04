@@ -152,9 +152,10 @@ func (s *Server) funcs() template.FuncMap {
 			}
 			return done * 100 / total
 		},
-		"dict":     dict,
-		"list":     func(v ...string) []string { return v },
-		"activity": describeActivity,
+		"dict":          dict,
+		"list":          func(v ...string) []string { return v },
+		"activity":      describeActivity,
+		"activityActor": activityActor,
 	}
 }
 

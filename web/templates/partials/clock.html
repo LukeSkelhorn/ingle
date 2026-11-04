@@ -1,1 +1,4 @@
 {{define "clock"}}<time datetime="{{.ISO}}"><span class="board__time">{{.Time}}</span> <span class="board__date">{{.Weekday}} {{.Date}}</span></time>{{end}}
+{{/* The screensaver's big clock (the screensaver and the locked display). */}}
+{{define "big_clock"}}<span class="saver__time">{{.Time}}</span>
+<span class="saver__date">{{.Weekday}} {{.Date}}</span>{{end}}

@@ -89,13 +89,27 @@ type Household struct {
 	CreatedAt int64  `json:"created_at"`
 }
 
+type HouseholdLock struct {
+	HouseholdID     int64  `json:"household_id"`
+	Locked          int64  `json:"locked"`
+	Reason          string `json:"reason"`
+	LockedBy        *int64 `json:"locked_by"`
+	ChangedAt       int64  `json:"changed_at"`
+	ScheduleApplied int64  `json:"schedule_applied"`
+}
+
 type HouseholdSetting struct {
-	HouseholdID            int64  `json:"household_id"`
-	Timezone               string `json:"timezone"`
-	DayStartsAt            string `json:"day_starts_at"`
-	AdminIdleMinutes       int64  `json:"admin_idle_minutes"`
-	UpdatedAt              int64  `json:"updated_at"`
-	ScreensaverIdleMinutes int64  `json:"screensaver_idle_minutes"`
+	HouseholdID            int64   `json:"household_id"`
+	Timezone               string  `json:"timezone"`
+	DayStartsAt            string  `json:"day_starts_at"`
+	AdminIdleMinutes       int64   `json:"admin_idle_minutes"`
+	UpdatedAt              int64   `json:"updated_at"`
+	ScreensaverIdleMinutes int64   `json:"screensaver_idle_minutes"`
+	UnlockCodeHash         *string `json:"unlock_code_hash"`
+	LockDays               int64   `json:"lock_days"`
+	LockFrom               string  `json:"lock_from"`
+	LockUntil              string  `json:"lock_until"`
+	LockIdleHours          int64   `json:"lock_idle_hours"`
 }
 
 type LedgerEntry struct {

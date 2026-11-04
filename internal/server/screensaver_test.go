@@ -97,11 +97,11 @@ func TestScreensaverIdleOnlyOnDisplays(t *testing.T) {
 	}
 	expect(t, phone.get("/admin/settings"), http.StatusOK, `name="screensaver_idle_minutes" value="5"`)
 	expect(t, phone.post("/admin/settings", url.Values{
-		"household_name": {"The Smiths"}, "timezone": {"Europe/London"}, "day_starts_at": {"00:00"},
+		"household_name": {"The Smiths"}, "timezone": {"Europe/London"}, "day_starts_at": {"00:00"}, "lock_from": {"09:00"}, "lock_until": {"15:00"},
 		"admin_idle_minutes": {"2"}, "screensaver_idle_minutes": {"121"},
 	}), http.StatusUnprocessableEntity, "Choose between 0 (never) and 120 minutes.")
 	expect(t, phone.post("/admin/settings", url.Values{
-		"household_name": {"The Smiths"}, "timezone": {"Europe/London"}, "day_starts_at": {"00:00"},
+		"household_name": {"The Smiths"}, "timezone": {"Europe/London"}, "day_starts_at": {"00:00"}, "lock_from": {"09:00"}, "lock_until": {"15:00"},
 		"admin_idle_minutes": {"2"}, "screensaver_idle_minutes": {"0"},
 	}), http.StatusOK, "Settings saved.")
 	if got := screensaverIdle(t, wall); got != "0" {

@@ -17,6 +17,7 @@ import (
 	"github.com/lukeskelhorn/domus/internal/chores"
 	"github.com/lukeskelhorn/domus/internal/household"
 	"github.com/lukeskelhorn/domus/internal/locale"
+	"github.com/lukeskelhorn/domus/internal/lock"
 	"github.com/lukeskelhorn/domus/internal/photos"
 	"github.com/lukeskelhorn/domus/internal/settings"
 	"github.com/lukeskelhorn/domus/internal/store"
@@ -34,6 +35,7 @@ type Deps struct {
 	Avatars     *avatar.Store
 	Photos      *photos.Library
 	Calendars   *calendar.Service
+	Lock        *lock.Service
 	Locale      locale.Locale
 	Log         *slog.Logger
 }
@@ -45,6 +47,8 @@ type Server struct {
 	pages  *pages
 	now    func() time.Time
 	events *hub
+	// lockEvents tells every open page the displays locked or unlocked.
+	lockEvents *hub
 
 	// setupDone latches once an adult can sign in; it never goes back
 	// because the last such adult can't be archived or stripped.
@@ -53,7 +57,11 @@ type Server struct {
 
 // New builds a Server.
 func New(d Deps) (*Server, error) {
-	s := &Server{Deps: d, now: time.Now, events: newHub()}
+	s := &Server{Deps: d, now: time.Now, events: newHub(), lockEvents: newHub()}
+	if d.Lock != nil {
+		// Every open page hears about a lock or unlock; displays reload.
+		d.Lock.OnChange(func(householdID int64) { s.lockEvents.publish(householdID, "") })
+	}
 	if d.Store != nil {
 		s.db = d.Store.DB
 	}
@@ -90,18 +98,21 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /signin", s.handleSignInForm)
 	mux.HandleFunc("POST /signin", s.handleSignIn)
 	mux.HandleFunc("POST /signout", s.handleSignOut)
-	mux.HandleFunc("GET /admin/unlock", s.handleUnlockForm)
-	mux.HandleFunc("POST /admin/unlock", s.handleUnlock)
+	mux.HandleFunc("GET /admin/unlock", s.notWhileLocked(s.handleUnlockForm))
+	mux.HandleFunc("POST /admin/unlock", s.notWhileLocked(s.handleAdminUnlock))
 	mux.HandleFunc("POST /admin/lock", s.handleSignOut)
 
 	// Viewer routes: a household display or a signed-in adult.
-	viewer := func(h http.HandlerFunc) http.Handler { return s.requireViewer(h) }
+	viewer := func(h http.HandlerFunc) http.Handler { return s.requireViewer(s.lockGate(h)) }
 	mux.Handle("GET /{$}", viewer(s.handleIndex))
 	mux.Handle("GET /clock", viewer(s.handleClock))
 	mux.Handle("GET /avatars/{name}", viewer(s.handleAvatar))
 	mux.Handle("GET /photos/{kind}/{name}", viewer(s.handlePhoto))
 	mux.Handle("GET /screensaver", viewer(s.handleScreensaver))
 	mux.Handle("GET /screensaver/photos", viewer(s.handleSlides))
+	mux.Handle("POST /lock", viewer(s.handleLock))
+	mux.Handle("POST /unlock", viewer(s.handleUnlock))
+	mux.Handle("POST /activity", viewer(s.handleActivity))
 	mux.Handle("GET /board", viewer(s.handleBoard))
 	mux.Handle("GET /board/events", viewer(s.handleBoardEvents))
 	mux.Handle("GET /board/occurrences/{id}/pick", viewer(s.handlePick))
@@ -169,6 +180,8 @@ func (s *Server) Handler() http.Handler {
 
 	mux.Handle("GET /admin/settings", admin(s.handleSettings))
 	mux.Handle("POST /admin/settings", admin(s.handleSettingsUpdate))
+	mux.Handle("POST /admin/settings/unlock-code", admin(s.handleUnlockCodeSet))
+	mux.Handle("POST /admin/settings/unlock-code/clear", admin(s.handleUnlockCodeClear))
 
 	// Outermost first: reject cross-origin writes, identify the caller, then
 	// send everything to /setup until the household is set up.
@@ -195,6 +208,10 @@ func (s *Server) clock(ctx context.Context) clockView {
 }
 
 func (s *Server) handleClock(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("big") == "1" {
+		s.renderPartial(w, r, "big_clock", s.clock(r.Context()))
+		return
+	}
 	s.renderPartial(w, r, "clock", s.clock(r.Context()))
 }
 

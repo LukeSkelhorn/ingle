@@ -40,3 +40,6 @@ ORDER BY sessions.last_seen_at DESC;
 DELETE FROM sessions
 WHERE (kind = 'personal' AND last_seen_at < sqlc.arg(personal_before))
    OR (kind = 'display' AND last_seen_at < sqlc.arg(display_before));
+
+-- name: DeleteDisplaySessions :exec
+DELETE FROM sessions WHERE household_id = ? AND kind = 'display';

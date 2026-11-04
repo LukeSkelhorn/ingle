@@ -10,12 +10,25 @@
     <li><a class="tile" href="/admin/completions"><strong>{{.Data.Pending}}</strong><span>Waiting for approval</span></a></li>
   </ul>
 
+  <section class="card lockcard">
+    <h2>Displays</h2>
+    {{if .Data.Lock.Locked}}
+    <p>🔒 Locked since {{.Data.Lock.Since}}. They show photos and the clock only.</p>
+    <form method="post" action="/unlock"><input type="hidden" name="next" value="/admin">
+      <button class="btn btn--primary" type="submit">Unlock the displays</button></form>
+    {{else}}
+    <p class="muted">Unlocked. Lock them when the house is empty to hide names, chores and the calendar.</p>
+    <form method="post" action="/lock"><input type="hidden" name="next" value="/admin">
+      <button class="btn" type="submit">🔒 Lock the displays</button></form>
+    {{end}}
+  </section>
+
   <section class="card">
     <h2>Recent activity</h2>
     {{if .Data.Activity}}
     <ul class="feed">
       {{range .Data.Activity}}
-      <li><span><strong>{{if .ActorName}}{{deref .ActorName}}{{else}}Someone{{end}}</strong> {{activity .Verb}}</span>
+      <li><span><strong>{{if .ActorName}}{{deref .ActorName}}{{else}}{{activityActor .Verb}}{{end}}</strong> {{activity .Verb}}</span>
           <time class="muted">{{when .CreatedAt}}</time></li>
       {{end}}
     </ul>

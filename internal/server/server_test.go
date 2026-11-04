@@ -25,6 +25,7 @@ import (
 	"github.com/lukeskelhorn/domus/internal/chores"
 	"github.com/lukeskelhorn/domus/internal/household"
 	"github.com/lukeskelhorn/domus/internal/locale"
+	"github.com/lukeskelhorn/domus/internal/lock"
 	"github.com/lukeskelhorn/domus/internal/photos"
 	"github.com/lukeskelhorn/domus/internal/settings"
 	"github.com/lukeskelhorn/domus/internal/store"
@@ -40,6 +41,7 @@ type harness struct {
 	// photoDir is the read-only photos folder (DOMUS_PHOTOS_DIR).
 	photoDir string
 	lib      *photos.Library
+	lock     *lock.Service
 	// ics serves calendar feeds: icsBody at any path.
 	ics *httptest.Server
 
@@ -120,9 +122,11 @@ func newHarness(t *testing.T) *harness {
 	cals := calendar.New(st, set.Location, h.ics.Client(), log)
 	cals.SetClock(h.clock)
 
+	h.lock = lock.New(st, set, h.auth.EndDisplaySessions)
+	h.lock.SetClock(h.clock)
 	srv, err := New(Deps{
 		Store: st, HouseholdID: hh.ID, Auth: h.auth, Settings: set, Chores: choreSvc,
-		Household: hhSvc, Avatars: avatars, Photos: h.lib, Calendars: cals, Locale: uk, Log: log,
+		Household: hhSvc, Avatars: avatars, Photos: h.lib, Calendars: cals, Lock: h.lock, Locale: uk, Log: log,
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -726,10 +730,10 @@ func TestSettingsAdmin(t *testing.T) {
 	phone := h.phone()
 	expect(t, phone.get("/admin/settings"), http.StatusOK, `value="The Smiths"`, `<option value="Europe/London" selected>`, `value="00:00"`)
 	expect(t, phone.post("/admin/settings", url.Values{
-		"household_name": {"The Smiths"}, "timezone": {"Mars/Olympus"}, "day_starts_at": {"04:00"}, "admin_idle_minutes": {"2"},
+		"household_name": {"The Smiths"}, "timezone": {"Mars/Olympus"}, "day_starts_at": {"04:00"}, "lock_from": {"09:00"}, "lock_until": {"15:00"}, "admin_idle_minutes": {"2"},
 	}), http.StatusUnprocessableEntity, "Choose a timezone.")
 	expect(t, phone.post("/admin/settings", url.Values{
-		"household_name": {"Smith HQ"}, "timezone": {"Europe/London"}, "day_starts_at": {"04:00"}, "admin_idle_minutes": {"5"},
+		"household_name": {"Smith HQ"}, "timezone": {"Europe/London"}, "day_starts_at": {"04:00"}, "lock_from": {"09:00"}, "lock_until": {"15:00"}, "admin_idle_minutes": {"5"},
 	}), http.StatusOK, "Settings saved.")
 	// It's 00:30 on 1 July; with a 04:00 reset the board is still on 30 June,
 	// so a new chore defaults to starting then.

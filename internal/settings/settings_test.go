@@ -71,21 +71,66 @@ func TestServiceUpdate(t *testing.T) {
 		t.Fatalf("defaults = %+v, %v", got, err)
 	}
 
-	err = svc.Update(ctx, h.ID, mum.ID, Input{HouseholdName: "", Timezone: "Local", DayStartsAt: "25:00", AdminIdleMinutes: 0, ScreensaverIdleMinutes: 121})
+	err = svc.Update(ctx, h.ID, mum.ID, Input{
+		HouseholdName: "", Timezone: "Local", DayStartsAt: "25:00", AdminIdleMinutes: 0, ScreensaverIdleMinutes: 121,
+		LockDays: 128, LockFrom: "9am", LockUntil: "15:00", LockIdleHours: 73,
+	})
 	var ve valid.Errors
-	if !errors.As(err, &ve) || len(ve) != 5 {
+	if !errors.As(err, &ve) || len(ve) != 8 {
 		t.Fatalf("Update(bad) = %v", err)
 	}
 
-	if err := svc.Update(ctx, h.ID, mum.ID, Input{HouseholdName: "Smiths", Timezone: "America/New_York", DayStartsAt: "04:30", AdminIdleMinutes: 10, ScreensaverIdleMinutes: 0}); err != nil {
+	if err := svc.Update(ctx, h.ID, mum.ID, Input{
+		HouseholdName: "Smiths", Timezone: "America/New_York", DayStartsAt: "04:30", AdminIdleMinutes: 10, ScreensaverIdleMinutes: 0,
+		LockDays: 0b0111110, LockFrom: "08:45", LockUntil: "15:15", LockIdleHours: 12,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	got, err = svc.Get(ctx, h.ID)
 	if err != nil || got.HouseholdName != "Smiths" || got.Location.String() != "America/New_York" ||
-		got.AdminIdle() != 10*time.Minute || got.DayStartsAt != "04:30" || got.ScreensaverIdle() != 0 {
+		got.AdminIdle() != 10*time.Minute || got.DayStartsAt != "04:30" || got.ScreensaverIdle() != 0 ||
+		got.LockDays != 0b0111110 || got.LockFrom != "08:45" || got.LockUntil != "15:15" || got.LockIdle() != 12*time.Hour {
 		t.Fatalf("after update = %+v, %v", got, err)
 	}
 	if loc := svc.Location(ctx, h.ID); loc.String() != "America/New_York" {
 		t.Errorf("Location = %v", loc)
+	}
+}
+
+func TestLockWindow(t *testing.T) {
+	london, _ := time.LoadLocation("Europe/London")
+	mk := func(days int64, from, until string) Settings {
+		f, _ := ParseClock(from)
+		u, _ := ParseClock(until)
+		return Settings{Location: london, LockDays: days, LockFrom: from, LockUntil: until, lockFrom: f, lockUntil: u}
+	}
+	at := func(d, hh, mm int) time.Time { return time.Date(2026, 10, d, hh, mm, 0, 0, london) }
+	const weekdays = 0b0111110
+	// 2026-10-23 is a Friday; the clocks go back at 02:00 on Sunday 25th.
+	for _, tc := range []struct {
+		name       string
+		s          Settings
+		now        time.Time
+		start, end time.Time
+		in         bool
+	}{
+		{"school day, inside", mk(weekdays, "09:00", "15:00"), at(23, 10, 0), at(23, 9, 0), at(23, 15, 0), true},
+		{"school day, before", mk(weekdays, "09:00", "15:00"), at(23, 8, 59), at(22, 9, 0), at(22, 15, 0), false},
+		{"exactly at start", mk(weekdays, "09:00", "15:00"), at(23, 9, 0), at(23, 9, 0), at(23, 15, 0), true},
+		{"exactly at end", mk(weekdays, "09:00", "15:00"), at(23, 15, 0), at(23, 9, 0), at(23, 15, 0), false},
+		{"weekend skips back to Friday", mk(weekdays, "09:00", "15:00"), at(26, 8, 0), at(23, 9, 0), at(23, 15, 0), false},
+		{"overnight across the clock change", mk(1<<6, "22:00", "07:00"), at(25, 1, 30), at(24, 22, 0), at(25, 7, 0), true},
+		{"same weekday last week", mk(1<<5, "09:00", "15:00"), at(23, 8, 0), at(16, 9, 0), at(16, 15, 0), false},
+	} {
+		start, end, in, ok := tc.s.LockWindow(tc.now)
+		if !ok || !start.Equal(tc.start) || !end.Equal(tc.end) || in != tc.in {
+			t.Errorf("%s: got %v–%v in=%v ok=%v; want %v–%v in=%v", tc.name, start, end, in, ok, tc.start, tc.end, tc.in)
+		}
+	}
+	if d := at(25, 7, 0).Sub(at(24, 22, 0)); d != 10*time.Hour {
+		t.Errorf("overnight window across the change lasts %v", d)
+	}
+	if _, _, _, ok := mk(0, "09:00", "15:00").LockWindow(at(23, 10, 0)); ok {
+		t.Error("schedule with no days is on")
 	}
 }

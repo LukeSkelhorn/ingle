@@ -10,7 +10,7 @@ import (
 )
 
 const getSettings = `-- name: GetSettings :one
-SELECT household_id, timezone, day_starts_at, admin_idle_minutes, updated_at, screensaver_idle_minutes FROM household_settings WHERE household_id = ?
+SELECT household_id, timezone, day_starts_at, admin_idle_minutes, updated_at, screensaver_idle_minutes, unlock_code_hash, lock_days, lock_from, lock_until, lock_idle_hours FROM household_settings WHERE household_id = ?
 `
 
 func (q *Queries) GetSettings(ctx context.Context, householdID int64) (HouseholdSetting, error) {
@@ -23,6 +23,11 @@ func (q *Queries) GetSettings(ctx context.Context, householdID int64) (Household
 		&i.AdminIdleMinutes,
 		&i.UpdatedAt,
 		&i.ScreensaverIdleMinutes,
+		&i.UnlockCodeHash,
+		&i.LockDays,
+		&i.LockFrom,
+		&i.LockUntil,
+		&i.LockIdleHours,
 	)
 	return i, err
 }
@@ -44,11 +49,27 @@ func (q *Queries) InsertDefaultSettings(ctx context.Context, arg InsertDefaultSe
 	return err
 }
 
+const setUnlockCode = `-- name: SetUnlockCode :exec
+UPDATE household_settings SET unlock_code_hash = ?, updated_at = ? WHERE household_id = ?
+`
+
+type SetUnlockCodeParams struct {
+	UnlockCodeHash *string `json:"unlock_code_hash"`
+	UpdatedAt      int64   `json:"updated_at"`
+	HouseholdID    int64   `json:"household_id"`
+}
+
+func (q *Queries) SetUnlockCode(ctx context.Context, arg SetUnlockCodeParams) error {
+	_, err := q.db.ExecContext(ctx, setUnlockCode, arg.UnlockCodeHash, arg.UpdatedAt, arg.HouseholdID)
+	return err
+}
+
 const updateSettings = `-- name: UpdateSettings :one
 UPDATE household_settings
-SET timezone = ?, day_starts_at = ?, admin_idle_minutes = ?, screensaver_idle_minutes = ?, updated_at = ?
+SET timezone = ?, day_starts_at = ?, admin_idle_minutes = ?, screensaver_idle_minutes = ?,
+    lock_days = ?, lock_from = ?, lock_until = ?, lock_idle_hours = ?, updated_at = ?
 WHERE household_id = ?
-RETURNING household_id, timezone, day_starts_at, admin_idle_minutes, updated_at, screensaver_idle_minutes
+RETURNING household_id, timezone, day_starts_at, admin_idle_minutes, updated_at, screensaver_idle_minutes, unlock_code_hash, lock_days, lock_from, lock_until, lock_idle_hours
 `
 
 type UpdateSettingsParams struct {
@@ -56,6 +77,10 @@ type UpdateSettingsParams struct {
 	DayStartsAt            string `json:"day_starts_at"`
 	AdminIdleMinutes       int64  `json:"admin_idle_minutes"`
 	ScreensaverIdleMinutes int64  `json:"screensaver_idle_minutes"`
+	LockDays               int64  `json:"lock_days"`
+	LockFrom               string `json:"lock_from"`
+	LockUntil              string `json:"lock_until"`
+	LockIdleHours          int64  `json:"lock_idle_hours"`
 	UpdatedAt              int64  `json:"updated_at"`
 	HouseholdID            int64  `json:"household_id"`
 }
@@ -66,6 +91,10 @@ func (q *Queries) UpdateSettings(ctx context.Context, arg UpdateSettingsParams) 
 		arg.DayStartsAt,
 		arg.AdminIdleMinutes,
 		arg.ScreensaverIdleMinutes,
+		arg.LockDays,
+		arg.LockFrom,
+		arg.LockUntil,
+		arg.LockIdleHours,
 		arg.UpdatedAt,
 		arg.HouseholdID,
 	)
@@ -77,6 +106,11 @@ func (q *Queries) UpdateSettings(ctx context.Context, arg UpdateSettingsParams) 
 		&i.AdminIdleMinutes,
 		&i.UpdatedAt,
 		&i.ScreensaverIdleMinutes,
+		&i.UnlockCodeHash,
+		&i.LockDays,
+		&i.LockFrom,
+		&i.LockUntil,
+		&i.LockIdleHours,
 	)
 	return i, err
 }

@@ -1,0 +1,117 @@
+{{define "title"}}Domus{{end}}
+{{define "bodyclass"}}is-board locked{{end}}
+{{define "content"}}
+{{/* The locked display: photos and the clock, nothing personal (no names,
+     chores or calendar). A tap brings up the keypad; the household code or
+     any adult PIN unlocks every display. */}}
+<main id="locked-page" data-locked="1">
+  <div id="screensaver" class="saver" role="button" aria-label="The displays are locked. Tap to enter the household code or an adult's PIN.">
+    <div class="saver__photos"></div>
+    <div class="saver__scrim"></div>
+    <div class="saver__info">
+      <div class="saver__clock" id="locked-clock">{{template "big_clock" .Data.Clock}}</div>
+      <p class="locked__hint">🔒 Locked. Tap to unlock.</p>
+    </div>
+  </div>
+
+  <dialog id="keypad" class="keypad" aria-label="Enter the household code or an adult's PIN">
+    <p class="keypad__title">Enter the household code</p>
+    <p class="keypad__sub">or an adult's PIN</p>
+    <div class="keypad__dots" aria-hidden="true"></div>
+    <p class="keypad__msg" role="alert"></p>
+    <div class="keypad__keys">
+      <button class="keypad__key" type="button" data-key="1">1</button>
+      <button class="keypad__key" type="button" data-key="2">2</button>
+      <button class="keypad__key" type="button" data-key="3">3</button>
+      <button class="keypad__key" type="button" data-key="4">4</button>
+      <button class="keypad__key" type="button" data-key="5">5</button>
+      <button class="keypad__key" type="button" data-key="6">6</button>
+      <button class="keypad__key" type="button" data-key="7">7</button>
+      <button class="keypad__key" type="button" data-key="8">8</button>
+      <button class="keypad__key" type="button" data-key="9">9</button>
+      <button class="keypad__key keypad__key--plain" type="button" data-cancel>Cancel</button>
+      <button class="keypad__key" type="button" data-key="0">0</button>
+      <button class="keypad__key keypad__key--plain" type="button" data-back aria-label="Delete">⌫</button>
+    </div>
+  </dialog>
+</main>
+<script src="/static/saver.js"></script>
+<script>
+  (function () {
+    var el = document.getElementById("screensaver"),
+        pad = document.getElementById("keypad"),
+        dots = pad.querySelector(".keypad__dots"),
+        msg = pad.querySelector(".keypad__msg"),
+        code = "", busy = false, closeTimer,
+        saver = DomusSaver(el, {
+          info: function () {
+            fetch("/clock?big=1", { credentials: "same-origin" })
+              .then(function (r) { return r.ok ? r.text() : null; })
+              .then(function (html) { if (html !== null) document.getElementById("locked-clock").innerHTML = html; })
+              .catch(function () {});
+          },
+        });
+    saver.start();
+
+    function draw() {
+      dots.textContent = "";
+      for (var i = 0; i < Math.max(4, code.length); i++) {
+        var d = document.createElement("span");
+        d.className = "keypad__dot" + (i < code.length ? " is-filled" : "");
+        dots.appendChild(d);
+      }
+    }
+    function idleClose() {
+      // Don't leave the keypad up on an empty house.
+      clearTimeout(closeTimer);
+      closeTimer = setTimeout(function () { pad.close(); }, 30000);
+    }
+    function open() {
+      if (pad.open) return;
+      code = ""; msg.textContent = ""; draw();
+      pad.showModal();
+      idleClose();
+    }
+    function submit() {
+      if (busy || code.length < 4) return;
+      busy = true;
+      var body = new URLSearchParams({ code: code });
+      fetch("/unlock", { method: "POST", credentials: "same-origin", body: body })
+        .then(function (r) {
+          if (r.ok) { location.replace("/"); return; }
+          return r.json().catch(function () { return {}; }).then(function (d) {
+            msg.textContent = d.error || "That didn't work. Try again.";
+            pad.classList.remove("is-wrong"); void pad.offsetWidth; pad.classList.add("is-wrong");
+            code = ""; draw();
+          });
+        })
+        .catch(function () { msg.textContent = "Can't reach Domus. Try again."; })
+        .finally(function () { busy = false; });
+    }
+
+    el.addEventListener("click", open);
+    pad.addEventListener("click", function (e) {
+      idleClose();
+      var k = e.target.closest("[data-key]");
+      if (k && code.length < 6) { code += k.dataset.key; msg.textContent = ""; draw(); }
+      if (e.target.closest("[data-back]")) { code = code.slice(0, -1); draw(); }
+      if (e.target.closest("[data-cancel]") || e.target === pad) { pad.close(); return; }
+      // Codes are 4 to 6 digits: try at 4, then again at 5 and 6 so a
+      // longer code still works without an "enter" key.
+      if (k && code.length >= 4) submit();
+    });
+    pad.addEventListener("close", function () { code = ""; clearTimeout(closeTimer); });
+    document.addEventListener("keydown", function (e) {
+      if (!pad.open) { open(); return; }
+      if (/^[0-9]$/.test(e.key) && code.length < 6) { code += e.key; draw(); if (code.length >= 4) submit(); }
+      if (e.key === "Backspace") { code = code.slice(0, -1); draw(); }
+    });
+
+    // Unlocking anywhere (another display, a phone, the schedule) reloads.
+    if (window.EventSource) {
+      var es = new EventSource("/board/events");
+      es.addEventListener("lock", function (e) { if (e.data === "unlocked") location.replace("/"); });
+    }
+  })();
+</script>
+{{end}}
