@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strconv"
@@ -61,6 +62,46 @@ func (s *Service) CheckUnlockCode(ctx context.Context, device *dbq.Device, code,
 	}
 	s.codeLimiter.Reset(devKey)
 	return who, nil
+}
+
+// CheckUnlockPIN checks the PIN of one adult, picked on a locked household
+// display. Wrong PINs count against that adult (as for admin), the display
+// and the client address.
+func (s *Service) CheckUnlockPIN(ctx context.Context, device *dbq.Device, personID int64, pin, clientAddr string) error {
+	if device == nil {
+		return ErrNotDisplay
+	}
+	devKey, addrKey, pKey := "unlock:"+strconv.FormatInt(device.ID, 10), "addr:"+clientAddr, pinKey(personID)
+	for _, b := range []struct {
+		l   *Limiter
+		key string
+	}{{s.codeLimiter, devKey}, {s.addrLimiter, addrKey}, {s.pinLimiter, pKey}} {
+		if blocked, _ := b.l.Blocked(b.key); blocked {
+			return ErrLockedOut
+		}
+	}
+	p, err := s.st.Q.GetPerson(ctx, dbq.GetPersonParams{HouseholdID: device.HouseholdID, ID: personID})
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("get person: %w", err)
+	}
+	ok := err == nil && p.Kind == "adult" && p.ArchivedAt == nil && p.PinHash != nil
+	if ok {
+		ok = VerifyPIN(*p.PinHash, pin)
+	} else {
+		VerifyPIN(dummyHash, pin)
+	}
+	if !ok {
+		pinLocked := s.pinLimiter.Fail(pKey)
+		devLocked := s.codeLimiter.Fail(devKey)
+		addrLocked := s.addrLimiter.Fail(addrKey)
+		if pinLocked || devLocked || addrLocked {
+			return ErrLockedOut
+		}
+		return ErrBadCredentials
+	}
+	s.pinLimiter.Reset(pKey)
+	s.codeLimiter.Reset(devKey)
+	return nil
 }
 
 // SetUnlockCode sets (or replaces) the household unlock code.

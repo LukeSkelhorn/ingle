@@ -75,8 +75,10 @@ func TestLockedDisplayShowsNothingPersonal(t *testing.T) {
 	}
 
 	locked := wall.get("/")
-	expect(t, locked, http.StatusOK, "Enter the household code", "or an adult's PIN", "saver__time")
-	for _, secret := range []string{"The Smiths", "Mum", "/avatars/", `id="board"`} {
+	// The unlock picker lists the adults with a PIN (Mum); nothing else
+	// personal shows.
+	expect(t, locked, http.StatusOK, "unlocking?<", `data-person="1"`, "Hi Mum", "saver__time")
+	for _, secret := range []string{"The Smiths", "/avatars/", `id="board"`} {
 		if strings.Contains(locked.body, secret) {
 			t.Errorf("locked page shows %q", secret)
 		}
@@ -105,10 +107,16 @@ func TestLockedDisplayShowsNothingPersonal(t *testing.T) {
 	expect(t, phone.get("/"), http.StatusOK, "The displays are locked", "The Smiths")
 	expect(t, phone.get("/admin"), http.StatusOK, "Unlock the displays", "Mum</strong> locked the displays")
 
+	// Picking Mum checks only her PIN: a wrong one, then someone who
+	// isn't an adult with a PIN.
+	expect(t, wall.post("/unlock", url.Values{"person": {"1"}, "code": {"1111"}}), http.StatusUnauthorized, "Wrong PIN")
+	expect(t, wall.post("/unlock", url.Values{"person": {"999"}, "code": {"2468"}}), http.StatusUnauthorized, "Wrong PIN")
+	expect(t, wall.get("/"), http.StatusOK, "unlocking?")
+
 	// Wrong code, then Mum's PIN.
 	expect(t, wall.post("/unlock", url.Values{"code": {"0000"}}), http.StatusUnauthorized, "Wrong code")
-	expect(t, wall.get("/"), http.StatusOK, "Enter the household code")
-	expect(t, wall.post("/unlock", url.Values{"code": {"2468"}}), http.StatusNoContent)
+	expect(t, wall.get("/"), http.StatusOK, "unlocking?<")
+	expect(t, wall.post("/unlock", url.Values{"person": {"1"}, "code": {"2468"}}), http.StatusNoContent)
 	if got := nextLock(t, events); got != "unlocked" {
 		t.Fatalf("unlock event = %q", got)
 	}
@@ -132,7 +140,7 @@ func TestHouseholdCodeAndPhone(t *testing.T) {
 
 	// Lock from the phone (back to admin home), unlock with the code.
 	expectRedirect(t, phone.post("/lock", url.Values{"next": {"/admin"}}), "/admin")
-	expect(t, wall.get("/"), http.StatusOK, "Enter the household code")
+	expect(t, wall.get("/"), http.StatusOK, "unlocking?<")
 	expect(t, wall.post("/unlock", url.Values{"code": {"1357"}}), http.StatusNoContent)
 	expect(t, wall.get("/"), http.StatusOK, `id="board"`)
 	expect(t, phone.get("/admin"), http.StatusOK, "Someone</strong> unlocked the displays with the household code")
@@ -201,7 +209,7 @@ func TestScheduleLocksDisplays(t *testing.T) {
 	expect(t, wall.get("/"), http.StatusOK, `id="board"`)
 	h.advance(20 * time.Minute)
 	tick()
-	expect(t, wall.get("/"), http.StatusOK, "Enter the household code")
+	expect(t, wall.get("/"), http.StatusOK, "unlocking?<")
 	expect(t, phone.get("/admin"), http.StatusOK, "Domus</strong> locked the displays on schedule")
 	h.advance(6 * time.Hour)
 	tick()
@@ -233,5 +241,5 @@ func TestIdleLockCountsTaps(t *testing.T) {
 	expect(t, wall.get("/"), http.StatusOK, `id="board"`) // this page load counts too
 	h.advance(2 * time.Hour)
 	tick()
-	expect(t, wall.get("/"), http.StatusOK, "Enter the household code")
+	expect(t, wall.get("/"), http.StatusOK, "unlocking?<")
 }

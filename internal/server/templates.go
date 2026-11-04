@@ -120,6 +120,18 @@ func (s *Server) funcs() template.FuncMap {
 		"money":      func(pence int64) string { return s.Locale.FormatMoney(pence) },
 		"moneyInput": locale.FormatMoneyInput,
 		"avatar":     avatarOf,
+		// plainAvatar is an avatar without its photo (initial or emoji),
+		// for the locked display, where /avatars/ isn't served.
+		"plainAvatar": func(p dbq.Person, size string) avatarView {
+			v := avatarOf(p, size)
+			if v.Photo != "" {
+				v.Photo = ""
+				if r := []rune(p.Name); len(r) > 0 {
+					v.Initial = strings.ToUpper(string(r[0]))
+				}
+			}
+			return v
+		},
 		"deref": func(p any) any {
 			switch v := p.(type) {
 			case *string:

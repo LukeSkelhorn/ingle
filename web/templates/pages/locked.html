@@ -1,11 +1,12 @@
 {{define "title"}}Domus{{end}}
 {{define "bodyclass"}}is-board locked{{end}}
 {{define "content"}}
-{{/* The locked display: photos and the clock, nothing personal (no names,
-     chores or calendar). A tap brings up the keypad; the household code or
-     any adult PIN unlocks every display. */}}
+{{/* The locked display: photos and the clock, nothing personal (no
+     household name, kids, chores or calendar; adults' names only in the
+     unlock picker). A tap asks who's unlocking, then their PIN (or the
+     household code); that unlocks every display. */}}
 <main id="locked-page" data-locked="1">
-  <div id="screensaver" class="saver" role="button" aria-label="The displays are locked. Tap to enter the household code or an adult's PIN.">
+  <div id="screensaver" class="saver" role="button" aria-label="The displays are locked. Tap to unlock.">
     <div class="saver__photos"></div>
     <div class="saver__scrim"></div>
     <div class="saver__info">
@@ -14,24 +15,43 @@
     </div>
   </div>
 
-  <dialog id="keypad" class="keypad" aria-label="Enter the household code or an adult's PIN">
-    <p class="keypad__title">Enter the household code</p>
-    <p class="keypad__sub">or an adult's PIN</p>
-    <div class="keypad__dots" aria-hidden="true"></div>
-    <p class="keypad__msg" role="alert"></p>
-    <div class="keypad__keys">
-      <button class="keypad__key" type="button" data-key="1">1</button>
-      <button class="keypad__key" type="button" data-key="2">2</button>
-      <button class="keypad__key" type="button" data-key="3">3</button>
-      <button class="keypad__key" type="button" data-key="4">4</button>
-      <button class="keypad__key" type="button" data-key="5">5</button>
-      <button class="keypad__key" type="button" data-key="6">6</button>
-      <button class="keypad__key" type="button" data-key="7">7</button>
-      <button class="keypad__key" type="button" data-key="8">8</button>
-      <button class="keypad__key" type="button" data-key="9">9</button>
-      <button class="keypad__key keypad__key--plain" type="button" data-cancel>Cancel</button>
-      <button class="keypad__key" type="button" data-key="0">0</button>
-      <button class="keypad__key keypad__key--plain" type="button" data-back aria-label="Delete">⌫</button>
+  {{/* Unlocking: pick who you are (an adult, or the household code),
+       then type the PIN or code. Names only show once someone taps. */}}
+  <dialog id="keypad" class="keypad" aria-label="Unlock the displays">
+    <div class="keypad__step" data-step="who">
+      <p class="keypad__title">Who's unlocking?</p>
+      <ul class="keypad__people">
+        {{range .Data.Adults}}
+        <li><button class="keypad__person" type="button" data-person="{{.Person.ID}}" data-title="Hi {{.Person.Name}}" data-sub="Enter your PIN">
+          {{template "avatar" (plainAvatar .Person "lg")}}<span>{{.Person.Name}}</span></button></li>
+        {{end}}
+        {{if .Data.HasCode}}
+        <li><button class="keypad__person" type="button" data-person="" data-title="Household code" data-sub="Enter the household code">
+          <span class="avatar avatar--lg keypad__code-icon" aria-hidden="true">🔢</span><span>Household code</span></button></li>
+        {{end}}
+      </ul>
+      <button class="btn btn--ghost keypad__cancel" type="button" data-cancel>Cancel</button>
+    </div>
+    <div class="keypad__step" data-step="pin" hidden>
+      <p class="keypad__title"></p>
+      <p class="keypad__sub"></p>
+      <div class="keypad__dots" aria-hidden="true"></div>
+      <p class="keypad__msg" role="alert"></p>
+      <div class="keypad__keys">
+        <button class="keypad__key" type="button" data-key="1">1</button>
+        <button class="keypad__key" type="button" data-key="2">2</button>
+        <button class="keypad__key" type="button" data-key="3">3</button>
+        <button class="keypad__key" type="button" data-key="4">4</button>
+        <button class="keypad__key" type="button" data-key="5">5</button>
+        <button class="keypad__key" type="button" data-key="6">6</button>
+        <button class="keypad__key" type="button" data-key="7">7</button>
+        <button class="keypad__key" type="button" data-key="8">8</button>
+        <button class="keypad__key" type="button" data-key="9">9</button>
+        <button class="keypad__key keypad__key--plain" type="button" data-back aria-label="Delete">⌫</button>
+        <button class="keypad__key" type="button" data-key="0">0</button>
+        <button class="keypad__key keypad__key--go" type="button" data-go aria-label="Unlock">→</button>
+      </div>
+      <button class="btn btn--ghost keypad__cancel" type="button" data-cancel></button>
     </div>
   </dialog>
 </main>
@@ -40,9 +60,12 @@
   (function () {
     var el = document.getElementById("screensaver"),
         pad = document.getElementById("keypad"),
+        whoStep = pad.querySelector('[data-step="who"]'),
+        pinStep = pad.querySelector('[data-step="pin"]'),
+        choices = pad.querySelectorAll("[data-person]"),
         dots = pad.querySelector(".keypad__dots"),
         msg = pad.querySelector(".keypad__msg"),
-        code = "", busy = false, closeTimer,
+        code = "", person = null, busy = false, closeTimer,
         saver = DomusSaver(el, {
           info: function () {
             fetch("/clock?big=1", { credentials: "same-origin" })
@@ -66,16 +89,30 @@
       clearTimeout(closeTimer);
       closeTimer = setTimeout(function () { pad.close(); }, 30000);
     }
+    function showWho() {
+      person = null; code = "";
+      pinStep.hidden = true; whoStep.hidden = false;
+    }
+    function showPin(choice) {
+      person = choice.dataset.person;
+      code = ""; msg.textContent = ""; draw();
+      pinStep.querySelector(".keypad__title").textContent = choice.dataset.title;
+      pinStep.querySelector(".keypad__sub").textContent = choice.dataset.sub;
+      // With only one way to unlock there's nothing to go back to.
+      pinStep.querySelector("[data-cancel]").textContent = choices.length > 1 ? "‹ Back" : "Cancel";
+      whoStep.hidden = true; pinStep.hidden = false;
+    }
     function open() {
       if (pad.open) return;
-      code = ""; msg.textContent = ""; draw();
+      if (choices.length === 1) showPin(choices[0]); else showWho();
       pad.showModal();
       idleClose();
     }
     function submit() {
-      if (busy || code.length < 4) return;
+      if (busy || person === null || code.length < 4) return;
       busy = true;
       var body = new URLSearchParams({ code: code });
+      if (person) body.set("person", person);
       fetch("/unlock", { method: "POST", credentials: "same-origin", body: body })
         .then(function (r) {
           if (r.ok) { location.replace("/"); return; }
@@ -88,23 +125,31 @@
         .catch(function () { msg.textContent = "Can't reach Domus. Try again."; })
         .finally(function () { busy = false; });
     }
+    function cancel() {
+      if (!pinStep.hidden && choices.length > 1) showWho(); else pad.close();
+    }
 
     el.addEventListener("click", open);
+    el.addEventListener("pointerup", open);
     pad.addEventListener("click", function (e) {
       idleClose();
+      if (e.target === pad) { pad.close(); return; }
+      var c = e.target.closest("[data-person]");
+      if (c) { showPin(c); return; }
+      if (e.target.closest("[data-cancel]")) { cancel(); return; }
       var k = e.target.closest("[data-key]");
       if (k && code.length < 6) { code += k.dataset.key; msg.textContent = ""; draw(); }
       if (e.target.closest("[data-back]")) { code = code.slice(0, -1); draw(); }
-      if (e.target.closest("[data-cancel]") || e.target === pad) { pad.close(); return; }
-      // Codes are 4 to 6 digits: try at 4, then again at 5 and 6 so a
-      // longer code still works without an "enter" key.
-      if (k && code.length >= 4) submit();
+      if (e.target.closest("[data-go]")) submit();
     });
-    pad.addEventListener("close", function () { code = ""; clearTimeout(closeTimer); });
+    pad.addEventListener("close", function () { code = ""; person = null; clearTimeout(closeTimer); });
     document.addEventListener("keydown", function (e) {
       if (!pad.open) { open(); return; }
-      if (/^[0-9]$/.test(e.key) && code.length < 6) { code += e.key; draw(); if (code.length >= 4) submit(); }
+      if (pinStep.hidden) return;
+      idleClose();
+      if (/^[0-9]$/.test(e.key) && code.length < 6) { code += e.key; draw(); }
       if (e.key === "Backspace") { code = code.slice(0, -1); draw(); }
+      if (e.key === "Enter") submit();
     });
 
     // Unlocking anywhere (another display, a phone, the schedule) reloads.

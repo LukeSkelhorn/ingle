@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/lukeskelhorn/domus/internal/auth"
@@ -22,6 +23,10 @@ type lockView struct {
 // lockedPage is the locked display: the clock and photos only.
 type lockedPage struct {
 	Clock clockView
+	// Adults with a PIN, to pick on the keypad before typing it, and
+	// whether a household code is set (its own choice).
+	Adults  []unlockAdult
+	HasCode bool
 }
 
 // locked reports whether the household's displays are locked.
@@ -106,7 +111,17 @@ func (s *Server) boardLock(r *http.Request) (lockView, error) {
 }
 
 func (s *Server) renderLocked(w http.ResponseWriter, r *http.Request) {
-	v := s.view(r, "", lockedPage{Clock: s.clock(r.Context())})
+	adults, err := s.unlockAdults(r)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	set, err := s.Settings.Get(r.Context(), s.HouseholdID)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	v := s.view(r, "", lockedPage{Clock: s.clock(r.Context()), Adults: adults, HasCode: set.HasUnlockCode()})
 	v.Household = "" // not even the family name on a locked screen
 	s.render(w, r, http.StatusOK, "locked", v)
 }
@@ -169,13 +184,26 @@ func (s *Server) handleUnlock(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad form", http.StatusBadRequest)
 		return
 	}
-	who, err := s.Auth.CheckUnlockCode(r.Context(), id.Device, r.PostFormValue("code"), s.clientAddr(r))
+	// An adult picked on the keypad unlocks with their own PIN; otherwise
+	// the code is the household code (or, as before, any adult's PIN).
+	var who *int64
+	var err error
+	if pid, perr := strconv.ParseInt(r.PostFormValue("person"), 10, 64); perr == nil {
+		err = s.Auth.CheckUnlockPIN(r.Context(), id.Device, pid, r.PostFormValue("code"), s.clientAddr(r))
+		who = &pid
+	} else {
+		who, err = s.Auth.CheckUnlockCode(r.Context(), id.Device, r.PostFormValue("code"), s.clientAddr(r))
+	}
 	switch {
 	case errors.Is(err, auth.ErrLockedOut):
 		keypadError(w, http.StatusTooManyRequests, "Too many tries. Try again in 5 minutes.")
 		return
 	case errors.Is(err, auth.ErrBadCredentials):
-		keypadError(w, http.StatusUnauthorized, "Wrong code. Try again.")
+		msg := "Wrong code. Try again."
+		if r.PostFormValue("person") != "" {
+			msg = "Wrong PIN. Try again."
+		}
+		keypadError(w, http.StatusUnauthorized, msg)
 		return
 	case err != nil:
 		s.serverError(w, r, err)
