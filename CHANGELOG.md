@@ -6,6 +6,18 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ## [Unreleased]
 
+## [v0.1.1] - 2026-11-05
+
+A small update to unlocking the displays.
+
+### Changed
+
+- **Lock the displays:** unlocking a locked display now uses the same screens as unlocking admin: the people grid, then the adult's avatar and the PIN pad. Both show the digits typed so far as dots. The household code is still an option on the locked display. The keypad shows as many dots as the PIN or code has and tries it as soon as the last digit goes in, so there's no need to press →. ([DOM-34](https://linear.app/skeltech/issue/DOM-34), [#13](https://github.com/lukeskelhorn/domus/pull/13))
+
+### Upgrade notes
+
+- A new database migration (`00006_pin_length`) runs automatically when Domus starts. PINs and household codes set before this release show four dots and need → once; after their first successful unlock, the keypad knows their length.
+
 ## [v0.1.0] - 2026-11-04
 
 The first release: a family chores board for a wall tablet, ready to run on a home server.
@@ -25,5 +37,6 @@ The first release: a family chores board for a wall tablet, ready to run on a ho
 
 - First release: nothing to upgrade from. New installs start at the setup page.
 
-[Unreleased]: https://github.com/lukeskelhorn/domus/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/lukeskelhorn/domus/compare/v0.1.1...HEAD
+[v0.1.1]: https://github.com/lukeskelhorn/domus/compare/v0.1.0...v0.1.1
 [v0.1.0]: https://github.com/lukeskelhorn/domus/releases/tag/v0.1.0

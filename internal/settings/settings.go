@@ -38,6 +38,9 @@ type Settings struct {
 	LockIdleHours int64
 	// UnlockCodeHash is the household unlock code's argon2id hash, or "".
 	UnlockCodeHash string
+	// UnlockCodeLength is how many digits the code has, or 0 if not known
+	// (a code set before lengths were stored, until it next unlocks).
+	UnlockCodeLength int
 
 	dayStart, lockFrom, lockUntil time.Duration
 }
@@ -292,9 +295,12 @@ func resolve(name string, row dbq.HouseholdSetting) (Settings, error) {
 	if err != nil {
 		return Settings{}, fmt.Errorf("stored lock_until %q: %w", row.LockUntil, err)
 	}
-	code := ""
+	code, codeLength := "", 0
 	if row.UnlockCodeHash != nil {
 		code = *row.UnlockCodeHash
+		if row.UnlockCodeLength != nil {
+			codeLength = int(*row.UnlockCodeLength)
+		}
 	}
 	return Settings{
 		HouseholdID:            row.HouseholdID,
@@ -308,6 +314,7 @@ func resolve(name string, row dbq.HouseholdSetting) (Settings, error) {
 		LockUntil:              row.LockUntil,
 		LockIdleHours:          row.LockIdleHours,
 		UnlockCodeHash:         code,
+		UnlockCodeLength:       codeLength,
 		dayStart:               dayStart,
 		lockFrom:               lockFrom,
 		lockUntil:              lockUntil,

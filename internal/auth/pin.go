@@ -29,6 +29,13 @@ func HashPIN(pin string) (string, error) {
 	return hashSecret(pin)
 }
 
+// PINLength is the stored length of a valid PIN or code, so the keypad can
+// show that many dots and try it once they're all typed.
+func PINLength(pin string) *int64 {
+	n := int64(len(pin))
+	return &n
+}
+
 // VerifyPIN reports whether pin matches the encoded hash. Malformed hashes
 // never match.
 func VerifyPIN(encoded, pin string) bool {

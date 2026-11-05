@@ -24,9 +24,11 @@ type lockView struct {
 type lockedPage struct {
 	Clock clockView
 	// Adults with a PIN, to pick on the keypad before typing it, and
-	// whether a household code is set (its own choice).
-	Adults  []unlockAdult
-	HasCode bool
+	// whether a household code is set (its own choice) and how many digits
+	// it has (0 if not known yet).
+	Adults     []unlockAdult
+	HasCode    bool
+	CodeLength int
 }
 
 // locked reports whether the household's displays are locked.
@@ -121,7 +123,7 @@ func (s *Server) renderLocked(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	v := s.view(r, "", lockedPage{Clock: s.clock(r.Context()), Adults: adults, HasCode: set.HasUnlockCode()})
+	v := s.view(r, "", lockedPage{Clock: s.clock(r.Context()), Adults: adults, HasCode: set.HasUnlockCode(), CodeLength: set.UnlockCodeLength})
 	v.Household = "" // not even the family name on a locked screen
 	s.render(w, r, http.StatusOK, "locked", v)
 }
