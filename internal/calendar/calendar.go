@@ -1,7 +1,8 @@
 // Package calendar reads the household's ICS feeds (Google, iCloud or
-// Outlook "secret address" links) so the screensaver can show what's on.
-// Feeds are fetched in the background and the next few days of events are
-// kept in memory; nothing about the events is stored in the database.
+// Outlook "secret address" links) so the screensaver and the board
+// calendar can show what's on.
+// Feeds are fetched in the background and a few months of events are kept
+// in memory; nothing about the events is stored in the database.
 package calendar
 
 import (
@@ -28,10 +29,12 @@ const (
 	MaxFeedBytes = 5 << 20
 	// RefreshEvery is how often the background loop re-fetches feeds.
 	RefreshEvery = 15 * time.Minute
-	// keepBehind and keepAhead bound the events cached per feed, so the
-	// screensaver keeps working for a few days if a feed stops answering.
-	keepBehind = 24 * time.Hour
-	keepAhead  = 8 * 24 * time.Hour
+	// KeepBehind and KeepAhead bound the events cached per feed: enough for
+	// the board calendar (back to the month 4 weeks ago, 3 months ahead,
+	// padded to whole weeks), and the screensaver keeps working if a feed
+	// stops answering.
+	KeepBehind = 75 * 24 * time.Hour
+	KeepAhead  = 100 * 24 * time.Hour
 )
 
 // ErrNotFound is returned for an unknown feed.
@@ -254,7 +257,7 @@ func (s *Service) store(r dbq.CalendarFeed, events []Event, fetchErr error) {
 		return
 	}
 	for i := range events {
-		events[i].Colour = r.Colour
+		events[i].Colour, events[i].Feed = r.Colour, r.Name
 	}
 	st.events, st.fetchedAt, st.err = events, s.now(), ""
 }
@@ -316,7 +319,7 @@ func (s *Service) fetch(ctx context.Context, householdID int64, u string) ([]Eve
 		return nil, errors.New("that isn't an iCal (.ics) calendar")
 	}
 	now := s.now()
-	return Expand(cal, now.Add(-keepBehind), now.Add(keepAhead), s.zone(ctx, householdID)), nil
+	return Expand(cal, now.Add(-KeepBehind), now.Add(KeepAhead), s.zone(ctx, householdID)), nil
 }
 
 func capitalise(s string) string {

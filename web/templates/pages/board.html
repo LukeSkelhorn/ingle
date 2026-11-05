@@ -9,13 +9,26 @@
   </form>
   {{end}}
   <header class="board__header">
-    <h1>{{if .Household}}{{.Household}}{{else}}Domus{{end}}</h1>
+    <div class="board__title">
+      <h1>{{if .Household}}{{.Household}}{{else}}Domus{{end}}</h1>
+      {{if not .Data.Lock.Locked}}
+      <nav class="views__dots" aria-label="View">
+        <button type="button" data-view-to="chores" aria-pressed="true"><i aria-hidden="true"></i><span>Chores</span></button>
+        <button type="button" data-view-to="calendar" aria-pressed="false"><i aria-hidden="true"></i><span>Calendar</span></button>
+      </nav>
+      {{end}}
+    </div>
     <div class="board__clock" hx-get="/clock" hx-trigger="every 30s" hx-swap="innerHTML">
       {{template "clock" .Data.Clock}}
     </div>
   </header>
 
-  {{template "board" .Data.Board}}
+  {{/* Chores and, unless locked, the calendar: swipe or tap the dots to
+       switch. The calendar loads the first time it's shown. */}}
+  <div class="views" data-view="chores">
+    <div class="views__panel" data-panel="chores">{{template "board" .Data.Board}}</div>
+    {{if not .Data.Lock.Locked}}<section id="calendar" class="views__panel cal" data-panel="calendar" aria-label="Calendar" hidden></section>{{end}}
+  </div>
 
   <dialog id="sheet" class="sheet" aria-label="Chore"><div id="sheet-body"></div></dialog>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
@@ -146,6 +159,120 @@
     document.addEventListener("visibilitychange", function () { if (!document.hidden) refresh(); });
   })();
 </script>
+<script>
+  // Chores and Calendar views. Swipe across the board or tap the dots; on a
+  // display the calendar goes back to the chores after
+  // {{.Viewer.CalendarSeconds}}s untouched (0 = never).
+  (function () {
+    var views = document.querySelector(".views"),
+        cal = document.getElementById("calendar"),
+        sheet = document.getElementById("sheet"),
+        saverEl = document.getElementById("screensaver"),
+        calIdleMs = {{.Viewer.CalendarSeconds}} * 1000,
+        still = window.matchMedia("(prefers-reduced-motion: reduce)"),
+        loaded = false, idleTimer, swallowUntil = 0, down = null;
+
+    function current() { return views.dataset.view; }
+    function load(url) {
+      if (window.htmx) htmx.ajax("GET", url, { target: cal, swap: "innerHTML" });
+    }
+    function reload() {
+      var w = cal && cal.querySelector("[data-src]");
+      if (w) load(w.dataset.src);
+    }
+
+    function show(view) {
+      if (!cal || view === current()) return;
+      var from = current();
+      views.dataset.view = view;
+      document.querySelectorAll(".views__panel").forEach(function (p) {
+        var on = p.dataset.panel === view;
+        p.hidden = !on;
+        p.classList.remove("views__panel--in-left", "views__panel--in-right");
+        if (on && !still.matches) {
+          void p.offsetWidth; // restart the animation
+          p.classList.add(view === "calendar" ? "views__panel--in-right" : "views__panel--in-left");
+        }
+      });
+      document.querySelectorAll("[data-view-to]").forEach(function (b) {
+        b.setAttribute("aria-pressed", b.dataset.viewTo === view ? "true" : "false");
+      });
+      if (view === "calendar") {
+        if (!loaded) { loaded = true; load("/board/calendar"); }
+        resetIdle();
+      } else {
+        clearTimeout(idleTimer);
+        if (from === "calendar") window.scrollTo(0, 0);
+      }
+    }
+    window.DomusViews = { show: show };
+    if (!cal) return;
+
+    document.querySelectorAll("[data-view-to]").forEach(function (b) {
+      b.addEventListener("click", function () { show(b.dataset.viewTo); });
+    });
+
+    function resetIdle() {
+      clearTimeout(idleTimer);
+      if (calIdleMs > 0 && current() === "calendar") idleTimer = setTimeout(function () { show("chores"); }, calIdleMs);
+    }
+    ["pointerdown", "keydown", "scroll", "wheel"].forEach(function (e) {
+      document.addEventListener(e, resetIdle, { passive: true, capture: true });
+    });
+
+    // Live: the calendar re-fetches what it's showing when the board
+    // changes, and every 15 minutes for new events.
+    document.addEventListener("domus:board", reload);
+    setInterval(function () { if (current() === "calendar") reload(); }, 15 * 60 * 1000);
+    document.addEventListener("visibilitychange", function () { if (!document.hidden && current() === "calendar") reload(); });
+
+    // On phones the week is a list: bring today into view.
+    document.addEventListener("htmx:afterSettle", function (e) {
+      if (e.detail.target !== cal) return;
+      var today = cal.querySelector(".cal__week .cal__day--today");
+      if (today && window.matchMedia("(max-width: 700px)").matches) today.scrollIntoView({ block: "start" });
+    });
+
+    // Swipe: a mostly-sideways move of 60px or more, not starting on a
+    // chore or a field, nor inside something that scrolls sideways itself.
+    function scrollsSideways(el, dx) {
+      for (; el && el !== views; el = el.parentElement) {
+        if (el.scrollWidth > el.clientWidth + 1 && /auto|scroll/.test(getComputedStyle(el).overflowX)) {
+          if (dx < 0 ? el.scrollLeft + el.clientWidth < el.scrollWidth - 1 : el.scrollLeft > 0) return true;
+        }
+      }
+      return false;
+    }
+    views.addEventListener("pointerdown", function (e) {
+      down = null;
+      if (!e.isPrimary || sheet.open || !saverEl.hidden) return;
+      if (e.target.closest("input, select, textarea, .chore")) return;
+      down = { x: e.clientX, y: e.clientY, el: e.target };
+    });
+    function end(x, y) {
+      if (!down) return;
+      var dx = x - down.x, dy = y - down.y, start = down.el;
+      down = null;
+      if (Math.abs(dx) < 60 || Math.abs(dx) < 2 * Math.abs(dy)) return;
+      if (scrollsSideways(start, dx)) return;
+      var to = dx < 0 ? "calendar" : "chores";
+      if (to === current()) return;
+      swallowUntil = Date.now() + 400;
+      show(to);
+    }
+    window.addEventListener("pointerup", function (e) { end(e.clientX, e.clientY); });
+    // A touch the browser took over for panning ends in pointercancel, so
+    // touchend finishes the swipe instead.
+    window.addEventListener("touchend", function (e) {
+      var t = e.changedTouches[0];
+      if (t) end(t.clientX, t.clientY);
+    }, { passive: true });
+    // The click that ends a swipe mustn't land on whatever's underneath.
+    window.addEventListener("click", function (e) {
+      if (Date.now() < swallowUntil) { e.preventDefault(); e.stopPropagation(); }
+    }, { capture: true });
+  })();
+</script>
 <script src="{{asset "saver.js"}}"></script>
 <script>
   // Screensaver. On a household display it starts after
@@ -192,6 +319,7 @@
       }
       clearTimeout(idleTimer);
       if (sheet.open) sheet.close();
+      if (window.DomusViews) DomusViews.show("chores");
       saver.start();
     }
 

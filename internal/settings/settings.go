@@ -1,5 +1,5 @@
 // Package settings stores per-household preferences (name, timezone, when
-// the board day rolls over, admin and screensaver idle timeouts) and caches them so hot paths
+// the board day rolls over, admin, screensaver and calendar idle timeouts) and caches them so hot paths
 // such as session checks and board rendering don't hit the database.
 package settings
 
@@ -28,6 +28,9 @@ type Settings struct {
 	// ScreensaverIdleMinutes is how long a household display waits before
 	// showing the screensaver; 0 means never.
 	ScreensaverIdleMinutes int64
+	// CalendarIdleMinutes is how long a display shows the board calendar,
+	// untouched, before going back to the chores; 0 means never.
+	CalendarIdleMinutes int64
 	// Lock schedule: on the weekdays in LockDays (bit 0 = Sunday) the
 	// displays lock at LockFrom and unlock at LockUntil (local "HH:MM"; the
 	// window runs overnight when LockFrom > LockUntil). LockDays 0 is off.
@@ -101,6 +104,12 @@ func (s Settings) ScreensaverIdle() time.Duration {
 	return time.Duration(s.ScreensaverIdleMinutes) * time.Minute
 }
 
+// CalendarIdle is how long a household display shows the board calendar,
+// untouched, before going back to the chores. Zero means never.
+func (s Settings) CalendarIdle() time.Duration {
+	return time.Duration(s.CalendarIdleMinutes) * time.Minute
+}
+
 // BoardDay returns midnight (local) of the board's current day. Before
 // DayStartsAt the board still shows the previous day, so e.g. with a 04:00
 // reset 01:30 on Tuesday is still Monday.
@@ -130,6 +139,7 @@ type Input struct {
 	DayStartsAt            string
 	AdminIdleMinutes       int64
 	ScreensaverIdleMinutes int64
+	CalendarIdleMinutes    int64
 	LockDays               int64
 	LockFrom               string
 	LockUntil              string
@@ -221,6 +231,9 @@ func (s *Service) Update(ctx context.Context, householdID, actorID int64, in Inp
 	if in.ScreensaverIdleMinutes < 0 || in.ScreensaverIdleMinutes > 120 {
 		errs.Add("screensaver_idle_minutes", "Choose between 0 (never) and 120 minutes.")
 	}
+	if in.CalendarIdleMinutes < 0 || in.CalendarIdleMinutes > 60 {
+		errs.Add("calendar_idle_minutes", "Choose between 0 (never) and 60 minutes.")
+	}
 	if in.LockDays < 0 || in.LockDays > 127 {
 		errs.Add("lock_days", "Choose the days to lock.")
 	}
@@ -252,6 +265,7 @@ func (s *Service) Update(ctx context.Context, householdID, actorID int64, in Inp
 			DayStartsAt:            in.DayStartsAt,
 			AdminIdleMinutes:       in.AdminIdleMinutes,
 			ScreensaverIdleMinutes: in.ScreensaverIdleMinutes,
+			CalendarIdleMinutes:    in.CalendarIdleMinutes,
 			LockDays:               in.LockDays,
 			LockFrom:               in.LockFrom,
 			LockUntil:              in.LockUntil,
@@ -309,6 +323,7 @@ func resolve(name string, row dbq.HouseholdSetting) (Settings, error) {
 		DayStartsAt:            row.DayStartsAt,
 		AdminIdleMinutes:       row.AdminIdleMinutes,
 		ScreensaverIdleMinutes: row.ScreensaverIdleMinutes,
+		CalendarIdleMinutes:    row.CalendarIdleMinutes,
 		LockDays:               row.LockDays,
 		LockFrom:               row.LockFrom,
 		LockUntil:              row.LockUntil,

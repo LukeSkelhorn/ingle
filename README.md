@@ -75,6 +75,16 @@ The board has a column for each family member, adults included. Each column show
 
 Every open board (the wall iPad, a second display, an adult's phone) updates live when anything changes.
 
+### Calendar
+
+Swipe left across the board (or tap **Calendar** under the household name) to see the week ahead: the family's calendar events and everyone's chores together, coloured by person, with their emoji. All-day events sit at the top of each day; timed events and chores follow in order. Shared chores are marked **Up for grabs**. Past days show what was done (✓ and who did it) and what was missed.
+
+- Use the arrows to go back up to 4 weeks or ahead up to 3 months, and **Today** to come back. **Month** shows a grid with a few things a day; tap a day for the full list.
+- Chores further ahead than the board has set up yet are worked out from their schedule.
+- The calendar is read-only. Tapping a chore shows what it is, who it's for, what it's worth and how often it repeats; chores are only ticked off from the chores view.
+- On a display, the calendar goes back to the chores after 2 minutes untouched (change this, or turn it off, in **Admin › Settings**). A locked display never shows it.
+- On a phone, the week is a list of days.
+
 ### Screensaver
 
 When a household display has been left alone for 5 minutes (change this, or turn it off, in **Admin › Settings**), it shows a screensaver. Family photos fade from one to the next, with the time and date, what's on today and tomorrow from your calendars, and how everyone's getting on with today's chores. Tap anywhere to get the board back. That tap only wakes the screen, so nobody ticks off a chore by accident. The 🌙 button starts the screensaver straight away on any board, phones included. If admin is unlocked on the display, it locks before the screensaver starts.
@@ -103,7 +113,7 @@ Any other device (not a display, not signed in) only sees the sign-in page: no b
 
 **Admin › Completions** lists everything waiting for a grown-up (chores, and reward claims under "Rewards waiting"), plus the last 7 days of completions with a **Reverse** button. A reversal never deletes history: the points come back off through a separate ledger adjustment, so a balance can go negative if the reward has already been spent.
 
-Admin covers family members (with an emoji or photo, picture cards, PINs and sign-ins), chores (with an emoji; assigned or shared, repeating daily/weekly/fortnightly/monthly, points and £), rewards, screensaver photos and calendars, devices and settings (household name, timezone, when the board's day rolls over, admin auto-lock, screensaver delay, the lock schedule, idle lock and household unlock code). Every change appears in the activity feed.
+Admin covers family members (with an emoji or photo, picture cards, PINs and sign-ins), chores (with an emoji; assigned or shared, repeating daily/weekly/fortnightly/monthly, points and £), rewards, screensaver photos and calendars, devices and settings (household name, timezone, when the board's day rolls over, admin auto-lock, screensaver delay, when the calendar returns to the chores, the lock schedule, idle lock and household unlock code). Every change appears in the activity feed.
 
 If Domus is reachable from outside your home network, put it behind a reverse proxy with HTTPS (e.g. Caddy or Traefik) and forward `X-Forwarded-Proto` so cookies are marked `Secure`. Photos are stored next to the database: avatars in `avatars/`, screensaver uploads in `photos/`, and resized copies of folder photos in `photo-cache/`.
 
@@ -158,7 +168,7 @@ internal/avatar/    emoji picker and photo uploads
 internal/picture/   safe image decoding and JPEG writing, shared by avatars and photos
 internal/lock/      locking the displays: state, schedule and idle lock
 internal/photos/    screensaver slideshow: uploaded photos plus the read-only photos folder
-internal/calendar/  ICS feeds: fetch, parse and expand recurring events for the screensaver
+internal/calendar/  ICS feeds: fetch, parse and expand recurring events for the screensaver and board calendar
 internal/chores/    chore lifecycle: recurrence presets, admin edits, board, claim, complete, undo, approve, reverse, redeem
 internal/backup/    nightly backups: database snapshot plus photos and avatars
 internal/store/     SQLite, embedded goose migrations, sqlc queries
@@ -172,7 +182,7 @@ deploy/             Docker Compose + Caddy for a home server
 
 Every table has a `household_id`, so one database can hold several households. A self-hosted install has just one.
 
-- **households** and **household_settings**: name, timezone, when the board's day rolls over, and the admin and screensaver idle timeouts.
+- **households** and **household_settings**: name, timezone, when the board's day rolls over, and the admin, screensaver and calendar idle timeouts.
 - **people**: adults and children, each with a colour and an avatar (an emoji or an uploaded photo). Adults can have a PIN and an email + password, all stored as argon2id hashes.
 - **devices** are registered household displays, and **sessions** are adult sign-ins (PIN on a display, or password elsewhere). Only sha256 hashes of their tokens are stored.
 - **chores** are either *assigned* to one person or sit in the shared *pool*. Recurrence is an iCal `RRULE` evaluated in the household timezone. A chore can award points, pence or both, and can require an adult's approval.
@@ -181,7 +191,7 @@ Every table has a `household_id`, so one database can hold several households. A
 - **completions** are pending, approved or rejected. Only approved completions credit the **ledger_entries** table, and balances are the sum of a person's entries. Rewards are claimed through **redemptions**: a pending claim holds its cost (what a person can spend is their balance less their pending claims) but writes nothing to the ledger; approving it adds one negative `redemption` entry, and declining or cancelling (stored as rejected) just lets the hold go.
 - **household_lock** says whether the displays are locked, why, and which schedule window was last applied. The unlock code (hashed), lock schedule and idle hours live in **household_settings**.
 - **photos** are the screensaver photos uploaded in admin. Folder photos are indexed in memory and never stored.
-- **calendar_feeds** are the ICS addresses for the screensaver. Events are fetched into memory and not stored.
+- **calendar_feeds** are the ICS addresses for the screensaver and the board calendar. Events are fetched into memory and not stored.
 - **activity** is an append-only feed and audit log.
 
 Timestamps are stored as unix seconds (UTC), local dates as `YYYY-MM-DD`, and money as integer pence.

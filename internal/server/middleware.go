@@ -179,18 +179,20 @@ func (s *Server) clearCookie(w http.ResponseWriter, r *http.Request, name string
 func (s *Server) view(r *http.Request, title string, data any) view {
 	id := identityFrom(r.Context())
 	v := view{Title: title, Data: data, Version: s.version()}
-	screensaverSeconds := 0
+	screensaverSeconds, calendarSeconds := 0, 0
 	if s.Settings != nil {
 		if set, err := s.Settings.Get(r.Context(), s.HouseholdID); err == nil {
 			v.Household = set.HouseholdName
 			v.Viewer.IdleSeconds = int(set.AdminIdle().Seconds())
 			screensaverSeconds = int(set.ScreensaverIdle().Seconds())
+			calendarSeconds = int(set.CalendarIdle().Seconds())
 		}
 	}
 	if id.Device != nil {
 		v.Viewer.IsDisplay = true
 		v.Viewer.DisplayName = id.Device.Name
 		v.Viewer.ScreensaverSeconds = screensaverSeconds
+		v.Viewer.CalendarSeconds = calendarSeconds
 	}
 	if id.Session != nil {
 		p := id.Session.Person

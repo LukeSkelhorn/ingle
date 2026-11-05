@@ -273,3 +273,29 @@ END:VEVENT
 		t.Errorf("second RemoveFeed = %v", err)
 	}
 }
+
+// The cache covers the board calendar's range: weeks back, months ahead.
+func TestFeedKeepsMonths(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, ics(`BEGIN:VEVENT
+UID:swim
+DTSTART;TZID=Europe/London:20260801T090000
+DTEND;TZID=Europe/London:20260801T100000
+RRULE:FREQ=WEEKLY
+SUMMARY:Swimming
+END:VEVENT
+`))
+	}))
+	defer srv.Close()
+	f := newFixture(t, srv.Client())
+	if _, err := f.svc.AddFeed(t.Context(), f.hh, f.mum.ID, "Family", srv.URL+"/family.ics"); err != nil {
+		t.Fatal(err)
+	}
+	// Now is 24 Oct; 5 weeks back and 13 weeks ahead are both cached.
+	for _, d := range []time.Time{time.Date(2026, 9, 19, 0, 0, 0, 0, london), time.Date(2027, 1, 23, 0, 0, 0, 0, london)} {
+		got := f.svc.Upcoming(f.hh, d, d.AddDate(0, 0, 1))
+		if len(got) != 1 || got[0].Feed != "Family" {
+			t.Errorf("Upcoming(%s) = %+v, want Swimming from Family", d.Format("2 Jan"), got)
+		}
+	}
+}

@@ -84,6 +84,10 @@ type viewer struct {
 	// ScreensaverSeconds is how long a display waits, untouched, before
 	// showing the screensaver; 0 means never (always 0 off a display).
 	ScreensaverSeconds int
+	// CalendarSeconds is how long a display shows the board calendar,
+	// untouched, before going back to the chores; 0 means never (always 0
+	// off a display).
+	CalendarSeconds int
 }
 
 // OnDisplayAdmin reports whether an adult is unlocked on a household display

@@ -139,6 +139,7 @@ type settingsForm struct {
 	DayStartsAt            string
 	AdminIdleMinutes       int64
 	ScreensaverIdleMinutes int64
+	CalendarIdleMinutes    int64
 	LockDays               int64
 	LockFrom               string
 	LockUntil              string
@@ -171,6 +172,7 @@ func (s *Server) settingsForm(set settings.Settings) settingsForm {
 		DayStartsAt:            set.DayStartsAt,
 		AdminIdleMinutes:       set.AdminIdleMinutes,
 		ScreensaverIdleMinutes: set.ScreensaverIdleMinutes,
+		CalendarIdleMinutes:    set.CalendarIdleMinutes,
 		LockDays:               set.LockDays,
 		LockFrom:               set.LockFrom,
 		LockUntil:              set.LockUntil,
@@ -209,6 +211,7 @@ func (s *Server) handleSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 		DayStartsAt:            f.str("day_starts_at"),
 		AdminIdleMinutes:       f.int("admin_idle_minutes", "Choose between 1 and 60 minutes."),
 		ScreensaverIdleMinutes: f.int("screensaver_idle_minutes", "Choose between 0 (never) and 120 minutes."),
+		CalendarIdleMinutes:    f.int("calendar_idle_minutes", "Choose between 0 (never) and 60 minutes."),
 		LockDays:               weekdayMask(r.PostForm["lock_day"]),
 		LockFrom:               f.str("lock_from"),
 		LockUntil:              f.str("lock_until"),
@@ -225,6 +228,7 @@ func (s *Server) handleSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 		HouseholdName: data.HouseholdName, Timezone: data.Timezone,
 		DayStartsAt: data.DayStartsAt, AdminIdleMinutes: data.AdminIdleMinutes,
 		ScreensaverIdleMinutes: data.ScreensaverIdleMinutes,
+		CalendarIdleMinutes:    data.CalendarIdleMinutes,
 		LockDays:               data.LockDays, LockFrom: data.LockFrom, LockUntil: data.LockUntil, LockIdleHours: data.LockIdleHours,
 	})
 	if errs, ok := validationErrors(err); ok {

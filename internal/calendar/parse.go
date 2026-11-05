@@ -18,11 +18,12 @@ type Event struct {
 	End    time.Time // exclusive
 	AllDay bool
 	Colour string // the feed's colour; set by the Service
+	Feed   string // the feed's name; set by the Service
 }
 
 // maxEvents caps how many occurrences one feed contributes to a window, so
 // a pathological feed can't flood the screen or memory.
-const maxEvents = 500
+const maxEvents = 3000
 
 // Parse decodes an iCalendar stream.
 func Parse(r io.Reader) (*ical.Calendar, error) {
