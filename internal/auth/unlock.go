@@ -5,8 +5,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strconv"
 
+	"github.com/lukeskelhorn/domus/internal/settings"
 	"github.com/lukeskelhorn/domus/internal/store"
 	"github.com/lukeskelhorn/domus/internal/store/dbq"
 )
@@ -61,6 +63,11 @@ func (s *Service) CheckUnlockCode(ctx context.Context, device *dbq.Device, code,
 		return nil, ErrBadCredentials
 	}
 	s.codeLimiter.Reset(devKey)
+	if who != nil {
+		s.learnPINLength(ctx, device.HouseholdID, *who, code)
+	} else {
+		s.learnCodeLength(ctx, set, code)
+	}
 	return who, nil
 }
 
@@ -101,7 +108,32 @@ func (s *Service) CheckUnlockPIN(ctx context.Context, device *dbq.Device, person
 	}
 	s.pinLimiter.Reset(pKey)
 	s.codeLimiter.Reset(devKey)
+	if p.PinLength == nil {
+		s.learnPINLength(ctx, device.HouseholdID, personID, pin)
+	}
 	return nil
+}
+
+// learnPINLength records the length of an adult's PIN that was set before
+// lengths were stored, now that it has just unlocked. Failing to record it
+// only means the keypad keeps asking for →, so errors are logged, not
+// returned.
+func (s *Service) learnPINLength(ctx context.Context, householdID, personID int64, pin string) {
+	if err := s.st.Q.LearnPINLength(ctx, dbq.LearnPINLengthParams{PinLength: PINLength(pin), HouseholdID: householdID, ID: personID}); err != nil {
+		slog.WarnContext(ctx, "record PIN length", slog.Int64("person", personID), slog.Any("err", err))
+	}
+}
+
+// learnCodeLength is learnPINLength for the household unlock code.
+func (s *Service) learnCodeLength(ctx context.Context, set settings.Settings, code string) {
+	if set.UnlockCodeLength != 0 {
+		return
+	}
+	if err := s.st.Q.LearnUnlockCodeLength(ctx, dbq.LearnUnlockCodeLengthParams{UnlockCodeLength: PINLength(code), HouseholdID: set.HouseholdID}); err != nil {
+		slog.WarnContext(ctx, "record unlock code length", slog.Any("err", err))
+		return
+	}
+	s.settings.Invalidate(set.HouseholdID)
 }
 
 // SetUnlockCode sets (or replaces) the household unlock code.
@@ -110,19 +142,19 @@ func (s *Service) SetUnlockCode(ctx context.Context, householdID, actorID int64,
 	if err != nil {
 		return err
 	}
-	return s.setUnlockCode(ctx, householdID, actorID, &hash, "lock.code_set")
+	return s.setUnlockCode(ctx, householdID, actorID, &hash, PINLength(code), "lock.code_set")
 }
 
 // ClearUnlockCode removes the household unlock code; adult PINs still
 // unlock the displays.
 func (s *Service) ClearUnlockCode(ctx context.Context, householdID, actorID int64) error {
-	return s.setUnlockCode(ctx, householdID, actorID, nil, "lock.code_cleared")
+	return s.setUnlockCode(ctx, householdID, actorID, nil, nil, "lock.code_cleared")
 }
 
-func (s *Service) setUnlockCode(ctx context.Context, householdID, actorID int64, hash *string, verb string) error {
+func (s *Service) setUnlockCode(ctx context.Context, householdID, actorID int64, hash *string, length *int64, verb string) error {
 	now := s.now()
 	err := s.st.WithTx(ctx, func(q *dbq.Queries) error {
-		if err := q.SetUnlockCode(ctx, dbq.SetUnlockCodeParams{UnlockCodeHash: hash, UpdatedAt: now.Unix(), HouseholdID: householdID}); err != nil {
+		if err := q.SetUnlockCode(ctx, dbq.SetUnlockCodeParams{UnlockCodeHash: hash, UnlockCodeLength: length, UpdatedAt: now.Unix(), HouseholdID: householdID}); err != nil {
 			return fmt.Errorf("set unlock code: %w", err)
 		}
 		return store.LogActivity(ctx, q, store.Activity{

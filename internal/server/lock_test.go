@@ -77,7 +77,7 @@ func TestLockedDisplayShowsNothingPersonal(t *testing.T) {
 	locked := wall.get("/")
 	// The unlock picker lists the adults with a PIN (Mum); nothing else
 	// personal shows.
-	expect(t, locked, http.StatusOK, "unlocking?<", `data-person="1"`, "Hi Mum", "saver__time")
+	expect(t, locked, http.StatusOK, "unlocking?<", `class="people-grid"`, `data-person="1"`, "Hi Mum", `data-length="4"`, "pinpad__keys", "/static/pinpad.js", "saver__time")
 	for _, secret := range []string{"The Smiths", "/avatars/", `id="board"`} {
 		if strings.Contains(locked.body, secret) {
 			t.Errorf("locked page shows %q", secret)

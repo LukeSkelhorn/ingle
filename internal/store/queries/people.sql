@@ -17,7 +17,11 @@ WHERE household_id = ? AND id = ?
 RETURNING *;
 
 -- name: SetPersonPIN :exec
-UPDATE people SET pin_hash = ? WHERE household_id = ? AND id = ?;
+UPDATE people SET pin_hash = ?, pin_length = ? WHERE household_id = ? AND id = ?;
+
+-- name: LearnPINLength :exec
+-- Records an older PIN's length the first time it unlocks.
+UPDATE people SET pin_length = ? WHERE household_id = ? AND id = ? AND pin_length IS NULL;
 
 -- name: ArchivePerson :exec
 UPDATE people SET archived_at = ? WHERE household_id = ? AND id = ?;
@@ -32,7 +36,7 @@ UPDATE people SET email = ?, password_hash = ? WHERE household_id = ? AND id = ?
 UPDATE people SET email = ? WHERE household_id = ? AND id = ?;
 
 -- name: ClearPersonPIN :exec
-UPDATE people SET pin_hash = NULL WHERE household_id = ? AND id = ?;
+UPDATE people SET pin_hash = NULL, pin_length = NULL WHERE household_id = ? AND id = ?;
 
 -- name: ClearPersonLogin :exec
 UPDATE people SET email = NULL, password_hash = NULL WHERE household_id = ? AND id = ?;

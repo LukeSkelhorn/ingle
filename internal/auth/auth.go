@@ -173,6 +173,9 @@ func (s *Service) UnlockWithPIN(ctx context.Context, device *dbq.Device, personI
 		return "", ErrBadCredentials
 	}
 	s.pinLimiter.Reset(key)
+	if p.PinLength == nil {
+		s.learnPINLength(ctx, device.HouseholdID, personID, pin)
+	}
 	return s.createSession(ctx, p, KindDisplay, &device.ID, "")
 }
 

@@ -431,7 +431,7 @@ func TestDisplayUnlockLockAndIdle(t *testing.T) {
 	r := wall.get("/admin/unlock")
 	expect(t, r, http.StatusOK, "Who's unlocking?", "Mum")
 	mumID := regexp.MustCompile(`/admin/unlock\?person=(\d+)`).FindStringSubmatch(r.body)[1]
-	expect(t, wall.get("/admin/unlock?person="+mumID), http.StatusOK, "Hi Mum", `name="pin"`)
+	expect(t, wall.get("/admin/unlock?person="+mumID), http.StatusOK, "Hi Mum", `name="pin"`, "pinpad__dots", `data-pinpad data-length="4"`, "/static/pinpad.js")
 
 	expect(t, wall.post("/admin/unlock", url.Values{"person": {mumID}, "pin": {"1111"}}), http.StatusUnauthorized, "Wrong PIN")
 	expectRedirect(t, wall.post("/admin/unlock", url.Values{"person": {mumID}, "pin": {"2468"}}), "/admin")

@@ -67,38 +67,16 @@ h2 { margin: 0 0 8px; font-size: 1.15rem; }
    photos as tappable. */
 .locked .saver { opacity: 1; cursor: pointer; }
 .locked__hint { margin: 6px 0 0; font-size: 0.95rem; opacity: 0.6; }
-.keypad {
-  border: 0; border-radius: 24px; padding: 24px; background: rgb(20 24 32 / 0.92); color: #fff;
-  width: min(340px, calc(100vw - 32px)); box-shadow: 0 20px 60px rgb(0 0 0 / 0.5);
-}
-.keypad::backdrop { background: rgb(0 0 0 / 0.45); }
-.keypad__title { margin: 0; text-align: center; font-size: 1.2rem; }
-.keypad__sub { margin: 2px 0 0; text-align: center; font-size: 0.95rem; opacity: 0.7; }
-.keypad__dots { display: flex; justify-content: center; gap: 12px; height: 24px; margin: 12px 0; }
-.keypad__dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgb(255 255 255 / 0.7); }
-.keypad__dot.is-filled { background: #fff; border-color: #fff; }
-.keypad__msg { min-height: 1.4em; margin: 0 0 8px; text-align: center; color: #ffb4a8; font-size: 0.95rem; }
-.keypad__keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-.keypad__key {
-  width: 64px; height: 64px; justify-self: center; border-radius: 50%; border: 0; background: rgb(255 255 255 / 0.12); color: #fff;
-  font-size: 1.6rem; font-variant-numeric: tabular-nums; cursor: pointer; touch-action: manipulation;
-}
-.keypad__key:active { background: rgb(255 255 255 / 0.28); }
-.keypad__key--plain { background: transparent; font-size: 1.1rem; }
-.keypad__key--go { background: rgb(255 255 255 / 0.85); color: #111; }
-.keypad__key--go:active { background: #fff; }
+/* The unlock card (same as admin unlock) over the dimmed photos. */
+.keypad.card { margin: auto; padding: 24px; border: 0; color: var(--fg); width: min(520px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); box-shadow: 0 20px 60px rgb(0 0 0 / 0.5); }
+.keypad::backdrop { background: rgb(0 0 0 / 0.55); }
 .keypad__step[hidden] { display: none; }
-.keypad__people { list-style: none; padding: 0; margin: 16px 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
-.keypad__person {
-  display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 96px; padding: 10px;
-  border: 0; border-radius: 16px; background: transparent; color: #fff; font: inherit; cursor: pointer; touch-action: manipulation;
-}
-.keypad__person:active, .keypad__person:focus-visible { background: rgb(255 255 255 / 0.12); }
-.keypad__code-icon { --person: #5b6475; display: inline-flex; align-items: center; justify-content: center; }
-.keypad .keypad__cancel { display: flex; margin: 16px auto 0; color: #fff; }
-.keypad.is-wrong .keypad__dots { animation: shake 0.35s; }
+.unlock__title { outline: none; }
+.unlock__not { border: 0; background: none; padding: 4px; font: inherit; color: var(--accent); text-decoration: underline; cursor: pointer; }
+.unlock__code-icon { --person: #5b6475; display: inline-flex; align-items: center; justify-content: center; }
+.pinpad.is-wrong .pinpad__dots { animation: shake 0.35s; }
 @keyframes shake { 25% { transform: translateX(-8px); } 75% { transform: translateX(8px); } }
-@media (prefers-reduced-motion: reduce) { .keypad.is-wrong .keypad__dots { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .pinpad.is-wrong .pinpad__dots { animation: none; } }
 
 /* Screensaver */
 .saver {
@@ -341,17 +319,21 @@ input, select, textarea { -webkit-user-select: text; user-select: text; }
 .unlock { text-align: center; }
 .unlock > .btn--ghost { display: flex; width: fit-content; margin: -8px 0 8px -8px; }
 .people-grid { list-style: none; padding: 0; margin: 16px 0 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; }
-.people-grid__item { display: flex; flex-direction: column; align-items: center; gap: 8px; text-decoration: none; color: var(--fg); padding: 8px; border-radius: var(--radius); }
+.people-grid__item {
+  display: flex; flex-direction: column; align-items: center; gap: 8px; text-decoration: none; color: var(--fg); padding: 8px; border-radius: var(--radius);
+  border: 0; background: none; font: inherit; cursor: pointer; touch-action: manipulation;
+}
 .people-grid__item:hover, .people-grid__item:focus-visible { background: var(--bg); }
 .unlock__who { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 8px; }
 .pinpad { display: flex; flex-direction: column; align-items: center; gap: 16px; }
-.pinpad__input {
-  width: 220px; text-align: center; font-size: 2rem; letter-spacing: 0.5em; padding: 8px;
-  border: 1px solid var(--line); border-radius: 12px; background: var(--bg);
-}
+.unlock__sub { margin: 0; }
+.pinpad__dots { display: flex; justify-content: center; gap: 14px; height: 24px; margin-top: 4px; }
+.pinpad__dot { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--fg); opacity: 0.6; }
+.pinpad__dot.is-filled { background: var(--fg); opacity: 1; }
+.pinpad__msg { min-height: 1.4em; margin: -4px 0; color: var(--danger); font-size: 0.95rem; }
 .pinpad__keys { display: grid; grid-template-columns: repeat(3, 76px); gap: 12px; }
 .pinpad__key {
-  height: 76px; border-radius: 50%; border: 1px solid var(--line); background: var(--bg);
+  height: 76px; color: var(--fg); border-radius: 50%; border: 1px solid var(--line); background: var(--bg);
   font-size: 1.6rem; cursor: pointer; touch-action: manipulation;
 }
 .pinpad__key:active { background: var(--line); }

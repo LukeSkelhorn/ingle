@@ -139,7 +139,7 @@ func (s *Service) Setup(ctx context.Context, householdID int64, in SetupInput) (
 		if err != nil {
 			return err
 		}
-		if err := q.SetPersonPIN(ctx, dbq.SetPersonPINParams{PinHash: &pinHash, HouseholdID: householdID, ID: p.ID}); err != nil {
+		if err := q.SetPersonPIN(ctx, dbq.SetPersonPINParams{PinHash: &pinHash, PinLength: auth.PINLength(in.PIN), HouseholdID: householdID, ID: p.ID}); err != nil {
 			return fmt.Errorf("set pin: %w", err)
 		}
 		if err := q.SetPersonLogin(ctx, dbq.SetPersonLoginParams{Email: &email, PasswordHash: &pwHash, HouseholdID: householdID, ID: p.ID}); err != nil {
@@ -282,7 +282,7 @@ func (s *Service) SetPIN(ctx context.Context, householdID, actorID, id int64, pi
 		return err
 	}
 	return s.credentialChange(ctx, householdID, actorID, id, "person.pin_set", keep, func(q *dbq.Queries, p dbq.Person) error {
-		return q.SetPersonPIN(ctx, dbq.SetPersonPINParams{PinHash: &hash, HouseholdID: householdID, ID: id})
+		return q.SetPersonPIN(ctx, dbq.SetPersonPINParams{PinHash: &hash, PinLength: auth.PINLength(pin), HouseholdID: householdID, ID: id})
 	})
 }
 

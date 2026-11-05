@@ -10,7 +10,7 @@ import (
 )
 
 const getSettings = `-- name: GetSettings :one
-SELECT household_id, timezone, day_starts_at, admin_idle_minutes, updated_at, screensaver_idle_minutes, unlock_code_hash, lock_days, lock_from, lock_until, lock_idle_hours FROM household_settings WHERE household_id = ?
+SELECT household_id, timezone, day_starts_at, admin_idle_minutes, updated_at, screensaver_idle_minutes, unlock_code_hash, lock_days, lock_from, lock_until, lock_idle_hours, unlock_code_length FROM household_settings WHERE household_id = ?
 `
 
 func (q *Queries) GetSettings(ctx context.Context, householdID int64) (HouseholdSetting, error) {
@@ -28,6 +28,7 @@ func (q *Queries) GetSettings(ctx context.Context, householdID int64) (Household
 		&i.LockFrom,
 		&i.LockUntil,
 		&i.LockIdleHours,
+		&i.UnlockCodeLength,
 	)
 	return i, err
 }
@@ -49,18 +50,40 @@ func (q *Queries) InsertDefaultSettings(ctx context.Context, arg InsertDefaultSe
 	return err
 }
 
+const learnUnlockCodeLength = `-- name: LearnUnlockCodeLength :exec
+UPDATE household_settings SET unlock_code_length = ?
+WHERE household_id = ? AND unlock_code_hash IS NOT NULL AND unlock_code_length IS NULL
+`
+
+type LearnUnlockCodeLengthParams struct {
+	UnlockCodeLength *int64 `json:"unlock_code_length"`
+	HouseholdID      int64  `json:"household_id"`
+}
+
+// Records an older household code's length the first time it unlocks.
+func (q *Queries) LearnUnlockCodeLength(ctx context.Context, arg LearnUnlockCodeLengthParams) error {
+	_, err := q.db.ExecContext(ctx, learnUnlockCodeLength, arg.UnlockCodeLength, arg.HouseholdID)
+	return err
+}
+
 const setUnlockCode = `-- name: SetUnlockCode :exec
-UPDATE household_settings SET unlock_code_hash = ?, updated_at = ? WHERE household_id = ?
+UPDATE household_settings SET unlock_code_hash = ?, unlock_code_length = ?, updated_at = ? WHERE household_id = ?
 `
 
 type SetUnlockCodeParams struct {
-	UnlockCodeHash *string `json:"unlock_code_hash"`
-	UpdatedAt      int64   `json:"updated_at"`
-	HouseholdID    int64   `json:"household_id"`
+	UnlockCodeHash   *string `json:"unlock_code_hash"`
+	UnlockCodeLength *int64  `json:"unlock_code_length"`
+	UpdatedAt        int64   `json:"updated_at"`
+	HouseholdID      int64   `json:"household_id"`
 }
 
 func (q *Queries) SetUnlockCode(ctx context.Context, arg SetUnlockCodeParams) error {
-	_, err := q.db.ExecContext(ctx, setUnlockCode, arg.UnlockCodeHash, arg.UpdatedAt, arg.HouseholdID)
+	_, err := q.db.ExecContext(ctx, setUnlockCode,
+		arg.UnlockCodeHash,
+		arg.UnlockCodeLength,
+		arg.UpdatedAt,
+		arg.HouseholdID,
+	)
 	return err
 }
 
@@ -69,7 +92,7 @@ UPDATE household_settings
 SET timezone = ?, day_starts_at = ?, admin_idle_minutes = ?, screensaver_idle_minutes = ?,
     lock_days = ?, lock_from = ?, lock_until = ?, lock_idle_hours = ?, updated_at = ?
 WHERE household_id = ?
-RETURNING household_id, timezone, day_starts_at, admin_idle_minutes, updated_at, screensaver_idle_minutes, unlock_code_hash, lock_days, lock_from, lock_until, lock_idle_hours
+RETURNING household_id, timezone, day_starts_at, admin_idle_minutes, updated_at, screensaver_idle_minutes, unlock_code_hash, lock_days, lock_from, lock_until, lock_idle_hours, unlock_code_length
 `
 
 type UpdateSettingsParams struct {
@@ -111,6 +134,7 @@ func (q *Queries) UpdateSettings(ctx context.Context, arg UpdateSettingsParams) 
 		&i.LockFrom,
 		&i.LockUntil,
 		&i.LockIdleHours,
+		&i.UnlockCodeLength,
 	)
 	return i, err
 }

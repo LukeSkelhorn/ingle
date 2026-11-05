@@ -1,0 +1,47 @@
+{{/* Unlock screens shared by admin unlock and the locked display, so both
+     look the same. */}}
+
+{{/* "Who's unlocking?" tiles: dict "Adults" []unlockAdult "Locked" bool
+     "HasCode" bool "CodeLength" int. Admin unlock links to each adult's PIN
+     page. The locked display uses buttons its script handles, shows photos
+     as initials (avatars aren't served while locked) and adds the household
+     code. data-length is how many digits each PIN or the code has (empty if
+     not known yet), for the pad's dots. */}}
+{{define "unlock_people"}}
+<ul class="people-grid">
+  {{if .Locked}}
+  {{range .Adults}}
+  <li><button class="people-grid__item" type="button" data-person="{{.Person.ID}}" data-length="{{with .Person.PinLength}}{{.}}{{end}}" data-title="Hi {{.Person.Name}}" data-sub="Enter your PIN" data-not="Not {{.Person.Name}}?">
+    {{template "avatar" (plainAvatar .Person "lg")}}<span>{{.Person.Name}}</span>
+  </button></li>
+  {{end}}
+  {{if .HasCode}}
+  <li><button class="people-grid__item" type="button" data-person="" data-length="{{with .CodeLength}}{{.}}{{end}}" data-title="Household code" data-sub="Enter the household code" data-not="‹ Back">
+    <span class="avatar avatar--lg unlock__code-icon" aria-hidden="true">🔢</span><span>Household code</span>
+  </button></li>
+  {{end}}
+  {{else}}
+  {{range .Adults}}
+  <li><a class="people-grid__item" href="/admin/unlock?person={{.Person.ID}}">
+    {{template "avatar" (avatar .Person "lg")}}<span>{{.Person.Name}}</span>
+  </a></li>
+  {{end}}
+  {{end}}
+</ul>
+{{end}}
+
+{{/* The PIN pad: dots for the digits typed so far, then the keys. The
+     argument is the PIN's length if known: that many dots, and it's tried
+     as soon as the last digit goes in. /static/pinpad.js makes it work. */}}
+{{define "pinpad"}}
+<div class="pinpad" data-pinpad data-length="{{with .}}{{.}}{{end}}">
+  <div class="pinpad__dots" aria-hidden="true"></div>
+  <p class="pinpad__msg" role="alert"></p>
+  <div class="pinpad__keys">
+    {{range $k := (list "1" "2" "3" "4" "5" "6" "7" "8" "9")}}<button type="button" class="pinpad__key" data-key="{{$k}}">{{$k}}</button>{{end}}
+    <button type="button" class="pinpad__key pinpad__key--muted" data-back aria-label="Delete">⌫</button>
+    <button type="button" class="pinpad__key" data-key="0">0</button>
+    <button type="button" class="pinpad__key pinpad__key--go" data-go aria-label="Unlock">→</button>
+  </div>
+</div>
+{{end}}

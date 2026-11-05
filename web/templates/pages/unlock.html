@@ -11,26 +11,18 @@
     {{if .Locked}}
       <p class="muted">Too many wrong PINs. Try again in a few minutes.</p>
     {{else}}
-    <form method="post" action="/admin/unlock" class="pinpad" id="pinpad">
+    <p class="muted unlock__sub">Enter your PIN</p>
+    <form method="post" action="/admin/unlock" id="pinform">
       <input type="hidden" name="person" value="{{.Person.ID}}">
-      <input class="pinpad__input" type="password" name="pin" id="pin" inputmode="numeric" pattern="[0-9]{4,6}"
-             minlength="4" maxlength="6" autocomplete="off" required aria-label="PIN" readonly>
-      <div class="pinpad__keys">
-        {{range $k := (list "1" "2" "3" "4" "5" "6" "7" "8" "9")}}<button type="button" class="pinpad__key" data-key="{{$k}}">{{$k}}</button>{{end}}
-        <button type="button" class="pinpad__key pinpad__key--muted" data-key="clear" aria-label="Clear">⌫</button>
-        <button type="button" class="pinpad__key" data-key="0">0</button>
-        <button type="submit" class="pinpad__key pinpad__key--go" aria-label="Unlock">→</button>
-      </div>
+      <input type="hidden" name="pin" id="pin">
+      {{template "pinpad" .Person.PinLength}}
     </form>
+    <script src="/static/pinpad.js"></script>
     <script>
       (function () {
-        var input = document.getElementById("pin");
-        document.querySelectorAll(".pinpad__key[data-key]").forEach(function (b) {
-          b.addEventListener("click", function () {
-            var k = b.dataset.key;
-            if (k === "clear") { input.value = input.value.slice(0, -1); return; }
-            if (input.value.length < 6) input.value += k;
-          });
+        var form = document.getElementById("pinform");
+        DomusPinpad(form.querySelector("[data-pinpad]"), {
+          onSubmit: function (code) { document.getElementById("pin").value = code; form.submit(); },
         });
       })();
     </script>
@@ -40,13 +32,7 @@
     <h1>Who's unlocking?</h1>
     {{template "flash" .}}
     {{if .Data.Adults}}
-    <ul class="people-grid">
-      {{range .Data.Adults}}
-      <li><a class="people-grid__item" href="/admin/unlock?person={{.Person.ID}}">
-        {{template "avatar" (avatar .Person "lg")}}<span>{{.Person.Name}}</span>
-      </a></li>
-      {{end}}
-    </ul>
+    {{template "unlock_people" (dict "Adults" .Data.Adults "Locked" false)}}
     {{else}}
     <p class="muted">No adult has a PIN yet. Sign in on a phone or computer and set one under People.</p>
     {{end}}

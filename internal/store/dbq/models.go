@@ -110,6 +110,7 @@ type HouseholdSetting struct {
 	LockFrom               string  `json:"lock_from"`
 	LockUntil              string  `json:"lock_until"`
 	LockIdleHours          int64   `json:"lock_idle_hours"`
+	UnlockCodeLength       *int64  `json:"unlock_code_length"`
 }
 
 type LedgerEntry struct {
@@ -139,6 +140,7 @@ type Person struct {
 	CreatedAt    int64   `json:"created_at"`
 	Email        *string `json:"email"`
 	PasswordHash *string `json:"password_hash"`
+	PinLength    *int64  `json:"pin_length"`
 }
 
 type Photo struct {

@@ -39,7 +39,7 @@ func (q *Queries) ClearPersonLogin(ctx context.Context, arg ClearPersonLoginPara
 }
 
 const clearPersonPIN = `-- name: ClearPersonPIN :exec
-UPDATE people SET pin_hash = NULL WHERE household_id = ? AND id = ?
+UPDATE people SET pin_hash = NULL, pin_length = NULL WHERE household_id = ? AND id = ?
 `
 
 type ClearPersonPINParams struct {
@@ -85,7 +85,7 @@ func (q *Queries) CountAdultsWithCredential(ctx context.Context, householdID int
 const createPerson = `-- name: CreatePerson :one
 INSERT INTO people (household_id, name, kind, colour, avatar, sort_order, created_at)
 VALUES (?, ?, ?, ?, ?, ?, ?)
-RETURNING id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash
+RETURNING id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash, pin_length
 `
 
 type CreatePersonParams struct {
@@ -122,12 +122,13 @@ func (q *Queries) CreatePerson(ctx context.Context, arg CreatePersonParams) (Per
 		&i.CreatedAt,
 		&i.Email,
 		&i.PasswordHash,
+		&i.PinLength,
 	)
 	return i, err
 }
 
 const getPerson = `-- name: GetPerson :one
-SELECT id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash FROM people WHERE household_id = ? AND id = ?
+SELECT id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash, pin_length FROM people WHERE household_id = ? AND id = ?
 `
 
 type GetPersonParams struct {
@@ -151,12 +152,13 @@ func (q *Queries) GetPerson(ctx context.Context, arg GetPersonParams) (Person, e
 		&i.CreatedAt,
 		&i.Email,
 		&i.PasswordHash,
+		&i.PinLength,
 	)
 	return i, err
 }
 
 const getPersonByEmail = `-- name: GetPersonByEmail :one
-SELECT id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash FROM people WHERE email = ? AND archived_at IS NULL
+SELECT id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash, pin_length FROM people WHERE email = ? AND archived_at IS NULL
 `
 
 func (q *Queries) GetPersonByEmail(ctx context.Context, email *string) (Person, error) {
@@ -175,12 +177,29 @@ func (q *Queries) GetPersonByEmail(ctx context.Context, email *string) (Person, 
 		&i.CreatedAt,
 		&i.Email,
 		&i.PasswordHash,
+		&i.PinLength,
 	)
 	return i, err
 }
 
+const learnPINLength = `-- name: LearnPINLength :exec
+UPDATE people SET pin_length = ? WHERE household_id = ? AND id = ? AND pin_length IS NULL
+`
+
+type LearnPINLengthParams struct {
+	PinLength   *int64 `json:"pin_length"`
+	HouseholdID int64  `json:"household_id"`
+	ID          int64  `json:"id"`
+}
+
+// Records an older PIN's length the first time it unlocks.
+func (q *Queries) LearnPINLength(ctx context.Context, arg LearnPINLengthParams) error {
+	_, err := q.db.ExecContext(ctx, learnPINLength, arg.PinLength, arg.HouseholdID, arg.ID)
+	return err
+}
+
 const listArchivedPeople = `-- name: ListArchivedPeople :many
-SELECT id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash FROM people
+SELECT id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash, pin_length FROM people
 WHERE household_id = ? AND archived_at IS NOT NULL
 ORDER BY name
 `
@@ -207,6 +226,7 @@ func (q *Queries) ListArchivedPeople(ctx context.Context, householdID int64) ([]
 			&i.CreatedAt,
 			&i.Email,
 			&i.PasswordHash,
+			&i.PinLength,
 		); err != nil {
 			return nil, err
 		}
@@ -222,7 +242,7 @@ func (q *Queries) ListArchivedPeople(ctx context.Context, householdID int64) ([]
 }
 
 const listPeople = `-- name: ListPeople :many
-SELECT id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash FROM people
+SELECT id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash, pin_length FROM people
 WHERE household_id = ? AND archived_at IS NULL
 ORDER BY sort_order, name
 `
@@ -249,6 +269,7 @@ func (q *Queries) ListPeople(ctx context.Context, householdID int64) ([]Person, 
 			&i.CreatedAt,
 			&i.Email,
 			&i.PasswordHash,
+			&i.PinLength,
 		); err != nil {
 			return nil, err
 		}
@@ -300,17 +321,23 @@ func (q *Queries) SetPersonLogin(ctx context.Context, arg SetPersonLoginParams) 
 }
 
 const setPersonPIN = `-- name: SetPersonPIN :exec
-UPDATE people SET pin_hash = ? WHERE household_id = ? AND id = ?
+UPDATE people SET pin_hash = ?, pin_length = ? WHERE household_id = ? AND id = ?
 `
 
 type SetPersonPINParams struct {
 	PinHash     *string `json:"pin_hash"`
+	PinLength   *int64  `json:"pin_length"`
 	HouseholdID int64   `json:"household_id"`
 	ID          int64   `json:"id"`
 }
 
 func (q *Queries) SetPersonPIN(ctx context.Context, arg SetPersonPINParams) error {
-	_, err := q.db.ExecContext(ctx, setPersonPIN, arg.PinHash, arg.HouseholdID, arg.ID)
+	_, err := q.db.ExecContext(ctx, setPersonPIN,
+		arg.PinHash,
+		arg.PinLength,
+		arg.HouseholdID,
+		arg.ID,
+	)
 	return err
 }
 
@@ -331,7 +358,7 @@ func (q *Queries) UnarchivePerson(ctx context.Context, arg UnarchivePersonParams
 const updatePerson = `-- name: UpdatePerson :one
 UPDATE people SET name = ?, kind = ?, colour = ?, avatar = ?, sort_order = ?
 WHERE household_id = ? AND id = ?
-RETURNING id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash
+RETURNING id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash, pin_length
 `
 
 type UpdatePersonParams struct {
@@ -368,6 +395,7 @@ func (q *Queries) UpdatePerson(ctx context.Context, arg UpdatePersonParams) (Per
 		&i.CreatedAt,
 		&i.Email,
 		&i.PasswordHash,
+		&i.PinLength,
 	)
 	return i, err
 }
