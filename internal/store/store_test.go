@@ -1,6 +1,7 @@
 package store
 
 import (
+	"fmt"
 	"io/fs"
 	"path/filepath"
 	"testing"
@@ -139,5 +140,77 @@ func TestMigrationsRoundTrip(t *testing.T) {
 	}
 	if _, err := st.EnsureHousehold(ctx, "Home", time.Now()); err != nil {
 		t.Errorf("schema unusable after round trip: %v", err)
+	}
+}
+
+// The shared chores migration rebuilds chores; occurrences and completions
+// must survive it both ways, and foreign keys must be back on afterwards.
+func TestSharedChoresMigrationKeepsData(t *testing.T) {
+	st := openTest(t)
+	ctx := t.Context()
+	sub, err := fs.Sub(migrations, "migrations")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := goose.NewProvider(goose.DialectSQLite3, st.DB, sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.DownTo(ctx, 10); err != nil {
+		t.Fatalf("DownTo(10): %v", err)
+	}
+	for _, q := range []string{
+		`INSERT INTO households (id, name, created_at) VALUES (1, 'Home', 1)`,
+		`INSERT INTO people (id, household_id, name, kind, colour, created_at) VALUES (1, 1, 'Alfie', 'child', '#46A758', 1)`,
+		`INSERT INTO chores (id, household_id, title, mode, assignee_id, starts_on, created_at, updated_at, day_mode) VALUES (1, 1, 'Bins', 'assigned', 1, '2026-11-02', 1, 1, 'any')`,
+		`INSERT INTO chore_occurrences (id, household_id, chore_id, due_on, assignee_id, status) VALUES (1, 1, 1, '2026-11-02', 1, 'done')`,
+		`INSERT INTO completions (household_id, occurrence_id, person_id, completed_at, status, points, pence) VALUES (1, 1, 1, 1, 'approved', 5, 0)`,
+	} {
+		if _, err := st.DB.ExecContext(ctx, q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	count := func() string {
+		t.Helper()
+		var c, o, k int
+		var mode string
+		if err := st.DB.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM chores), (SELECT count(*) FROM chore_occurrences), (SELECT count(*) FROM completions), (SELECT day_mode FROM chores WHERE id = 1)`).Scan(&c, &o, &k, &mode); err != nil {
+			t.Fatal(err)
+		}
+		return fmt.Sprintf("%d/%d/%d/%s", c, o, k, mode)
+	}
+	checkFK := func(when string) {
+		t.Helper()
+		var on int
+		if err := st.DB.QueryRowContext(ctx, `PRAGMA foreign_keys`).Scan(&on); err != nil || on != 1 {
+			t.Errorf("%s: foreign_keys = %d (%v), want 1", when, on, err)
+		}
+		rows, err := st.DB.QueryContext(ctx, `PRAGMA foreign_key_check`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		if rows.Next() {
+			t.Errorf("%s: foreign key violations", when)
+		}
+	}
+	before := count()
+	if _, err := p.Up(ctx); err != nil {
+		t.Fatalf("Up: %v", err)
+	}
+	if got := count(); got != before {
+		t.Errorf("after up = %s, want %s", got, before)
+	}
+	checkFK("after up")
+	if _, err := st.DB.ExecContext(ctx, `INSERT INTO chores (household_id, title, mode, starts_on, created_at, updated_at) VALUES (1, 'Tea', 'shared', '2026-11-02', 1, 1)`); err != nil {
+		t.Errorf("shared chore after up: %v", err)
+	}
+	if _, err := p.DownTo(ctx, 10); err != nil {
+		t.Fatalf("DownTo(10) again: %v", err)
+	}
+	checkFK("after down")
+	var mode string
+	if err := st.DB.QueryRowContext(ctx, `SELECT mode FROM chores WHERE title = 'Tea'`).Scan(&mode); err != nil || mode != "pool" {
+		t.Errorf("shared chore after down = %q (%v), want pool", mode, err)
 	}
 }

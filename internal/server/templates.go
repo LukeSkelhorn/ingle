@@ -160,9 +160,12 @@ func (s *Server) funcs() template.FuncMap {
 			return loc.FormatDate(t) + " " + loc.FormatTime(t)
 		},
 		"weekdayShort": func(d time.Weekday) string { return d.String()[:3] },
-		"shortDate":    shortDate,
-		"worth":        s.worth,
-		"pts":          pts,
+		// names and orNames list people: "Isla and Mum", "Luke or Sam".
+		"names":     func(ps []dbq.Person) string { return joinNames(ps, "and") },
+		"orNames":   func(ps []dbq.Person) string { return joinNames(ps, "or") },
+		"shortDate": shortDate,
+		"worth":     s.worth,
+		"pts":       pts,
 		"percent": func(done, total int) int {
 			if total == 0 {
 				return 0
@@ -224,4 +227,16 @@ func dict(kv ...any) (map[string]any, error) {
 		m[k] = kv[i+1]
 	}
 	return m, nil
+}
+
+// joinNames lists people's names as "A, B and C" (or "A, B or C").
+func joinNames(ps []dbq.Person, last string) string {
+	names := make([]string, len(ps))
+	for i, p := range ps {
+		names[i] = p.Name
+	}
+	if len(names) < 2 {
+		return strings.Join(names, "")
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " " + last + " " + names[len(names)-1]
 }

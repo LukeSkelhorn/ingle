@@ -44,6 +44,9 @@ type CalChore struct {
 	// Or names a flexible-day chore's days ("Tue or Thu"); it is shown on
 	// each of them until it's done. "" for everything else.
 	Or string
+	// People is who a shared chore is for, until it's done (then PersonID
+	// is whoever did it).
+	People []int64
 }
 
 // Calendar returns the chores due on each local date in [from, to]
@@ -65,6 +68,10 @@ func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list completions: %w", err)
+	}
+	shared, err := s.sharedPeople(ctx, householdID)
+	if err != nil {
+		return nil, err
 	}
 	byOcc := make(map[int64]dbq.ListLiveCompletionsForRangeRow, len(comps))
 	for _, c := range comps {
@@ -95,9 +102,13 @@ func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time
 		if c.PersonID == nil {
 			c.PersonID = r.ClaimedBy
 		}
+		if r.Mode == ModeShared {
+			c.People = shared[r.ChoreID]
+		}
 		comp, done := byOcc[r.ID]
 		if done {
 			c.Status, c.DoneByID, c.DoneAt, c.Pending = CalDone, &comp.PersonID, comp.CompletedAt, comp.Status == StatusPending
+			c.People = nil
 			if c.PersonID == nil {
 				c.PersonID = &comp.PersonID
 			}
@@ -163,7 +174,7 @@ func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time
 						add(CalChore{
 							ChoreID: ch.ID, Date: d, Title: ch.Title, Emoji: ch.Emoji, DueTime: ch.DueTime,
 							Points: ch.Points, Pence: ch.Pence, Pool: ch.Mode == ModePool,
-							PersonID: ch.AssigneeID, Status: statusOn(d, today), Or: or,
+							PersonID: ch.AssigneeID, Status: statusOn(d, today), Or: or, People: shared[ch.ID],
 						})
 					}
 				}
@@ -180,7 +191,7 @@ func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time
 				out[d] = append(out[d], CalChore{
 					ChoreID: ch.ID, Date: d, Title: ch.Title, Emoji: ch.Emoji, DueTime: ch.DueTime,
 					Points: ch.Points, Pence: ch.Pence, Pool: ch.Mode == ModePool,
-					PersonID: ch.AssigneeID, Status: statusOn(d, today),
+					PersonID: ch.AssigneeID, Status: statusOn(d, today), People: shared[ch.ID],
 				})
 			}
 		}

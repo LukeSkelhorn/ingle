@@ -23,6 +23,7 @@
       <legend>Who does it?</legend>
       <div class="segmented">
         <label><input type="radio" name="mode" value="assigned"{{if eq .Data.Mode "assigned"}} checked{{end}}> <span>Someone specific</span></label>
+        <label><input type="radio" name="mode" value="shared"{{if eq .Data.Mode "shared"}} checked{{end}}> <span>Any of these people</span></label>
         <label><input type="radio" name="mode" value="pool"{{if eq .Data.Mode "pool"}} checked{{end}}> <span>Anyone can claim it</span></label>
       </div>
       {{template "err" index .Errors "mode"}}
@@ -38,6 +39,19 @@
         {{end}}
       </div>
       {{template "err" index .Errors "assignee_id"}}
+    </fieldset>
+    <fieldset class="field" data-show-when="mode=shared">
+      <legend>Any of</legend>
+      <p class="muted field__hint">It shows in each of their columns, and whoever does it first gets the points.</p>
+      <div class="people-pick">
+        {{range .Data.People}}
+        <label class="people-pick__item">
+          <input type="checkbox" name="people_ids" value="{{.ID}}"{{if $.Data.HasPerson .ID}} checked{{end}}>
+          {{template "avatar" (avatar . "md")}}<span>{{.Name}}</span>
+        </label>
+        {{end}}
+      </div>
+      {{template "err" index .Errors "people_ids"}}
     </fieldset>
 
     <label class="field">

@@ -62,6 +62,12 @@ type ChoreOccurrence struct {
 	AvailableFrom *string `json:"available_from"`
 }
 
+type ChorePerson struct {
+	HouseholdID int64 `json:"household_id"`
+	ChoreID     int64 `json:"chore_id"`
+	PersonID    int64 `json:"person_id"`
+}
+
 type Completion struct {
 	ID           int64  `json:"id"`
 	HouseholdID  int64  `json:"household_id"`

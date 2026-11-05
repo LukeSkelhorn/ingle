@@ -71,6 +71,7 @@ type calItem struct {
 	Chore  *chores.CalChore
 	Person *dbq.Person // whose chore it is; nil for one up for grabs
 	DoneBy *dbq.Person
+	People []dbq.Person // a shared chore, not done yet: who it's for
 	sort   string
 }
 
@@ -277,6 +278,11 @@ func (s *Server) calendarDays(r *http.Request, loc locale.Locale, first, last, t
 			if c.DoneByID != nil {
 				it.DoneBy = byID[*c.DoneByID]
 			}
+			for _, id := range c.People {
+				if p := byID[id]; p != nil {
+					it.People = append(it.People, *p)
+				}
+			}
 			if it.Person != nil {
 				it.Colour = it.Person.Colour
 			}
@@ -357,6 +363,9 @@ func (s *Server) handleCalendarChore(w http.ResponseWriter, r *http.Request) {
 		}
 		if c.DoneByID != nil && p.ID == *c.DoneByID {
 			v.Item.DoneBy = p
+		}
+		if slices.Contains(c.People, p.ID) {
+			v.Item.People = append(v.Item.People, *p)
 		}
 	}
 	if c.DoneAt != 0 {

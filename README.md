@@ -63,7 +63,8 @@ Set these as environment variables, or copy `.env.example` to `.env`. Task loads
 The board has a column for each family member, adults included. Each column shows their points and £ balance, how much of today they've done, and their chores. Shared chores sit in **Up for grabs** at the top.
 
 - Tap one of your own chores to mark it done. Points are added straight away, unless the chore needs a grown-up to check it.
-- Tap a shared chore, pick who you are, then choose **I'll do it** (it moves to your column) or **It's done**. Use **Give back** to return a claimed chore to the pool.
+- Tap a chore in **Up for grabs**, pick who you are, then choose **I'll do it** (it moves to your column) or **It's done**. Use **Give back** to return a claimed chore to the pool.
+- Some chores belong to a few people: set **Any of these people** in **Admin › Chores** and tick who (both adults for "School run", say). It shows in each of their columns, with small avatars of the others, and not in Up for grabs. Whoever does it first gets the points, and it's gone from the others' columns. Archiving someone takes them out of these chores; one left with a single person becomes theirs.
 - Tapped the wrong thing? **Undo** appears for a few seconds after each completion.
 - **Grown-ups can put it right.** Completions run on the honour system: points count straight away. If something was marked done that wasn't, an adult (unlocked on the display, or signed in on a phone) taps the done chore and chooses **Reverse**. The points come off and the chore goes back on the board. Chores set to need a grown-up's check show **Approve** and **Not done yet** instead. Completions can be reversed for 7 days.
 - Tap a person's avatar or name to open their sheet: their balance, what they've earned this week (reversals come off, spending doesn't), and the household's rewards. Rewards they can afford are highlighted; the rest show how much more they need.

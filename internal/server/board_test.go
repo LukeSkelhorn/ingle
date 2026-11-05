@@ -756,3 +756,50 @@ func TestToastHeaderIsASCII(t *testing.T) {
 		t.Errorf("round trip = %+v, %v (%q)", m, err, h)
 	}
 }
+
+func TestBoardSharedChore(t *testing.T) {
+	h, wall, phone := boardHousehold(t)
+	mum, alfie, isla := h.person("Mum"), h.person("Alfie"), h.person("Isla")
+	expectRedirect(t, phone.post("/admin/chores", url.Values{
+		"title": {"School run"}, "mode": {"shared"}, "people_ids": {itoa(mum.ID), itoa(isla.ID)},
+		"repeat": {"daily"}, "starts_on": {"2026-07-01"}, "points": {"0"},
+	}), "/admin/chores")
+	occ := h.occurrence("School run")
+
+	r := wall.get("/board")
+	for _, p := range []dbq.Person{mum, isla} {
+		sec := section(r.body, p.Name)
+		if !strings.Contains(sec, "School run") || !strings.Contains(sec, `hx-vals='{"person": "`+itoa(p.ID)+`"}'`) {
+			t.Errorf("%s's column has no School run tapping as them:\n%s", p.Name, sec)
+		}
+	}
+	if strings.Contains(section(r.body, "Alfie"), "School run") || strings.Contains(poolOf(r.body), "School run") {
+		t.Error("School run shown for Alfie or in Up for grabs")
+	}
+	if !strings.Contains(section(r.body, "Mum"), `aria-label="Shared with Isla"`) {
+		t.Error("Mum's card doesn't say who it's shared with")
+	}
+
+	// Alfie isn't one of them.
+	r = wall.post("/board/occurrences/"+itoa(occ.ID)+"/complete", url.Values{"person": {itoa(alfie.ID)}})
+	if r.status != http.StatusConflict || !toastOf(t, r).Error {
+		t.Errorf("Alfie completing = %d %+v", r.status, toastOf(t, r))
+	}
+	// Without saying who, it can't tell.
+	r = wall.post("/board/occurrences/"+itoa(occ.ID)+"/complete", nil)
+	if tt := toastOf(t, r); tt.Message != "Choose who did it." {
+		t.Errorf("no person toast = %+v", tt)
+	}
+
+	r = wall.post("/board/occurrences/"+itoa(occ.ID)+"/complete", url.Values{"person": {itoa(isla.ID)}})
+	expect(t, r, http.StatusOK)
+	if tt := toastOf(t, r); tt.Message != "Nice one, Isla! Done for everyone." {
+		t.Errorf("toast = %+v", tt)
+	}
+	if strings.Contains(section(r.body, "Mum"), "School run") {
+		t.Error("still in Mum's column after Isla did it")
+	}
+	if !strings.Contains(section(r.body, "Isla"), "School run") {
+		t.Error("not ticked in Isla's column")
+	}
+}

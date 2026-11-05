@@ -10,6 +10,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/teambition/rrule-go"
@@ -22,6 +23,8 @@ import (
 const (
 	ModeAssigned = "assigned"
 	ModePool     = "pool"
+	// ModeShared is done once by any of a few chosen people (chore_people).
+	ModeShared = "shared"
 )
 
 // Status values shared by occurrences, completions and redemptions.
@@ -208,6 +211,14 @@ func (s *Service) Claim(ctx context.Context, householdID, occurrenceID, personID
 		if _, err := getPerson(ctx, q, householdID, personID); err != nil {
 			return err
 		}
+		// A shared chore is already theirs to do; nobody claims it.
+		if occ, err := getOccurrence(ctx, q, householdID, occurrenceID); err != nil {
+			return err
+		} else if shared, err := choreIsShared(ctx, q, householdID, occ.ChoreID); err != nil {
+			return err
+		} else if shared {
+			return ErrNotClaimable
+		}
 		n, err := q.ClaimOccurrence(ctx, dbq.ClaimOccurrenceParams{
 			PersonID:    &personID,
 			ClaimedAt:   ptr(s.now().Unix()),
@@ -284,6 +295,15 @@ func (s *Service) Complete(ctx context.Context, householdID, occurrenceID, perso
 		chore, err := q.GetChore(ctx, dbq.GetChoreParams{HouseholdID: householdID, ID: occ.ChoreID})
 		if err != nil {
 			return fmt.Errorf("get chore: %w", err)
+		}
+		if chore.Mode == ModeShared && owner == nil {
+			people, err := q.ListPeopleForChore(ctx, dbq.ListPeopleForChoreParams{HouseholdID: householdID, ChoreID: chore.ID})
+			if err != nil {
+				return fmt.Errorf("chore people: %w", err)
+			}
+			if !slices.Contains(people, personID) {
+				return ErrNotYours
+			}
 		}
 
 		status := StatusApproved
@@ -440,6 +460,24 @@ func getPerson(ctx context.Context, q *dbq.Queries, householdID, id int64) (dbq.
 		return dbq.Person{}, ErrNotFound
 	}
 	return p, nil
+}
+
+func choreIsShared(ctx context.Context, q *dbq.Queries, householdID, choreID int64) (bool, error) {
+	c, err := q.GetChore(ctx, dbq.GetChoreParams{HouseholdID: householdID, ID: choreID})
+	if err != nil {
+		return false, notFound(err)
+	}
+	return c.Mode == ModeShared, nil
+}
+
+// IsShared reports whether an occurrence belongs to a shared chore.
+func (s *Service) IsShared(ctx context.Context, householdID, occurrenceID int64) bool {
+	occ, err := getOccurrence(ctx, s.st.Q, householdID, occurrenceID)
+	if err != nil {
+		return false
+	}
+	shared, _ := choreIsShared(ctx, s.st.Q, householdID, occ.ChoreID)
+	return shared
 }
 
 func getOccurrence(ctx context.Context, q *dbq.Queries, householdID, id int64) (dbq.ChoreOccurrence, error) {

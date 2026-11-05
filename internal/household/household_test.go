@@ -297,3 +297,64 @@ func TestTypedRewardEmojiAndPictureCards(t *testing.T) {
 		t.Fatalf("adult with picture cards = %d, %v", dad.PictureCards, err)
 	}
 }
+
+func TestArchiveLeavesSharedChores(t *testing.T) {
+	f := newFixture(t)
+	ctx := t.Context()
+	alfie, isla, freddie := f.add("Alfie", KindChild), f.add("Isla", KindChild), f.add("Freddie", KindChild)
+
+	shared := func(title string, people ...int64) dbq.Chore {
+		t.Helper()
+		c, err := f.st.Q.CreateChore(ctx, dbq.CreateChoreParams{
+			HouseholdID: f.hh, Title: title, Mode: "shared", StartsOn: "2026-11-02", CreatedAt: 1, UpdatedAt: 1,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, p := range people {
+			if err := f.st.Q.AddChorePerson(ctx, dbq.AddChorePersonParams{HouseholdID: f.hh, ChoreID: c.ID, PersonID: p}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, err := f.st.Q.InsertOccurrence(ctx, dbq.InsertOccurrenceParams{HouseholdID: f.hh, ChoreID: c.ID, DueOn: "2026-11-02"}); err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	three := shared("Feed the cat", alfie.ID, isla.ID, freddie.ID)
+	two := shared("Tidy the den", alfie.ID, isla.ID)
+
+	// Shared chores don't block archiving Alfie; he's taken out of both.
+	if err := f.svc.ArchivePerson(ctx, f.hh, f.mum.ID, alfie.ID); err != nil {
+		t.Fatalf("archive Alfie: %v", err)
+	}
+	if got, _ := f.st.Q.ListPeopleForChore(ctx, dbq.ListPeopleForChoreParams{HouseholdID: f.hh, ChoreID: three.ID}); len(got) != 2 {
+		t.Errorf("three-person chore now has %v", got)
+	}
+	c, _ := f.st.Q.GetChore(ctx, dbq.GetChoreParams{HouseholdID: f.hh, ID: three.ID})
+	if c.Mode != "shared" {
+		t.Errorf("three-person chore mode = %q", c.Mode)
+	}
+
+	// The two-person one is Isla's now, today's occurrence included.
+	c, _ = f.st.Q.GetChore(ctx, dbq.GetChoreParams{HouseholdID: f.hh, ID: two.ID})
+	if c.Mode != "assigned" || c.AssigneeID == nil || *c.AssigneeID != isla.ID {
+		t.Errorf("two-person chore = %+v, want assigned to Isla", c)
+	}
+	if got, _ := f.st.Q.ListPeopleForChore(ctx, dbq.ListPeopleForChoreParams{HouseholdID: f.hh, ChoreID: two.ID}); len(got) != 0 {
+		t.Errorf("assigned chore still has people %v", got)
+	}
+	rows, err := f.st.Q.ListBoard(ctx, dbq.ListBoardParams{HouseholdID: f.hh, FromDate: "2026-11-02", ToDate: "2026-11-02"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range rows {
+		if r.ChoreID == two.ID && (r.AssigneeID == nil || *r.AssigneeID != isla.ID) {
+			t.Errorf("occurrence assignee = %v, want Isla", r.AssigneeID)
+		}
+	}
+	// Now it's assigned, it blocks archiving Isla like any other.
+	if err := f.svc.ArchivePerson(ctx, f.hh, f.mum.ID, isla.ID); !errors.Is(err, ErrHasAssignedChores) {
+		t.Errorf("archive Isla = %v, want ErrHasAssignedChores", err)
+	}
+}

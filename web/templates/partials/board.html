@@ -80,7 +80,8 @@
   </button>
   {{else}}
   <button class="chore__main" type="button" hx-disabled-elt="this"
-          hx-post="/board/occurrences/{{.OccurrenceID}}/complete" hx-target="#board" hx-swap="outerHTML">
+          hx-post="/board/occurrences/{{.OccurrenceID}}/complete" hx-target="#board" hx-swap="outerHTML"
+          {{- if .Shared}} hx-vals='{"person": "{{.For}}"}'{{end}}>
     <span class="chore__check" aria-hidden="true"></span>
     {{with $e}}<span class="chore__emoji" aria-hidden="true">{{.}}</span>{{end}}
     <span class="chore__text">
@@ -111,6 +112,7 @@
   {{- if .Overdue}}<span class="tag tag--late">Overdue · {{shortDate .DueOn}}</span>{{end}}
   {{- if .LastChance}}<span class="tag tag--last">Last chance</span>{{else if .Flex}}<span class="tag tag--flex">{{.Flex}}</span>{{end}}
   {{- if .Claimed}}<span class="tag">Claimed</span>{{end}}
+  {{- with .With}}<span class="chore__with" role="img" aria-label="Shared with {{names .}}">{{range .}}{{template "avatar" (avatar . "xs")}}{{end}}</span>{{end}}
   {{- with .DueTime}}<span>by {{.}}</span>{{end}}
   {{- with worth .Points .Pence}}<span class="chip">{{.}}</span>{{end -}}
 </span>

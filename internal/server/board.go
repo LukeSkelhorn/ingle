@@ -144,6 +144,9 @@ func (s *Server) handleComplete(w http.ResponseWriter, r *http.Request) {
 		Message: "Nice one, " + s.personName(r, *person) + "!",
 		Undo:    "/board/completions/" + itoa(c.ID) + "/undo",
 	}
+	if s.Chores.IsShared(r.Context(), s.HouseholdID, id) {
+		t.Message += " Done for everyone."
+	}
 	if c.Status == chores.StatusPending {
 		t.Message = "Done! A grown-up will check it."
 	}

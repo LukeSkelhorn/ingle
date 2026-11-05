@@ -227,7 +227,8 @@ func (s *Service) UpdatePerson(ctx context.Context, householdID, actorID, id int
 
 // ArchivePerson hides a person from the board, keeping their history. It
 // fails while they have assigned chores, or if they are the last adult who
-// can sign in.
+// can sign in. They're taken out of any shared chores; one left with a
+// single person becomes that person's assigned chore.
 func (s *Service) ArchivePerson(ctx context.Context, householdID, actorID, id int64) error {
 	now := s.now()
 	return s.st.WithTx(ctx, func(q *dbq.Queries) error {
@@ -251,6 +252,9 @@ func (s *Service) ArchivePerson(ctx context.Context, householdID, actorID, id in
 			}
 		}
 		at := now.Unix()
+		if err := leaveSharedChores(ctx, q, householdID, id, at); err != nil {
+			return err
+		}
 		if err := q.ArchivePerson(ctx, dbq.ArchivePersonParams{ArchivedAt: &at, HouseholdID: householdID, ID: id}); err != nil {
 			return fmt.Errorf("archive person: %w", err)
 		}
@@ -590,4 +594,33 @@ func notFound(err error) error {
 		return ErrNotFound
 	}
 	return err
+}
+
+// leaveSharedChores takes personID out of every shared chore. A shared chore
+// down to one person becomes theirs: assigned, with its not-yet-started
+// occurrences given to them.
+func leaveSharedChores(ctx context.Context, q *dbq.Queries, householdID, personID, at int64) error {
+	if err := q.RemovePersonFromSharedChores(ctx, dbq.RemovePersonFromSharedChoresParams{HouseholdID: householdID, PersonID: personID}); err != nil {
+		return fmt.Errorf("leave shared chores: %w", err)
+	}
+	solo, err := q.ListSharedChoresWithOnePerson(ctx, householdID)
+	if err != nil {
+		return fmt.Errorf("shared chores: %w", err)
+	}
+	for _, c := range solo {
+		if err := q.MakeChoreAssigned(ctx, dbq.MakeChoreAssignedParams{
+			PersonID: &c.PersonID, UpdatedAt: at, HouseholdID: householdID, ID: c.ChoreID,
+		}); err != nil {
+			return fmt.Errorf("assign chore: %w", err)
+		}
+		if err := q.AssignOpenOccurrences(ctx, dbq.AssignOpenOccurrencesParams{
+			PersonID: &c.PersonID, HouseholdID: householdID, ChoreID: c.ChoreID,
+		}); err != nil {
+			return fmt.Errorf("assign occurrences: %w", err)
+		}
+		if err := q.DeleteChorePeople(ctx, dbq.DeleteChorePeopleParams{HouseholdID: householdID, ChoreID: c.ChoreID}); err != nil {
+			return fmt.Errorf("clear chore people: %w", err)
+		}
+	}
+	return nil
 }

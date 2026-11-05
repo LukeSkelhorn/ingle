@@ -67,7 +67,13 @@ type Card struct {
 	// Thu"); LastChance marks the last of several days.
 	Flex       string
 	LastChance bool
-	SortOn     string // the day it sorts with: today, or an overdue due date
+	// Shared chores: For is whose column this copy is in (the person a tap
+	// completes it as), With the other chosen people. Done shared chores
+	// show only under whoever did them.
+	Shared bool
+	For    int64
+	With   []dbq.Person
+	SortOn string // the day it sorts with: today, or an overdue due date
 }
 
 // FallbackEmoji leads a picture card for a chore with no emoji and nothing
@@ -141,6 +147,14 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 		}
 	}
 	loc := s.loc(ctx, householdID)
+	shared, err := s.sharedPeople(ctx, householdID)
+	if err != nil {
+		return Board{}, err
+	}
+	byPerson := make(map[int64]dbq.Person, len(people))
+	for _, p := range people {
+		byPerson[p.ID] = p
+	}
 
 	b := Board{Day: today, People: people}
 	cols := make(map[int64]*Column, len(people))
@@ -189,6 +203,7 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 			Points:       r.Points,
 			Pence:        r.Pence,
 			Pool:         r.Mode == ModePool,
+			Shared:       r.Mode == ModeShared,
 			Overdue:      r.DueOn < today && !done,
 			Done:         done,
 			SortOn:       min(r.DueOn, today),
@@ -212,6 +227,26 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 		if owner == nil && done {
 			// An unclaimed pool chore someone just did: show it under them.
 			owner = &comp.PersonID
+		}
+		if owner == nil && card.Shared {
+			// Not done yet: in each chosen person's column, as theirs to do.
+			ids := shared[r.ChoreID]
+			for _, id := range ids {
+				col := cols[id]
+				if col == nil {
+					continue
+				}
+				c := card
+				c.For = id
+				for _, other := range ids {
+					if p, ok := byPerson[other]; ok && other != id {
+						c.With = append(c.With, p)
+					}
+				}
+				col.Cards = append(col.Cards, c)
+				col.TotalToday++
+			}
+			continue
 		}
 		if owner == nil {
 			b.Pool = append(b.Pool, card)
@@ -303,4 +338,22 @@ func availableFrom(r dbq.ListBoardRow) string {
 		return *r.AvailableFrom
 	}
 	return r.DueOn
+}
+
+// SharedPeople maps each active shared chore to its chosen, active people,
+// in board order.
+func (s *Service) SharedPeople(ctx context.Context, householdID int64) (map[int64][]int64, error) {
+	return s.sharedPeople(ctx, householdID)
+}
+
+func (s *Service) sharedPeople(ctx context.Context, householdID int64) (map[int64][]int64, error) {
+	rows, err := s.st.Q.ListChorePeople(ctx, householdID)
+	if err != nil {
+		return nil, fmt.Errorf("chore people: %w", err)
+	}
+	out := map[int64][]int64{}
+	for _, r := range rows {
+		out[r.ChoreID] = append(out[r.ChoreID], r.PersonID)
+	}
+	return out, nil
 }

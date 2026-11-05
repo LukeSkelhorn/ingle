@@ -51,3 +51,13 @@ WHERE chore_occurrences.household_id = sqlc.arg(household_id)
   AND chore_occurrences.due_on >= sqlc.arg(from_date)
   AND chore_occurrences.status = 'open' AND chore_occurrences.claimed_by IS NULL
   AND NOT EXISTS (SELECT 1 FROM completions c WHERE c.occurrence_id = chore_occurrences.id);
+
+-- name: AssignOpenOccurrences :exec
+-- Gives a chore's not-yet-started occurrences to person_id (a shared chore
+-- that's down to one person becomes theirs).
+UPDATE chore_occurrences
+SET assignee_id = sqlc.arg(person_id)
+WHERE chore_occurrences.household_id = sqlc.arg(household_id)
+  AND chore_occurrences.chore_id = sqlc.arg(chore_id)
+  AND chore_occurrences.status = 'open' AND chore_occurrences.claimed_by IS NULL
+  AND NOT EXISTS (SELECT 1 FROM completions c WHERE c.occurrence_id = chore_occurrences.id);

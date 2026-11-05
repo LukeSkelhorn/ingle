@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -18,8 +19,9 @@ type Input struct {
 	Title            string
 	Emoji            string // a single emoji, or "" for none
 	Description      string
-	Mode             string // ModeAssigned or ModePool
-	AssigneeID       *int64 // required for ModeAssigned, ignored for ModePool
+	Mode             string  // ModeAssigned or ModePool
+	AssigneeID       *int64  // required for ModeAssigned, ignored otherwise
+	PeopleIDs        []int64 // ModeShared: who it's for (two or more)
 	Repeat           Recurrence
 	DayMode          string  // DayEach or DayAny; "" means DayEach
 	StartsOn         string  // YYYY-MM-DD
@@ -62,6 +64,9 @@ func (s *Service) CreateChore(ctx context.Context, householdID, actorID int64, i
 		if c, err = setDayMode(ctx, q, c, p.DayMode); err != nil {
 			return err
 		}
+		if err := setPeople(ctx, q, c, p.PeopleIDs); err != nil {
+			return err
+		}
 		if err := s.refresh(ctx, q, c, nil, boardDay); err != nil {
 			return err
 		}
@@ -98,6 +103,9 @@ func (s *Service) UpdateChore(ctx context.Context, householdID, actorID, id int6
 			return fmt.Errorf("update chore: %w", err)
 		}
 		if c, err = setDayMode(ctx, q, c, p.DayMode); err != nil {
+			return err
+		}
+		if err := setPeople(ctx, q, c, p.PeopleIDs); err != nil {
 			return err
 		}
 		if err := s.refresh(ctx, q, c, &old, boardDay); err != nil {
@@ -145,6 +153,27 @@ func setDayMode(ctx context.Context, q *dbq.Queries, c dbq.Chore, mode string) (
 	return c, nil
 }
 
+// setPeople replaces who a shared chore is for; other chores have nobody.
+func setPeople(ctx context.Context, q *dbq.Queries, c dbq.Chore, people []int64) error {
+	if err := q.DeleteChorePeople(ctx, dbq.DeleteChorePeopleParams{HouseholdID: c.HouseholdID, ChoreID: c.ID}); err != nil {
+		return fmt.Errorf("clear chore people: %w", err)
+	}
+	if c.Mode != ModeShared {
+		return nil
+	}
+	for _, id := range people {
+		if err := q.AddChorePerson(ctx, dbq.AddChorePersonParams{HouseholdID: c.HouseholdID, ChoreID: c.ID, PersonID: id}); err != nil {
+			return fmt.Errorf("add chore person: %w", err)
+		}
+	}
+	return nil
+}
+
+// ChorePeople returns who a shared chore is for (active people only).
+func (s *Service) ChorePeople(ctx context.Context, householdID, choreID int64) ([]int64, error) {
+	return s.st.Q.ListPeopleForChore(ctx, dbq.ListPeopleForChoreParams{HouseholdID: householdID, ChoreID: choreID})
+}
+
 // refresh replaces c's not-yet-started occurrences and re-materialises the
 // window from boardDay. old is the chore before an edit (nil on create).
 func (s *Service) refresh(ctx context.Context, q *dbq.Queries, c dbq.Chore, old *dbq.Chore, boardDay time.Time) error {
@@ -176,6 +205,7 @@ type validated struct {
 	Title, Emoji, Description, Mode, StartsOn string
 	DayMode                                   string
 	AssigneeID                                *int64
+	PeopleIDs                                 []int64
 	Rrule, DueTime                            *string
 	Points, Pence, RequiresApproval           int64
 }
@@ -214,8 +244,24 @@ func (s *Service) validate(ctx context.Context, q *dbq.Queries, householdID int6
 			out.AssigneeID = &p.ID
 		}
 	case ModePool:
+	case ModeShared:
+		// Distinct, active people. One is just an assigned chore.
+		for _, id := range in.PeopleIDs {
+			if slices.Contains(out.PeopleIDs, id) {
+				continue
+			}
+			if p, err := getPerson(ctx, q, householdID, id); err == nil {
+				out.PeopleIDs = append(out.PeopleIDs, p.ID)
+			}
+		}
+		switch len(out.PeopleIDs) {
+		case 0:
+			errs.Add("people_ids", "Choose at least two people.")
+		case 1:
+			out.Mode, out.AssigneeID, out.PeopleIDs = ModeAssigned, &out.PeopleIDs[0], nil
+		}
 	default:
-		errs.Add("mode", "Choose assigned or shared pool.")
+		errs.Add("mode", "Choose who does it.")
 	}
 	rule, err := in.Repeat.RRule()
 	if err != nil {

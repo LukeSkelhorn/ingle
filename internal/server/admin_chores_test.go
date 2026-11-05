@@ -176,3 +176,48 @@ func TestChoreFormDayMode(t *testing.T) {
 	expectRedirect(t, phone.post("/admin/chores", chore), "/admin/chores")
 	expect(t, phone.get("/admin/chores"), http.StatusOK, "Weekly: Tue or Thu", "Once on a weekday")
 }
+
+func TestChoreFormShared(t *testing.T) {
+	h := newHarness(t)
+	h.setUp()
+	phone := h.phone()
+	for _, n := range []string{"Alfie", "Isla"} {
+		expectPersonCreated(t, phone.post("/admin/people", url.Values{"name": {n}, "kind": {"child"}, "colour": {"#46A758"}, "avatar_mode": {"none"}}))
+	}
+	alfie, isla := h.person("Alfie"), h.person("Isla")
+
+	expect(t, phone.get("/admin/chores/new"), http.StatusOK,
+		`name="mode" value="shared"`, "Any of these people", `data-show-when="mode=shared"`,
+		`type="checkbox" name="people_ids" value="`+itoa(isla.ID)+`"`)
+
+	chore := url.Values{
+		"title": {"Feed the cat"}, "mode": {"shared"}, "people_ids": {itoa(alfie.ID), itoa(isla.ID)},
+		"repeat": {"daily"}, "starts_on": {"2026-07-01"}, "suggest_offered": {"1"},
+	}
+	expectRedirect(t, phone.post("/admin/chores", chore), "/admin/chores")
+	cat := h.chore("Feed the cat")
+	if cat.Mode != chores.ModeShared {
+		t.Fatalf("mode = %q", cat.Mode)
+	}
+	expect(t, phone.get("/admin/chores/"+itoa(cat.ID)), http.StatusOK,
+		`name="mode" value="shared" checked`,
+		`name="people_ids" value="`+itoa(alfie.ID)+`" checked`, `name="people_ids" value="`+itoa(isla.ID)+`" checked`)
+
+	// Nobody ticked.
+	chore.Del("people_ids")
+	chore.Set("title", "Nobody's")
+	expect(t, phone.post("/admin/chores", chore), http.StatusUnprocessableEntity, "Choose at least two people.")
+
+	expectRedirect(t, phone.post("/admin/chores", url.Values{
+		"title": {"Hoover"}, "mode": {"pool"}, "repeat": {"daily"}, "starts_on": {"2026-07-01"}, "suggest_offered": {"1"},
+	}), "/admin/chores")
+
+	// The list says who; Isla's chores include it; Up for grabs doesn't.
+	expect(t, phone.get("/admin/chores"), http.StatusOK, "Alfie or Isla", `class="avatar-stack"`)
+	r := phone.get("/admin/chores?person=" + itoa(isla.ID))
+	expect(t, r, http.StatusOK, "Feed the cat", "Chores · 1 for Isla")
+	r = phone.get("/admin/chores?person=pool")
+	if strings.Contains(r.body, "Feed the cat") || !strings.Contains(r.body, "Hoover") {
+		t.Error("Up for grabs list wrong: want Hoover only")
+	}
+}

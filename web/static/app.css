@@ -234,6 +234,16 @@ button.chore__main:active { background: var(--line); }
 .tag { border-radius: 6px; padding: 0 6px; background: var(--line); color: var(--fg); }
 .tag--late { background: var(--danger); color: #fff; }
 .tag--wait { background: var(--ok-bg); color: var(--ok-fg); }
+/* Shared chores: the other chosen people, as a small overlapping stack. */
+.avatar-stack { display: inline-flex; flex: none; }
+.avatar-stack .avatar { box-shadow: 0 0 0 2px var(--surface); }
+.avatar-stack .avatar + .avatar { margin-left: -12px; }
+.chore__with { display: inline-flex; align-items: center; }
+.chore__with .avatar { box-shadow: 0 0 0 2px var(--surface); }
+.chore__with .avatar + .avatar { margin-left: -6px; }
+.cal-item__people { display: inline-flex; align-items: center; gap: 4px; }
+.cal-item__people .avatar + .avatar { margin-left: -6px; }
+.cal-item__people .avatar { box-shadow: 0 0 0 2px var(--surface); }
 /* Flexible-day chores: the days left, and the last of them. */
 .chore__meta .tag--flex { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--fg); }
 .chore__meta .tag--last { background: color-mix(in srgb, #e0a100 28%, transparent); color: var(--fg); font-weight: 600; }
@@ -404,6 +414,7 @@ input, select, textarea { -webkit-user-select: text; user-select: text; }
 .emoji-field__more { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 10px; }
 .field .emoji-field__more input.emoji-field__typed:not([type=radio]):not([type=checkbox]) { flex: none; width: 9em; font-size: 1.2rem; }
 .emoji-field__hint { margin: 0; }
+.field__hint { margin: 0 0 8px; font-size: 0.9rem; }
 .emoji-field__hint[hidden], .check[hidden] { display: none; }
 .emoji-field__suggest span { font-size: 1.3rem; vertical-align: -0.1em; }
 .emoji input:checked + span { border-color: var(--accent); background: var(--bg); }

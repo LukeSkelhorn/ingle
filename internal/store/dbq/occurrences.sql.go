@@ -9,6 +9,28 @@ import (
 	"context"
 )
 
+const assignOpenOccurrences = `-- name: AssignOpenOccurrences :exec
+UPDATE chore_occurrences
+SET assignee_id = ?1
+WHERE chore_occurrences.household_id = ?2
+  AND chore_occurrences.chore_id = ?3
+  AND chore_occurrences.status = 'open' AND chore_occurrences.claimed_by IS NULL
+  AND NOT EXISTS (SELECT 1 FROM completions c WHERE c.occurrence_id = chore_occurrences.id)
+`
+
+type AssignOpenOccurrencesParams struct {
+	PersonID    *int64 `json:"person_id"`
+	HouseholdID int64  `json:"household_id"`
+	ChoreID     int64  `json:"chore_id"`
+}
+
+// Gives a chore's not-yet-started occurrences to person_id (a shared chore
+// that's down to one person becomes theirs).
+func (q *Queries) AssignOpenOccurrences(ctx context.Context, arg AssignOpenOccurrencesParams) error {
+	_, err := q.db.ExecContext(ctx, assignOpenOccurrences, arg.PersonID, arg.HouseholdID, arg.ChoreID)
+	return err
+}
+
 const claimOccurrence = `-- name: ClaimOccurrence :execrows
 UPDATE chore_occurrences
 SET claimed_by = ?1, claimed_at = ?2, status = 'claimed'

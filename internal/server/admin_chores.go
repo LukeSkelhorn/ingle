@@ -20,6 +20,7 @@ import (
 type choreRow struct {
 	Chore    dbq.Chore
 	Assignee *dbq.Person
+	People   []dbq.Person // a shared chore's chosen people
 	Schedule string
 }
 
@@ -159,15 +160,30 @@ func (s *Server) handleChores(w http.ResponseWriter, r *http.Request) {
 	if id, err := strconv.ParseInt(page.Q.Person, 10, 64); err == nil {
 		page.Person = byID[id]
 	}
+	shared, err := s.Chores.SharedPeople(ctx, s.HouseholdID)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
 	page.Rows = make([]choreRow, 0, len(list))
 	for _, c := range list {
 		row := choreRow{Chore: c, Schedule: describeSchedule(chores.ParseRecurrence(c.Rrule), c.DayMode, c.StartsOn)}
 		if c.AssigneeID != nil {
 			row.Assignee = byID[*c.AssigneeID]
 		}
+		for _, id := range shared[c.ID] {
+			if p := byID[id]; p != nil {
+				row.People = append(row.People, *p)
+			}
+		}
+		// A person's chores include the shared ones they're chosen for; Up
+		// for grabs is only the chores anyone can claim.
+		mine := func(id int64) bool {
+			return (c.AssigneeID != nil && *c.AssigneeID == id) || slices.Contains(shared[c.ID], id)
+		}
 		switch {
-		case page.Pool && c.AssigneeID != nil,
-			page.Person != nil && (c.AssigneeID == nil || *c.AssigneeID != page.Person.ID):
+		case page.Pool && c.Mode != chores.ModePool,
+			page.Person != nil && !mine(page.Person.ID):
 			continue
 		}
 		page.Rows = append(page.Rows, row)
@@ -207,6 +223,7 @@ type choreForm struct {
 	Description      string
 	Mode             string
 	AssigneeID       int64
+	PeopleIDs        []int64 // a shared chore's chosen people
 	Repeat           string
 	Days             []time.Weekday
 	DayMode          string // chores.DayEach or chores.DayAny
@@ -224,6 +241,9 @@ type choreForm struct {
 	WeekOrder []time.Weekday
 	MonthDays []int
 }
+
+// HasPerson is used by the shared chore's people checkboxes.
+func (f choreForm) HasPerson(id int64) bool { return slices.Contains(f.PeopleIDs, id) }
 
 // HasDay is used by the template's day checkboxes.
 func (f choreForm) HasDay(d time.Weekday) bool { return slices.Contains(f.Days, d) }
@@ -261,6 +281,11 @@ func (s *Server) choreFormFor(r *http.Request, c dbq.Chore) (choreForm, error) {
 	f.Emoji.Value = c.Emoji
 	if c.AssigneeID != nil {
 		f.AssigneeID = *c.AssigneeID
+	}
+	if c.Mode == chores.ModeShared {
+		if f.PeopleIDs, err = s.Chores.ChorePeople(r.Context(), s.HouseholdID, c.ID); err != nil {
+			return f, err
+		}
 	}
 	f.Repeat, f.Days, f.Custom, f.DayMode = rec.Kind, rec.Days, rec.Raw, c.DayMode
 	if rec.Kind == chores.RepeatMonthly {
@@ -366,6 +391,12 @@ func (s *Server) readChoreForm(w http.ResponseWriter, r *http.Request, f *choreF
 		f.MonthDay = n
 	}
 	f.Back = choreBack(fm.str("back"), f.People)
+	f.PeopleIDs = nil
+	for _, v := range r.Form["people_ids"] {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
+			f.PeopleIDs = append(f.PeopleIDs, n)
+		}
+	}
 	f.AssigneeID = 0
 	if id := fm.optID("assignee_id"); id != nil {
 		f.AssigneeID = *id
@@ -381,6 +412,9 @@ func (s *Server) readChoreForm(w http.ResponseWriter, r *http.Request, f *choreF
 		DayMode:  f.DayMode,
 		StartsOn: f.StartsOn, DueTime: fm.optStr("due_time"),
 		Points: f.Points, Pence: pence, RequiresApproval: f.RequiresApproval,
+	}
+	if f.Mode == chores.ModeShared {
+		in.PeopleIDs = f.PeopleIDs
 	}
 	if f.Mode == chores.ModeAssigned && f.AssigneeID != 0 {
 		id := f.AssigneeID
