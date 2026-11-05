@@ -116,6 +116,32 @@
       // events, so refresh once.
       es.addEventListener("open", function () { if (connected) refresh(); connected = true; });
     }
+    // A goal just reached celebrates once on each display. Seen keys are
+    // kept in this browser; without storage we skip it rather than repeat
+    // it on every refresh.
+    var CELEBRATED = "domus.celebrated";
+    function celebrate() {
+      var goals = document.querySelectorAll("#board [data-celebrate]");
+      if (!goals.length) return;
+      var seen;
+      try { seen = JSON.parse(localStorage.getItem(CELEBRATED) || "[]"); } catch (err) { return; }
+      if (!Array.isArray(seen)) seen = [];
+      var fresh = false;
+      goals.forEach(function (g) {
+        var key = g.dataset.celebrate;
+        if (seen.indexOf(key) !== -1) return;
+        seen.push(key);
+        fresh = true;
+        g.classList.add("goal--celebrate");
+        setTimeout(function () { g.classList.remove("goal--celebrate"); }, 2400);
+      });
+      if (!fresh) return;
+      try { localStorage.setItem(CELEBRATED, JSON.stringify(seen.slice(-50))); } catch (err) { /* celebrated anyway */ }
+    }
+    // Any swap may bring a fresh #board (a tap's response or a refresh).
+    document.addEventListener("htmx:afterSettle", celebrate);
+    celebrate();
+
     // The iPad waking from sleep may have missed events too.
     document.addEventListener("visibilitychange", function () { if (!document.hidden) refresh(); });
   })();

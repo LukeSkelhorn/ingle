@@ -93,8 +93,10 @@ func TestLockedDisplayShowsNothingPersonal(t *testing.T) {
 	if r := wall.do(req); r.status != http.StatusLocked || r.header.Get("HX-Redirect") != "/" {
 		t.Errorf("htmx /board while locked = %d %q", r.status, r.header.Get("HX-Redirect"))
 	}
-	if r := wall.post("/board/occurrences/1/complete", nil); r.status != http.StatusLocked {
-		t.Errorf("complete while locked = %d", r.status)
+	for _, p := range []string{"/board/occurrences/1/complete", "/board/people/1/goal", "/board/people/1/goal/clear"} {
+		if r := wall.post(p, nil); r.status != http.StatusLocked {
+			t.Errorf("POST %s while locked = %d", p, r.status)
+		}
 	}
 	expect(t, wall.get("/clock?big=1"), http.StatusOK, "saver__time")
 	expect(t, wall.get("/screensaver/photos"), http.StatusOK)

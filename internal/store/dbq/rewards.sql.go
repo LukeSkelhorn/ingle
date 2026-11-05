@@ -67,14 +67,15 @@ func (q *Queries) CreateRedemption(ctx context.Context, arg CreateRedemptionPara
 }
 
 const createReward = `-- name: CreateReward :one
-INSERT INTO rewards (household_id, title, description, cost_points, cost_pence, created_at)
-VALUES (?, ?, ?, ?, ?, ?)
-RETURNING id, household_id, title, description, cost_points, cost_pence, archived_at, created_at
+INSERT INTO rewards (household_id, title, emoji, description, cost_points, cost_pence, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?)
+RETURNING id, household_id, title, description, cost_points, cost_pence, archived_at, created_at, emoji
 `
 
 type CreateRewardParams struct {
 	HouseholdID int64  `json:"household_id"`
 	Title       string `json:"title"`
+	Emoji       string `json:"emoji"`
 	Description string `json:"description"`
 	CostPoints  int64  `json:"cost_points"`
 	CostPence   int64  `json:"cost_pence"`
@@ -85,6 +86,7 @@ func (q *Queries) CreateReward(ctx context.Context, arg CreateRewardParams) (Rew
 	row := q.db.QueryRowContext(ctx, createReward,
 		arg.HouseholdID,
 		arg.Title,
+		arg.Emoji,
 		arg.Description,
 		arg.CostPoints,
 		arg.CostPence,
@@ -100,6 +102,7 @@ func (q *Queries) CreateReward(ctx context.Context, arg CreateRewardParams) (Rew
 		&i.CostPence,
 		&i.ArchivedAt,
 		&i.CreatedAt,
+		&i.Emoji,
 	)
 	return i, err
 }
@@ -135,7 +138,7 @@ const getRedemptionDetail = `-- name: GetRedemptionDetail :one
 SELECT
     d.id, d.reward_id, d.person_id, d.points, d.pence, d.status, d.requested_at,
     p.name AS person_name, p.colour AS person_colour, p.avatar AS person_avatar,
-    r.title
+    r.title, r.emoji
 FROM redemptions d
 JOIN people p ON p.id = d.person_id
 JOIN rewards r ON r.id = d.reward_id
@@ -159,6 +162,7 @@ type GetRedemptionDetailRow struct {
 	PersonColour string  `json:"person_colour"`
 	PersonAvatar *string `json:"person_avatar"`
 	Title        string  `json:"title"`
+	Emoji        string  `json:"emoji"`
 }
 
 func (q *Queries) GetRedemptionDetail(ctx context.Context, arg GetRedemptionDetailParams) (GetRedemptionDetailRow, error) {
@@ -176,12 +180,13 @@ func (q *Queries) GetRedemptionDetail(ctx context.Context, arg GetRedemptionDeta
 		&i.PersonColour,
 		&i.PersonAvatar,
 		&i.Title,
+		&i.Emoji,
 	)
 	return i, err
 }
 
 const getReward = `-- name: GetReward :one
-SELECT id, household_id, title, description, cost_points, cost_pence, archived_at, created_at FROM rewards WHERE household_id = ? AND id = ?
+SELECT id, household_id, title, description, cost_points, cost_pence, archived_at, created_at, emoji FROM rewards WHERE household_id = ? AND id = ?
 `
 
 type GetRewardParams struct {
@@ -201,6 +206,7 @@ func (q *Queries) GetReward(ctx context.Context, arg GetRewardParams) (Reward, e
 		&i.CostPence,
 		&i.ArchivedAt,
 		&i.CreatedAt,
+		&i.Emoji,
 	)
 	return i, err
 }
@@ -280,7 +286,7 @@ func (q *Queries) HeldForPerson(ctx context.Context, arg HeldForPersonParams) (H
 }
 
 const listArchivedRewards = `-- name: ListArchivedRewards :many
-SELECT id, household_id, title, description, cost_points, cost_pence, archived_at, created_at FROM rewards
+SELECT id, household_id, title, description, cost_points, cost_pence, archived_at, created_at, emoji FROM rewards
 WHERE household_id = ? AND archived_at IS NOT NULL
 ORDER BY title
 `
@@ -303,6 +309,66 @@ func (q *Queries) ListArchivedRewards(ctx context.Context, householdID int64) ([
 			&i.CostPence,
 			&i.ArchivedAt,
 			&i.CreatedAt,
+			&i.Emoji,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGoals = `-- name: ListGoals :many
+SELECT
+    p.id AS person_id, CAST(p.goal_set_at AS INTEGER) AS set_at,
+    r.id, r.title, r.emoji, r.cost_points, r.cost_pence,
+    CAST(EXISTS (
+        SELECT 1 FROM redemptions d
+        WHERE d.household_id = p.household_id AND d.person_id = p.id
+          AND d.reward_id = r.id AND d.status = 'pending'
+    ) AS INTEGER) AS waiting
+FROM people p
+JOIN rewards r ON r.id = p.goal_reward_id AND r.household_id = p.household_id
+WHERE p.household_id = ? AND p.archived_at IS NULL AND r.archived_at IS NULL
+`
+
+type ListGoalsRow struct {
+	PersonID   int64  `json:"person_id"`
+	SetAt      int64  `json:"set_at"`
+	ID         int64  `json:"id"`
+	Title      string `json:"title"`
+	Emoji      string `json:"emoji"`
+	CostPoints int64  `json:"cost_points"`
+	CostPence  int64  `json:"cost_pence"`
+	Waiting    int64  `json:"waiting"`
+}
+
+// What each active person is saving for (never an archived reward), and
+// whether they've already asked for it.
+func (q *Queries) ListGoals(ctx context.Context, householdID int64) ([]ListGoalsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listGoals, householdID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListGoalsRow{}
+	for rows.Next() {
+		var i ListGoalsRow
+		if err := rows.Scan(
+			&i.PersonID,
+			&i.SetAt,
+			&i.ID,
+			&i.Title,
+			&i.Emoji,
+			&i.CostPoints,
+			&i.CostPence,
+			&i.Waiting,
 		); err != nil {
 			return nil, err
 		}
@@ -321,7 +387,7 @@ const listPendingRedemptionDetails = `-- name: ListPendingRedemptionDetails :man
 SELECT
     d.id, d.reward_id, d.person_id, d.points, d.pence, d.status, d.requested_at,
     p.name AS person_name, p.colour AS person_colour, p.avatar AS person_avatar,
-    r.title
+    r.title, r.emoji
 FROM redemptions d
 JOIN people p ON p.id = d.person_id
 JOIN rewards r ON r.id = d.reward_id
@@ -341,6 +407,7 @@ type ListPendingRedemptionDetailsRow struct {
 	PersonColour string  `json:"person_colour"`
 	PersonAvatar *string `json:"person_avatar"`
 	Title        string  `json:"title"`
+	Emoji        string  `json:"emoji"`
 }
 
 // Waiting claims with who and what, oldest first.
@@ -365,6 +432,7 @@ func (q *Queries) ListPendingRedemptionDetails(ctx context.Context, householdID 
 			&i.PersonColour,
 			&i.PersonAvatar,
 			&i.Title,
+			&i.Emoji,
 		); err != nil {
 			return nil, err
 		}
@@ -420,7 +488,7 @@ func (q *Queries) ListPendingRedemptions(ctx context.Context, householdID int64)
 }
 
 const listRewards = `-- name: ListRewards :many
-SELECT id, household_id, title, description, cost_points, cost_pence, archived_at, created_at FROM rewards
+SELECT id, household_id, title, description, cost_points, cost_pence, archived_at, created_at, emoji FROM rewards
 WHERE household_id = ? AND archived_at IS NULL
 ORDER BY cost_points, cost_pence, title
 `
@@ -443,6 +511,7 @@ func (q *Queries) ListRewards(ctx context.Context, householdID int64) ([]Reward,
 			&i.CostPence,
 			&i.ArchivedAt,
 			&i.CreatedAt,
+			&i.Emoji,
 		); err != nil {
 			return nil, err
 		}
@@ -502,13 +571,14 @@ func (q *Queries) UnarchiveReward(ctx context.Context, arg UnarchiveRewardParams
 }
 
 const updateReward = `-- name: UpdateReward :one
-UPDATE rewards SET title = ?, description = ?, cost_points = ?, cost_pence = ?
+UPDATE rewards SET title = ?, emoji = ?, description = ?, cost_points = ?, cost_pence = ?
 WHERE household_id = ? AND id = ?
-RETURNING id, household_id, title, description, cost_points, cost_pence, archived_at, created_at
+RETURNING id, household_id, title, description, cost_points, cost_pence, archived_at, created_at, emoji
 `
 
 type UpdateRewardParams struct {
 	Title       string `json:"title"`
+	Emoji       string `json:"emoji"`
 	Description string `json:"description"`
 	CostPoints  int64  `json:"cost_points"`
 	CostPence   int64  `json:"cost_pence"`
@@ -519,6 +589,7 @@ type UpdateRewardParams struct {
 func (q *Queries) UpdateReward(ctx context.Context, arg UpdateRewardParams) (Reward, error) {
 	row := q.db.QueryRowContext(ctx, updateReward,
 		arg.Title,
+		arg.Emoji,
 		arg.Description,
 		arg.CostPoints,
 		arg.CostPence,
@@ -535,6 +606,7 @@ func (q *Queries) UpdateReward(ctx context.Context, arg UpdateRewardParams) (Rew
 		&i.CostPence,
 		&i.ArchivedAt,
 		&i.CreatedAt,
+		&i.Emoji,
 	)
 	return i, err
 }

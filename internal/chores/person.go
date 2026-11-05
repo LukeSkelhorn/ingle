@@ -16,6 +16,7 @@ type Summary struct {
 	Points, Pence         int64 // available: every ledger entry, less what's held
 	HeldPoints, HeldPence int64 // held by waiting reward claims
 	Waiting               int   // how many claims are waiting
+	Goal                  *Goal // what they're saving for, if anything
 	WeekPoints            int64 // earned since weekStart, net of reversals
 	WeekPence             int64
 }
@@ -45,9 +46,20 @@ func (s *Service) PersonSummary(ctx context.Context, householdID, personID int64
 	if err != nil {
 		return Summary{}, fmt.Errorf("earned this week: %w", err)
 	}
-	return Summary{
+	goals, err := q.ListGoals(ctx, householdID)
+	if err != nil {
+		return Summary{}, fmt.Errorf("goals: %w", err)
+	}
+	sum := Summary{
 		Person: p, Points: bal.Points - held.Points, Pence: bal.Pence - held.Pence,
 		HeldPoints: held.Points, HeldPence: held.Pence, Waiting: int(held.Waiting),
 		WeekPoints: week.Points, WeekPence: week.Pence,
-	}, nil
+	}
+	for _, g := range goals {
+		if g.PersonID == personID {
+			goal := newGoal(g, sum.Points, sum.Pence)
+			sum.Goal = &goal
+		}
+	}
+	return sum, nil
 }

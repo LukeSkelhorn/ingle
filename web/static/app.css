@@ -152,6 +152,41 @@ h2 { margin: 0 0 8px; font-size: 1.15rem; }
 .progress { display: flex; flex-direction: column; gap: 4px; font-size: 0.9rem; color: var(--muted); }
 .progress__bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
 .progress__bar > span { display: block; height: 100%; background: var(--person); transition: width 0.4s ease; }
+/* What a person is saving for, in their column and on their sheet. */
+.goal {
+  position: relative; display: flex; flex-direction: column; gap: 6px; padding: 10px 12px;
+  border-radius: 12px; border: 1px solid var(--line); background: var(--bg);
+}
+.goal--reached { border: 2px solid var(--person); }
+.goal--waiting { border-style: dashed; }
+.goal__line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; margin: 0; }
+.goal__emoji { font-size: 1.4rem; line-height: 1; }
+.goal__title { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.goal__have { margin-left: auto; color: var(--muted); font-size: 0.9rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.goal__bar { height: 10px; border-radius: 5px; background: var(--line); overflow: hidden; }
+.goal__bar > span { display: block; height: 100%; background: var(--person); transition: width 0.6s ease; }
+.goal__status { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0; }
+.goal__ready { font-weight: 600; }
+.goal__claim { flex: none; min-height: 44px; padding: 8px 18px; touch-action: manipulation; }
+/* Reaching a goal: the emoji bounces, the bar shines and a few sparkles fly. */
+.goal--celebrate .goal__emoji { display: inline-block; animation: goal-bounce 0.7s ease 3; }
+.goal--celebrate .goal__bar > span {
+  background: linear-gradient(90deg, var(--person) 30%, rgb(255 255 255 / 0.7) 50%, var(--person) 70%) var(--person);
+  background-size: 300% 100%; animation: goal-shine 1.2s linear 2;
+}
+.goal--celebrate::before, .goal--celebrate::after {
+  content: "🎉"; position: absolute; top: -6px; font-size: 1.5rem; pointer-events: none;
+  animation: goal-pop 1.4s ease-out forwards;
+}
+.goal--celebrate::before { left: 10%; }
+.goal--celebrate::after { content: "✨"; right: 10%; animation-delay: 0.25s; opacity: 0; }
+@keyframes goal-bounce { 0%, 100% { transform: none; } 40% { transform: translateY(-8px) scale(1.25); } }
+@keyframes goal-shine { from { background-position: 100% 0; } to { background-position: -50% 0; } }
+@keyframes goal-pop {
+  0% { transform: translateY(8px) scale(0.6); opacity: 0; }
+  25% { opacity: 1; }
+  100% { transform: translateY(-34px) scale(1.2); opacity: 0; }
+}
 
 .chores { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .chores--pool { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
@@ -227,6 +262,10 @@ button.chore__main:active { background: var(--line); }
 .reward--affordable { border: 2px solid var(--person); }
 .reward__action { flex: none; min-height: 44px; padding: 8px 16px; touch-action: manipulation; }
 .reward--waiting { border-style: dashed; }
+.reward__side { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.reward__side .reward__action { min-height: 40px; padding: 6px 12px; font-size: 0.9rem; }
+.reward__goal { flex: none; }
+.person__stop { margin-top: 8px; min-height: 40px; font-size: 0.9rem; }
 /* An adult taps a waiting claim to check it. */
 .reward__open {
   display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 44px;
@@ -250,7 +289,10 @@ form.picker:not(:has(input:checked)) [hx-post] { opacity: 0.4; pointer-events: n
 
 @media (prefers-reduced-motion: reduce) {
   .chore--just .chore__check, .toast { animation: none; }
-  .progress__bar > span { transition: none; }
+  .progress__bar > span, .goal__bar > span { transition: none; }
+  .goal--celebrate .goal__emoji, .goal--celebrate .goal__bar > span { animation: none; }
+  .goal--celebrate::before, .goal--celebrate::after { content: none; }
+  .goal--celebrate { box-shadow: 0 0 0 4px color-mix(in srgb, var(--person) 35%, transparent); }
 }
 @media (max-width: 600px) {
   .board { padding: 14px 16px 88px; }
@@ -325,6 +367,7 @@ input, select, textarea { -webkit-user-select: text; user-select: text; }
   display: grid; place-items: center; width: 48px; height: 48px; font-size: 1.6rem;
   border-radius: 12px; border: 2px solid transparent; cursor: pointer;
 }
+.emoji .emoji__none { width: auto; padding: 0 12px; font-size: 0.9rem; border-color: var(--line); }
 .emoji input:checked + span { border-color: var(--accent); background: var(--bg); }
 .emoji input:focus-visible + span { outline: 2px solid var(--accent); }
 .day { position: relative; }

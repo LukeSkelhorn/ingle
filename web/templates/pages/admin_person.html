@@ -43,6 +43,16 @@
       <small class="muted">JPEG, PNG or GIF up to 8 MB. It's cropped to a square.</small>
       {{template "err" index .Errors "photo"}}
     </label>
+    {{if .Data.Rewards}}
+    <label class="field">
+      <span>Saving for</span>
+      <select name="goal">
+        <option value=""{{if not .Data.Goal}} selected{{end}}>Nothing</option>
+        {{range .Data.Rewards}}<option value="{{.ID}}"{{if eq .ID $.Data.Goal}} selected{{end}}>{{with .Emoji}}{{.}} {{end}}{{.Title}}{{with worth .CostPoints .CostPence}} ({{.}}){{end}}</option>{{end}}
+      </select>
+      <small class="muted">Shown on their column with how close they are. They can change it on the board too.</small>
+    </label>
+    {{end}}
     <label class="field field--short">
       <span>Order on the board</span>
       <input type="number" name="sort_order" value="{{.Data.SortOrder}}" min="0" max="999" inputmode="numeric">

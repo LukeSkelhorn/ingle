@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/lukeskelhorn/domus/internal/avatar"
+	"github.com/lukeskelhorn/domus/internal/chores"
 	"github.com/lukeskelhorn/domus/internal/household"
 	"github.com/lukeskelhorn/domus/internal/store/dbq"
 	"github.com/lukeskelhorn/domus/internal/valid"
@@ -53,6 +54,9 @@ type personForm struct {
 
 	Colours []string
 	Emojis  []string
+
+	Goal    int64        // the reward they're saving for, 0 for none
+	Rewards []dbq.Reward // to pick a goal from (editing only)
 }
 
 func newPersonForm() personForm {
@@ -73,6 +77,9 @@ func (s *Server) personFormFor(r *http.Request, p dbq.Person) personForm {
 		f.Email = *p.Email
 	}
 	f.IsMe = actor(r).Person.ID == p.ID
+	if p.GoalRewardID != nil {
+		f.Goal = *p.GoalRewardID
+	}
 	f.AvatarMode, f.Emoji = "none", ""
 	switch kind, val := avatar.Parse(p.Avatar); kind {
 	case avatar.Emoji:
@@ -87,6 +94,14 @@ func (s *Server) renderPerson(w http.ResponseWriter, r *http.Request, status int
 	title := "Add someone"
 	if f.ID != 0 {
 		title = f.Name
+	}
+	if f.ID != 0 && !f.Archived {
+		rewards, err := s.Household.Rewards(r.Context(), s.HouseholdID)
+		if err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+		f.Rewards = rewards
 	}
 	v := s.view(r, title, f)
 	v.Nav = "people"
@@ -236,7 +251,36 @@ func (s *Server) handlePersonUpdate(w http.ResponseWriter, r *http.Request) {
 	if kind, name := avatar.Parse(cur.Avatar); kind == avatar.Photo && (p.Avatar == nil || *p.Avatar != *cur.Avatar) {
 		_ = s.Avatars.Remove(name)
 	}
-	s.renderPerson(w, r, http.StatusOK, s.personFormFor(r, p), nil, "Saved.")
+	flash := "Saved."
+	if r.Form.Has("goal") {
+		if p, err = s.savePersonGoal(r, p, newForm(r).optID("goal")); errors.Is(err, chores.ErrNotFound) {
+			flash = "Saved, but that reward has gone, so their goal wasn't changed."
+		} else if err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+	}
+	s.renderPerson(w, r, http.StatusOK, s.personFormFor(r, p), nil, flash)
+}
+
+// savePersonGoal sets or clears what p is saving for, if it changed: saving
+// the same goal again would restart its celebration.
+func (s *Server) savePersonGoal(r *http.Request, p dbq.Person, goal *int64) (dbq.Person, error) {
+	ctx := r.Context()
+	switch {
+	case goal == nil && p.GoalRewardID == nil,
+		goal != nil && p.GoalRewardID != nil && *goal == *p.GoalRewardID:
+		return p, nil
+	case goal == nil:
+		if err := s.Chores.ClearGoal(ctx, s.HouseholdID, p.ID); err != nil {
+			return p, err
+		}
+	default:
+		if _, err := s.Chores.SetGoal(ctx, s.HouseholdID, p.ID, *goal); err != nil {
+			return p, err
+		}
+	}
+	return s.Household.Person(ctx, s.HouseholdID, p.ID)
 }
 
 func (s *Server) handlePersonArchive(w http.ResponseWriter, r *http.Request) {

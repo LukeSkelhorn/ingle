@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/mail"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -54,9 +55,18 @@ type PersonInput struct {
 // RewardInput is the editable part of a reward.
 type RewardInput struct {
 	Title       string
+	Emoji       string // one of RewardEmojis, or "" for none
 	Description string
 	CostPoints  int64
 	CostPence   int64
+}
+
+// RewardEmojis is the picker for rewards: treats, outings and things to
+// save up for, easy to spot on the board.
+var RewardEmojis = []string{
+	"🧱", "🎮", "📚", "🧸", "🎨", "⚽", "🚲", "🛹", "🎧", "📱",
+	"🍕", "🍦", "🍫", "🍩", "🍿", "🎬", "🎟️", "🎡", "🏊", "🎳",
+	"🌙", "🛌", "📺", "🎁", "💷", "⭐", "👑", "🦄", "🦖", "🚀",
 }
 
 // SetupInput is the first-run form.
@@ -400,7 +410,7 @@ func (s *Service) CreateReward(ctx context.Context, householdID, actorID int64, 
 	err := s.st.WithTx(ctx, func(q *dbq.Queries) error {
 		var err error
 		r, err = q.CreateReward(ctx, dbq.CreateRewardParams{
-			HouseholdID: householdID, Title: strings.TrimSpace(in.Title), Description: strings.TrimSpace(in.Description),
+			HouseholdID: householdID, Title: strings.TrimSpace(in.Title), Emoji: in.Emoji, Description: strings.TrimSpace(in.Description),
 			CostPoints: in.CostPoints, CostPence: in.CostPence, CreatedAt: now.Unix(),
 		})
 		if err != nil {
@@ -421,7 +431,7 @@ func (s *Service) UpdateReward(ctx context.Context, householdID, actorID, id int
 	err := s.st.WithTx(ctx, func(q *dbq.Queries) error {
 		var err error
 		r, err = q.UpdateReward(ctx, dbq.UpdateRewardParams{
-			Title: strings.TrimSpace(in.Title), Description: strings.TrimSpace(in.Description),
+			Title: strings.TrimSpace(in.Title), Emoji: in.Emoji, Description: strings.TrimSpace(in.Description),
 			CostPoints: in.CostPoints, CostPence: in.CostPence, HouseholdID: householdID, ID: id,
 		})
 		if err != nil {
@@ -432,7 +442,8 @@ func (s *Service) UpdateReward(ctx context.Context, householdID, actorID, id int
 	return r, err
 }
 
-// ArchiveReward hides a reward.
+// ArchiveReward hides a reward. Anyone saving for it loses the goal; it
+// doesn't come back if the reward is restored.
 func (s *Service) ArchiveReward(ctx context.Context, householdID, actorID, id int64) error {
 	now := s.now()
 	return s.st.WithTx(ctx, func(q *dbq.Queries) error {
@@ -442,6 +453,9 @@ func (s *Service) ArchiveReward(ctx context.Context, householdID, actorID, id in
 		at := now.Unix()
 		if err := q.ArchiveReward(ctx, dbq.ArchiveRewardParams{ArchivedAt: &at, HouseholdID: householdID, ID: id}); err != nil {
 			return fmt.Errorf("archive reward: %w", err)
+		}
+		if err := q.ClearGoalsForReward(ctx, dbq.ClearGoalsForRewardParams{HouseholdID: householdID, GoalRewardID: &id}); err != nil {
+			return fmt.Errorf("clear goals: %w", err)
 		}
 		return log(ctx, q, householdID, actorID, "reward.archived", "reward", id, now)
 	})
@@ -493,6 +507,9 @@ func validateReward(in RewardInput) valid.Errors {
 	errs := valid.Errors{}
 	if n := len([]rune(strings.TrimSpace(in.Title))); n < 1 || n > 100 {
 		errs.Add("title", "Enter a title (up to 100 characters).")
+	}
+	if in.Emoji != "" && !slices.Contains(RewardEmojis, in.Emoji) {
+		errs.Add("emoji", "Choose an emoji from the list.")
 	}
 	if len(in.Description) > 1000 {
 		errs.Add("description", "Keep it under 1,000 characters.")

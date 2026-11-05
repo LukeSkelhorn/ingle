@@ -131,6 +131,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /board/completions/{id}/reject", viewer(s.boardReview(s.Chores.Reject, "Not counted. It's back on the board.")))
 	mux.Handle("POST /board/completions/{id}/reverse", viewer(s.boardReview(s.Chores.Reverse, "Reversed. Points taken back.")))
 	mux.Handle("POST /board/rewards/{id}/claim", viewer(s.handleRewardClaim))
+	mux.Handle("POST /board/people/{id}/goal", viewer(s.handleGoalSet))
+	mux.Handle("POST /board/people/{id}/goal/clear", viewer(s.handleGoalClear))
 	mux.Handle("GET /board/redemptions/{id}/review", viewer(s.handleClaimReviewSheet))
 	mux.Handle("POST /board/redemptions/{id}/approve", viewer(s.boardReview(s.Chores.ApproveRedemption, "Approved. Enjoy! 🎁")))
 	mux.Handle("POST /board/redemptions/{id}/decline", viewer(s.boardReview(s.Chores.DeclineRedemption, "Declined. Points are free again.")))

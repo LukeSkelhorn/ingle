@@ -34,15 +34,18 @@ func (s *Server) handleRewards(w http.ResponseWriter, r *http.Request) {
 type rewardForm struct {
 	ID          int64
 	Title       string
+	Emoji       string
 	Description string
 	CostPoints  int64
 	Money       string
 	Archived    bool
+
+	Emojis []string
 }
 
 func rewardFormFor(rw dbq.Reward) rewardForm {
 	return rewardForm{
-		ID: rw.ID, Title: rw.Title, Description: rw.Description,
+		ID: rw.ID, Title: rw.Title, Emoji: rw.Emoji, Description: rw.Description,
 		CostPoints: rw.CostPoints, Money: formatMoneyInput(rw.CostPence), Archived: rw.ArchivedAt != nil,
 	}
 }
@@ -52,6 +55,7 @@ func (s *Server) renderReward(w http.ResponseWriter, r *http.Request, status int
 	if f.ID != 0 {
 		title = f.Title
 	}
+	f.Emojis = household.RewardEmojis
 	v := s.view(r, title, f)
 	v.Nav = "rewards"
 	v.Errors = errs
@@ -95,6 +99,7 @@ func (s *Server) readRewardForm(w http.ResponseWriter, r *http.Request, f *rewar
 	}
 	fm := newForm(r)
 	f.Title = fm.str("title")
+	f.Emoji = fm.str("emoji")
 	f.Description = fm.str("description")
 	f.CostPoints = fm.int("cost_points", "Enter a whole number of points.")
 	f.Money = fm.str("money")
@@ -102,7 +107,7 @@ func (s *Server) readRewardForm(w http.ResponseWriter, r *http.Request, f *rewar
 	if err != nil {
 		fm.errs.Add("money", "Enter an amount like 2.50.")
 	}
-	return household.RewardInput{Title: f.Title, Description: f.Description, CostPoints: f.CostPoints, CostPence: pence}, fm, nil
+	return household.RewardInput{Title: f.Title, Emoji: f.Emoji, Description: f.Description, CostPoints: f.CostPoints, CostPence: pence}, fm, nil
 }
 
 func (s *Server) handleRewardCreate(w http.ResponseWriter, r *http.Request) {

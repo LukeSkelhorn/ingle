@@ -50,6 +50,12 @@
 <fieldset class="field">
   <legend>Emoji</legend>
   <div class="emojis">
+    {{if .None}}
+    <label class="emoji">
+      <input type="radio" name="emoji" value=""{{if eq "" $.Selected}} checked{{end}}>
+      <span class="emoji__none">None</span>
+    </label>
+    {{end}}
     {{range .Emojis}}
     <label class="emoji">
       <input type="radio" name="emoji" value="{{.}}"{{if eq . $.Selected}} checked{{end}}>

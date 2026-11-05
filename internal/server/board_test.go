@@ -110,7 +110,7 @@ func TestBoardStrangerSeesNothing(t *testing.T) {
 	for _, p := range []string{"/board", "/board/events", "/board/occurrences/1/pick", "/board/people/1", "/board/redemptions/1/review"} {
 		expectRedirect(t, stranger.get(p), "/signin")
 	}
-	for _, p := range []string{"/board/occurrences/1/complete", "/board/rewards/1/claim", "/board/redemptions/1/approve", "/board/redemptions/1/cancel"} {
+	for _, p := range []string{"/board/occurrences/1/complete", "/board/rewards/1/claim", "/board/redemptions/1/approve", "/board/redemptions/1/cancel", "/board/people/1/goal", "/board/people/1/goal/clear"} {
 		expectRedirect(t, stranger.post(p, nil), "/signin")
 	}
 }
@@ -609,6 +609,137 @@ func TestAdminRewardClaims(t *testing.T) {
 	}
 	expect(t, wall.get("/board/people/"+itoa(alfie.ID)), http.StatusOK, "40 pts")
 	expect(t, phone.get("/admin"), http.StatusOK, "declined a claim for Screen time")
+}
+
+func TestSaveForAReward(t *testing.T) {
+	h, wall, phone := boardHousehold(t)
+	alfie := h.person("Alfie")
+	sheet := "/board/people/" + itoa(alfie.ID)
+	goal := sheet + "/goal"
+	expectRedirect(t, phone.post("/admin/rewards", url.Values{"title": {"Lego set"}, "emoji": {"🧱"}, "cost_points": {"100"}}), "/admin/rewards")
+	expectRedirect(t, phone.post("/admin/rewards", url.Values{"title": {"Sweets"}, "cost_points": {"10"}}), "/admin/rewards")
+	expect(t, phone.post("/admin/rewards", url.Values{"title": {"Odd"}, "emoji": {"x"}, "cost_points": {"1"}}), http.StatusUnprocessableEntity, "Choose an emoji")
+	var lego, sweets int64
+	for _, rw := range must(h.st.Q.ListRewards(t.Context(), h.hh)) {
+		switch rw.Title {
+		case "Lego set":
+			lego = rw.ID
+		case "Sweets":
+			sweets = rw.ID
+		}
+	}
+	if _, err := h.st.Q.InsertLedgerEntry(t.Context(), dbq.InsertLedgerEntryParams{
+		HouseholdID: h.hh, PersonID: alfie.ID, Points: 60, Kind: "completion", CreatedAt: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Only rewards they can't afford yet offer saving.
+	r := wall.get(sheet)
+	expect(t, r, http.StatusOK, "🧱", `hx-post="`+goal+`" hx-vals='{"reward": "`+itoa(lego)+`"}'`)
+	if strings.Contains(r.body, `"reward": "`+itoa(sweets)+`"`) {
+		t.Error("affordable Sweets offers Save for this")
+	}
+
+	r = wall.post(goal, url.Values{"reward": {itoa(lego)}})
+	expect(t, r, http.StatusOK, `id="board"`)
+	if tt := toastOf(t, r); tt.Message != "Saving for Lego set 🧱" {
+		t.Errorf("toast = %+v", tt)
+	}
+	col := section(r.body, "Alfie")
+	for _, want := range []string{`class="goal"`, "🧱", "Lego set", "60 of 100 pts", "width: 60%"} {
+		if !strings.Contains(col, want) {
+			t.Errorf("column missing %q", want)
+		}
+	}
+	if strings.Contains(col, "data-celebrate") {
+		t.Error("celebrating before the goal is reached")
+	}
+	expect(t, wall.get(sheet), http.StatusOK, "Saving for", "Stop saving", "Your goal")
+	expect(t, wall.post(goal, nil), http.StatusBadRequest)
+	expect(t, wall.post(goal, url.Values{"reward": {"9999"}}), http.StatusConflict)
+
+	// Reached: Claim on the column, and a key to celebrate once.
+	if _, err := h.st.Q.InsertLedgerEntry(t.Context(), dbq.InsertLedgerEntryParams{
+		HouseholdID: h.hh, PersonID: alfie.ID, Points: 40, Kind: "completion", CreatedAt: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	col = section(wall.get("/board").body, "Alfie")
+	setAt := *h.person("Alfie").GoalSetAt
+	for _, want := range []string{
+		"goal--reached", `data-celebrate="` + itoa(alfie.ID) + ":" + itoa(lego) + ":" + itoa(setAt) + `"`,
+		`hx-post="/board/rewards/` + itoa(lego) + `/claim"`, "saved enough!",
+	} {
+		if !strings.Contains(col, want) {
+			t.Errorf("reached column missing %q", want)
+		}
+	}
+
+	// Claimed: waiting. Approved: the goal is gone.
+	col = section(wall.post("/board/rewards/"+itoa(lego)+"/claim", url.Values{"person": {itoa(alfie.ID)}}).body, "Alfie")
+	if !strings.Contains(col, "goal--waiting") || strings.Contains(col, "data-celebrate") {
+		t.Errorf("claimed goal should wait without celebrating: %s", col)
+	}
+	pending := must(h.st.Q.ListPendingRedemptions(t.Context(), h.hh))
+	expect(t, phone.post("/admin/rewards/claims/"+itoa(pending[0].ID)+"/approve", nil), http.StatusOK)
+	if strings.Contains(section(wall.get("/board").body, "Alfie"), `class="goal`) {
+		t.Error("goal still shown after approval")
+	}
+
+	// Stop saving.
+	expect(t, wall.post(goal, url.Values{"reward": {itoa(sweets)}}), http.StatusOK, "Sweets")
+	r = wall.post(goal+"/clear", nil)
+	expect(t, r, http.StatusOK)
+	if tt := toastOf(t, r); tt.Message != "Goal removed" {
+		t.Errorf("toast = %+v", tt)
+	}
+	if h.person("Alfie").GoalRewardID != nil {
+		t.Error("goal not cleared")
+	}
+}
+
+func TestAdminPersonGoal(t *testing.T) {
+	h, _, phone := boardHousehold(t)
+	alfie := h.person("Alfie")
+	expectRedirect(t, phone.post("/admin/rewards", url.Values{"title": {"Lego set"}, "emoji": {"🧱"}, "cost_points": {"100"}}), "/admin/rewards")
+	lego := must(h.st.Q.ListRewards(t.Context(), h.hh))[0]
+	page := "/admin/people/" + itoa(alfie.ID)
+	expect(t, phone.get(page), http.StatusOK, "Saving for", `<option value="`+itoa(lego.ID)+`">🧱 Lego set (100 pts)</option>`)
+
+	form := url.Values{"name": {"Alfie"}, "kind": {"child"}, "colour": {"#46A758"}, "avatar_mode": {"emoji"}, "emoji": {"🦖"}, "sort_order": {"1"}}
+	form.Set("goal", itoa(lego.ID))
+	expect(t, phone.post(page, form), http.StatusOK, "Saved.", `<option value="`+itoa(lego.ID)+`" selected>`)
+	first := h.person("Alfie")
+	if first.GoalRewardID == nil || *first.GoalRewardID != lego.ID {
+		t.Fatalf("goal = %v", first.GoalRewardID)
+	}
+	// Saving again doesn't restart it.
+	h.advance(time.Hour)
+	expect(t, phone.post(page, form), http.StatusOK)
+	if again := h.person("Alfie"); *again.GoalSetAt != *first.GoalSetAt {
+		t.Error("re-saving the same goal reset it")
+	}
+	// A form without the field leaves it alone; an empty choice clears it.
+	form.Del("goal")
+	expect(t, phone.post(page, form), http.StatusOK)
+	if h.person("Alfie").GoalRewardID == nil {
+		t.Error("goal cleared by a form without it")
+	}
+	form.Set("goal", "")
+	expect(t, phone.post(page, form), http.StatusOK)
+	if h.person("Alfie").GoalRewardID != nil {
+		t.Error("goal not cleared")
+	}
+
+	// Archiving the reward clears goals quietly.
+	form.Set("goal", itoa(lego.ID))
+	expect(t, phone.post(page, form), http.StatusOK)
+	expectRedirect(t, phone.post("/admin/rewards/"+itoa(lego.ID)+"/archive", nil), "/admin/rewards")
+	if h.person("Alfie").GoalRewardID != nil {
+		t.Error("archived reward still a goal")
+	}
+	expect(t, phone.post(page, form), http.StatusOK, "that reward has gone")
 }
 
 func TestToastHeaderIsASCII(t *testing.T) {

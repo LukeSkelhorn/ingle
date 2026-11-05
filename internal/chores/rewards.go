@@ -23,6 +23,7 @@ type RedemptionDetail struct {
 	Pence       int64
 	Person      dbq.Person // ID, Name, Colour and Avatar only
 	Title       string     // the reward
+	Emoji       string     // the reward's, "" for none
 }
 
 // Pending reports whether the claim is waiting for an adult.
@@ -130,6 +131,10 @@ func (s *Service) approveTx(ctx context.Context, q *dbq.Queries, householdID, re
 	}); err != nil {
 		return fmt.Errorf("ledger: %w", err)
 	}
+	// Saving for it is done.
+	if err := q.ClearGoalIf(ctx, dbq.ClearGoalIfParams{HouseholdID: householdID, ID: d.PersonID, RewardID: &d.RewardID}); err != nil {
+		return fmt.Errorf("clear goal: %w", err)
+	}
 	// The child is the actor, so the feed reads "Alfie claimed Lego set".
 	return s.activity(ctx, q, householdID, d.PersonID, "reward.redeemed", d.ID)
 }
@@ -218,5 +223,100 @@ func redemptionDetail(r dbq.GetRedemptionDetailRow) RedemptionDetail {
 		Pence:       r.Pence,
 		Person:      dbq.Person{ID: r.PersonID, Name: r.PersonName, Colour: r.PersonColour, Avatar: r.PersonAvatar},
 		Title:       r.Title,
+		Emoji:       r.Emoji,
 	}
+}
+
+// DefaultGoalEmoji stands in for a reward without an emoji.
+const DefaultGoalEmoji = "🎯"
+
+// Goal is the reward a person is saving for and how close they are, from
+// what they can spend (their balance less waiting claims).
+type Goal struct {
+	RewardID              int64
+	Title                 string
+	RewardEmoji           string
+	CostPoints, CostPence int64
+	SetAt                 int64 // when they picked it
+	HavePoints, HavePence int64 // towards the cost: 0 to the cost
+	Percent               int   // the slower of points and money, 0 to 100
+	Reached               bool  // they can claim it now
+	Waiting               bool  // they've asked for it; a grown-up decides
+}
+
+// Emoji is the reward's emoji, or DefaultGoalEmoji.
+func (g Goal) Emoji() string {
+	if g.RewardEmoji == "" {
+		return DefaultGoalEmoji
+	}
+	return g.RewardEmoji
+}
+
+// newGoal works out progress towards row from what the person can spend.
+// For a reward that costs points and money, progress is the slower of the
+// two, so the bar only fills once both are covered. While a claim for it is
+// waiting the hold has already taken the cost, so it shows as full.
+func newGoal(row dbq.ListGoalsRow, points, pence int64) Goal {
+	g := Goal{
+		RewardID: row.ID, Title: row.Title, RewardEmoji: row.Emoji,
+		CostPoints: row.CostPoints, CostPence: row.CostPence, SetAt: row.SetAt,
+		Waiting: row.Waiting != 0,
+	}
+	if g.Waiting {
+		points, pence = g.CostPoints, g.CostPence
+	}
+	g.HavePoints = min(max(points, 0), g.CostPoints)
+	g.HavePence = min(max(pence, 0), g.CostPence)
+	g.Percent = 100
+	if g.CostPoints > 0 {
+		g.Percent = min(g.Percent, int(g.HavePoints*100/g.CostPoints))
+	}
+	if g.CostPence > 0 {
+		g.Percent = min(g.Percent, int(g.HavePence*100/g.CostPence))
+	}
+	g.Reached = !g.Waiting && g.Percent == 100
+	return g
+}
+
+// SetGoal has personID save for rewardID, replacing any goal they had.
+// Anyone at the board can do this. It returns ErrNotFound for an archived
+// person or reward, or one from another household.
+func (s *Service) SetGoal(ctx context.Context, householdID, personID, rewardID int64) (dbq.Reward, error) {
+	var reward dbq.Reward
+	err := s.st.WithTx(ctx, func(q *dbq.Queries) error {
+		if _, err := getPerson(ctx, q, householdID, personID); err != nil {
+			return err
+		}
+		var err error
+		reward, err = q.GetReward(ctx, dbq.GetRewardParams{HouseholdID: householdID, ID: rewardID})
+		if err != nil {
+			return notFound(err)
+		}
+		if reward.ArchivedAt != nil {
+			return ErrNotFound
+		}
+		now := s.now().Unix()
+		n, err := q.SetGoal(ctx, dbq.SetGoalParams{RewardID: &rewardID, SetAt: &now, HouseholdID: householdID, ID: personID})
+		if err != nil {
+			return fmt.Errorf("set goal: %w", err)
+		}
+		if n == 0 {
+			return ErrNotFound
+		}
+		return nil
+	})
+	return reward, err
+}
+
+// ClearGoal stops personID saving for anything.
+func (s *Service) ClearGoal(ctx context.Context, householdID, personID int64) error {
+	return s.st.WithTx(ctx, func(q *dbq.Queries) error {
+		if _, err := getPerson(ctx, q, householdID, personID); err != nil {
+			return err
+		}
+		if err := q.ClearGoal(ctx, dbq.ClearGoalParams{HouseholdID: householdID, ID: personID}); err != nil {
+			return fmt.Errorf("clear goal: %w", err)
+		}
+		return nil
+	})
 }

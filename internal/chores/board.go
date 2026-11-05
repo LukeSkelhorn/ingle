@@ -39,6 +39,7 @@ type Column struct {
 	Points     int64
 	Pence      int64
 	Waiting    int
+	Goal       *Goal // what they're saving for, if anything
 	DoneToday  int
 	TotalToday int
 	Cards      []Card
@@ -88,6 +89,10 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 	if err != nil {
 		return Board{}, fmt.Errorf("held: %w", err)
 	}
+	goals, err := q.ListGoals(ctx, householdID)
+	if err != nil {
+		return Board{}, fmt.Errorf("goals: %w", err)
+	}
 	rows, err := q.ListBoard(ctx, dbq.ListBoardParams{HouseholdID: householdID, FromDate: from, ToDate: today})
 	if err != nil {
 		return Board{}, fmt.Errorf("list board: %w", err)
@@ -127,6 +132,12 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 			c.Points -= h.Points
 			c.Pence -= h.Pence
 			c.Waiting = int(h.Waiting)
+		}
+	}
+	for _, g := range goals {
+		if c := cols[g.PersonID]; c != nil {
+			goal := newGoal(g, c.Points, c.Pence)
+			c.Goal = &goal
 		}
 	}
 

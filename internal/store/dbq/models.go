@@ -141,6 +141,8 @@ type Person struct {
 	Email        *string `json:"email"`
 	PasswordHash *string `json:"password_hash"`
 	PinLength    *int64  `json:"pin_length"`
+	GoalRewardID *int64  `json:"goal_reward_id"`
+	GoalSetAt    *int64  `json:"goal_set_at"`
 }
 
 type Photo struct {
@@ -175,6 +177,7 @@ type Reward struct {
 	CostPence   int64  `json:"cost_pence"`
 	ArchivedAt  *int64 `json:"archived_at"`
 	CreatedAt   int64  `json:"created_at"`
+	Emoji       string `json:"emoji"`
 }
 
 type Session struct {

@@ -431,6 +431,43 @@ func (s *Server) handleRewardClaim(w http.ResponseWriter, r *http.Request) {
 	s.boardDone(w, r, toast{Message: msg})
 }
 
+// handleGoalSet has a person save for a reward. Like completing a chore,
+// anyone at the board can do it.
+func (s *Server) handleGoalSet(w http.ResponseWriter, r *http.Request) {
+	id, _, ok := s.boardAction(w, r)
+	if !ok {
+		return
+	}
+	rewardID := newForm(r).optID("reward")
+	if rewardID == nil {
+		http.Error(w, "which reward?", http.StatusBadRequest)
+		return
+	}
+	rw, err := s.Chores.SetGoal(r.Context(), s.HouseholdID, id, *rewardID)
+	if err != nil {
+		s.boardError(w, r, err)
+		return
+	}
+	emoji := rw.Emoji
+	if emoji == "" {
+		emoji = chores.DefaultGoalEmoji
+	}
+	s.boardDone(w, r, toast{Message: "Saving for " + rw.Title + " " + emoji})
+}
+
+// handleGoalClear stops a person saving for anything.
+func (s *Server) handleGoalClear(w http.ResponseWriter, r *http.Request) {
+	id, _, ok := s.boardAction(w, r)
+	if !ok {
+		return
+	}
+	if err := s.Chores.ClearGoal(r.Context(), s.HouseholdID, id); err != nil {
+		s.boardError(w, r, err)
+		return
+	}
+	s.boardDone(w, r, toast{Message: "Goal removed"})
+}
+
 // claimReviewView is an adult's sheet for a waiting reward claim.
 type claimReviewView struct {
 	D chores.RedemptionDetail

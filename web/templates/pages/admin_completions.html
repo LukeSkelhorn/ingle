@@ -33,7 +33,7 @@
       {{range .Data.Claims}}
       <li class="list__row list__row--review">
         {{template "avatar" (avatar .Person "sm")}}
-        <span class="list__main"><strong>{{.Title}}</strong>
+        <span class="list__main"><strong>{{with .Emoji}}{{.}} {{end}}{{.Title}}</strong>
           <small class="muted">{{.Person.Name}} · {{when .RequestedAt}}{{with worth .Points .Pence}} · {{.}}{{end}}</small></span>
         <span class="list__actions">
           <form method="post" action="/admin/rewards/claims/{{.ID}}/decline"><button class="btn btn--ghost" type="submit">Decline</button></form>

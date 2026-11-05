@@ -239,3 +239,35 @@ func TestRewards(t *testing.T) {
 		t.Errorf("update missing reward: %v", err)
 	}
 }
+
+func TestRewardEmojiAndGoals(t *testing.T) {
+	f := newFixture(t)
+	ctx := t.Context()
+	if _, err := f.svc.CreateReward(ctx, f.hh, f.mum.ID, RewardInput{Title: "Lego", Emoji: "x", CostPoints: 1}); err == nil {
+		t.Error("emoji outside the picker accepted")
+	}
+	r, err := f.svc.CreateReward(ctx, f.hh, f.mum.ID, RewardInput{Title: "Lego", Emoji: "🧱", CostPoints: 100})
+	if err != nil || r.Emoji != "🧱" {
+		t.Fatalf("CreateReward = %+v, %v", r, err)
+	}
+	if r, err = f.svc.UpdateReward(ctx, f.hh, f.mum.ID, r.ID, RewardInput{Title: "Lego", CostPoints: 100}); err != nil || r.Emoji != "" {
+		t.Fatalf("UpdateReward = %+v, %v", r, err)
+	}
+
+	// Archiving a reward clears anyone saving for it; restoring doesn't
+	// bring the goal back.
+	kid := f.add("Alfie", KindChild)
+	at := int64(1)
+	if _, err := f.st.Q.SetGoal(ctx, dbq.SetGoalParams{RewardID: &r.ID, SetAt: &at, HouseholdID: f.hh, ID: kid.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.svc.ArchiveReward(ctx, f.hh, f.mum.ID, r.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.svc.RestoreReward(ctx, f.hh, f.mum.ID, r.ID); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := f.svc.Person(ctx, f.hh, kid.ID); p.GoalRewardID != nil || p.GoalSetAt != nil {
+		t.Errorf("goal after archive = %v, %v", p.GoalRewardID, p.GoalSetAt)
+	}
+}

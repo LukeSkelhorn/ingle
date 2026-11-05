@@ -19,7 +19,7 @@
     {{end}}
   </section>
   <div class="columns">
-    {{range .Columns}}
+    {{range $col := .Columns}}
     <section class="column" style="--person: {{.Person.Colour}}" aria-label="{{.Person.Name}}">
       {{/* Tapping the avatar or name opens their sheet: balance and rewards. */}}
       <h2 class="column__heading">
@@ -33,6 +33,7 @@
           </span>
         </button>
       </h2>
+      {{with .Goal}}{{template "goal" (dict "Goal" . "PersonID" $col.Person.ID)}}{{end}}
       {{if .TotalToday}}
       <div class="progress" role="img" aria-label="{{.DoneToday}} of {{.TotalToday}} done today">
         <div class="progress__bar"><span style="width: {{percent .DoneToday .TotalToday}}%"></span></div>
@@ -177,6 +178,12 @@
   <p class="person__balance">{{pts .Points}}{{if .Pence}} <span class="person__money">{{money .Pence}}</span>{{end}}
     {{- with worth .HeldPoints .HeldPence}} <span class="person__held">({{.}} held)</span>{{end}}</p>
   <p class="person__week">This week: {{with worth .WeekPoints .WeekPence}}{{.}}{{else}}nothing yet{{end}}</p>
+  {{with .Goal}}
+  <h3 class="person__sub">Saving for</h3>
+  {{template "goal" (dict "Goal" . "PersonID" $.Person.ID)}}
+  <button class="btn btn--ghost person__stop" type="button" hx-disabled-elt="this"
+          hx-post="/board/people/{{$.Person.ID}}/goal/clear" hx-target="#board" hx-swap="outerHTML">Stop saving</button>
+  {{end}}
   {{if .Waiting}}
   <h3 class="person__sub">Waiting for a grown-up</h3>
   <ul class="rewards" hx-target="#board" hx-swap="outerHTML">
@@ -186,14 +193,14 @@
       <button class="reward__open" type="button"
               hx-get="/board/redemptions/{{.ID}}/review" hx-target="#sheet-body" hx-swap="innerHTML">
         <span class="reward__text">
-          <span class="reward__title">{{.Title}}</span>
+          <span class="reward__title">{{with .Emoji}}<span aria-hidden="true">{{.}}</span> {{end}}{{.Title}}</span>
           {{with worth .Points .Pence}}<span class="chip">{{.}}</span>{{end}}
         </span>
         <span class="reward__status">Check ›</span>
       </button>
       {{else}}
       <span class="reward__text">
-        <span class="reward__title">{{.Title}}</span>
+        <span class="reward__title">{{with .Emoji}}<span aria-hidden="true">{{.}}</span> {{end}}{{.Title}}</span>
         {{with worth .Points .Pence}}<span class="chip">{{.}}</span>{{end}}
       </span>
       <button class="btn btn--ghost reward__action" type="button" hx-disabled-elt="this"
@@ -209,15 +216,20 @@
     {{range .Rewards}}
     <li class="reward{{if .Affordable}} reward--affordable{{end}}">
       <span class="reward__text">
-        <span class="reward__title">{{.Title}}</span>
+        <span class="reward__title">{{with .Emoji}}<span aria-hidden="true">{{.}}</span> {{end}}{{.Title}}</span>
         {{with worth .CostPoints .CostPence}}<span class="chip">{{.}}</span>{{end}}
       </span>
       {{if .Affordable}}<button class="btn btn--primary reward__action" type="button" hx-disabled-elt="this"
               hx-post="/board/rewards/{{.ID}}/claim" hx-vals='{"person": "{{$.Person.ID}}"}'>Claim</button>
-      {{else}}<span class="reward__need">
-        {{- if .NeedPoints}}{{pts .NeedPoints}} more{{end}}
-        {{- if and .NeedPoints .NeedPence}} · {{end}}
-        {{- if .NeedPence}}{{money .NeedPence}} more{{end -}}
+      {{else}}<span class="reward__side">
+        <span class="reward__need">
+          {{- if .NeedPoints}}{{pts .NeedPoints}} more{{end}}
+          {{- if and .NeedPoints .NeedPence}} · {{end}}
+          {{- if .NeedPence}}{{money .NeedPence}} more{{end -}}
+        </span>
+        {{if and $.Goal (eq $.Goal.RewardID .ID)}}<span class="tag reward__goal">Your goal</span>
+        {{else}}<button class="btn btn--ghost reward__action" type="button" hx-disabled-elt="this"
+                hx-post="/board/people/{{$.Person.ID}}/goal" hx-vals='{"reward": "{{.ID}}"}'>Save for this</button>{{end}}
       </span>{{end}}
     </li>
     {{end}}
@@ -236,7 +248,7 @@
 {{define "claim_review"}}
 {{with .D}}
 <div class="picker" hx-target="#board" hx-swap="outerHTML">
-  <h2 class="picker__title" tabindex="-1" autofocus>{{.Title}}</h2>
+  <h2 class="picker__title" tabindex="-1" autofocus>{{with .Emoji}}<span aria-hidden="true">{{.}}</span> {{end}}{{.Title}}</h2>
   <div class="review__who">
     {{template "avatar" (avatar .Person "md")}}
     <p>{{.Person.Name}} · asked {{when .RequestedAt}}{{with worth .Points .Pence}}<br><span class="chip">{{.}}</span>{{end}}</p>
@@ -252,3 +264,28 @@
 </div>
 {{end}}
 {{end}}
+
+{{/* What a person is saving for: dict "Goal" chores.Goal "PersonID" int64.
+     Once it's reached the page script celebrates it, once per display per
+     goal (data-celebrate is the key). */}}
+{{define "goal"}}{{$pid := .PersonID}}{{with .Goal}}
+<div class="goal{{if .Reached}} goal--reached{{end}}{{if .Waiting}} goal--waiting{{end}}"
+     hx-target="#board" hx-swap="outerHTML"
+     {{- if .Reached}} data-celebrate="{{$pid}}:{{.RewardID}}:{{.SetAt}}"{{end}}>
+  <p class="goal__line">
+    <span class="goal__emoji" aria-hidden="true">{{.Emoji}}</span>
+    <span class="goal__title">{{.Title}}</span>
+    <span class="goal__have">
+      {{- if .CostPoints}}{{.HavePoints}} of {{pts .CostPoints}}{{end}}
+      {{- if and .CostPoints .CostPence}} · {{end}}
+      {{- if .CostPence}}{{money .HavePence}} of {{money .CostPence}}{{end -}}
+    </span>
+  </p>
+  <div class="goal__bar" role="img" aria-label="Saving for {{.Title}}: {{.Percent}}%"><span style="width: {{.Percent}}%"></span></div>
+  {{if .Waiting}}<p class="goal__status"><span class="tag tag--wait">Waiting for a grown-up</span></p>
+  {{else if .Reached}}<p class="goal__status"><span class="goal__ready">You've saved enough!</span>
+    <button class="btn btn--primary goal__claim" type="button" hx-disabled-elt="this"
+            hx-post="/board/rewards/{{.RewardID}}/claim" hx-vals='{"person": "{{$pid}}"}'>Claim</button></p>
+  {{end}}
+</div>
+{{end}}{{end}}
