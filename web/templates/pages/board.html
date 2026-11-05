@@ -198,7 +198,9 @@
         b.setAttribute("aria-pressed", b.dataset.viewTo === view ? "true" : "false");
       });
       if (view === "calendar") {
-        if (!loaded) { loaded = true; load("/board/calendar"); }
+        // This display doesn't get its own board events, so re-fetch on
+        // the way in: a chore just ticked here shows on the calendar.
+        if (!loaded) { loaded = true; load("/board/calendar"); } else reload();
         resetIdle();
       } else {
         clearTimeout(idleTimer);

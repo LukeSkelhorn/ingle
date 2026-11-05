@@ -41,6 +41,9 @@ type CalChore struct {
 	DoneByID *int64 // who completed it, when Done
 	DoneAt   int64  // unix seconds, when Done
 	Pending  bool   // done, waiting for an adult
+	// Or names a flexible-day chore's days ("Tue or Thu"); it is shown on
+	// each of them until it's done. "" for everything else.
+	Or string
 }
 
 // Calendar returns the chores due on each local date in [from, to]
@@ -74,6 +77,11 @@ func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time
 	}
 	seen := make(map[key]bool, len(rows))
 	out := map[string][]CalChore{}
+	add := func(c CalChore) {
+		if c.Date >= from && c.Date <= to {
+			out[c.Date] = append(out[c.Date], c)
+		}
+	}
 	for _, r := range rows {
 		seen[key{r.ChoreID, r.DueOn}] = true
 		if r.Status == "skipped" {
@@ -87,13 +95,37 @@ func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time
 		if c.PersonID == nil {
 			c.PersonID = r.ClaimedBy
 		}
-		if comp, done := byOcc[r.ID]; done {
+		comp, done := byOcc[r.ID]
+		if done {
 			c.Status, c.DoneByID, c.DoneAt, c.Pending = CalDone, &comp.PersonID, comp.CompletedAt, comp.Status == StatusPending
 			if c.PersonID == nil {
 				c.PersonID = &comp.PersonID
 			}
 		}
-		out[r.DueOn] = append(out[r.DueOn], c)
+		if r.AvailableFrom == nil {
+			add(c)
+			continue
+		}
+
+		// A flexible-day chore: once done, it's on the day it was done; until
+		// then, on each of its days that hasn't passed (and on its last day,
+		// missed, once that has).
+		days := windowDays(r.Rrule, r.StartsOn, *r.AvailableFrom, r.DueOn, loc)
+		c.Or = DaysHint(days)
+		if done {
+			if d := time.Unix(comp.CompletedAt, 0).In(loc).Format(DateLayout); d >= *r.AvailableFrom && d <= r.DueOn {
+				c.Date = d
+			}
+			add(c)
+			continue
+		}
+		for _, d := range days {
+			if d < today && d != r.DueOn {
+				continue
+			}
+			c.Date, c.Status = d, statusOn(d, today)
+			add(c)
+		}
 	}
 
 	// Project the rest from today onwards.
@@ -112,6 +144,31 @@ func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time
 			return nil, fmt.Errorf("to: %w", err)
 		}
 		for _, ch := range chores {
+			if ch.DayMode == DayAny && ch.Rrule != nil {
+				// From the Monday, so a week seen from mid-week still names
+				// all its days.
+				ws, err := flexWindows(ch, mondayOf(first), last, loc)
+				if err != nil {
+					continue
+				}
+				for _, w := range ws {
+					if seen[key{ch.ID, w.Due()}] {
+						continue
+					}
+					or := DaysHint(w.Days)
+					for _, d := range w.Days {
+						if d < start {
+							continue
+						}
+						add(CalChore{
+							ChoreID: ch.ID, Date: d, Title: ch.Title, Emoji: ch.Emoji, DueTime: ch.DueTime,
+							Points: ch.Points, Pence: ch.Pence, Pool: ch.Mode == ModePool,
+							PersonID: ch.AssigneeID, Status: statusOn(d, today), Or: or,
+						})
+					}
+				}
+				continue
+			}
 			dates, err := occurrenceDates(ch, first, last, loc)
 			if err != nil {
 				continue // a broken rule shouldn't hide the whole calendar

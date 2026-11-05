@@ -74,6 +74,7 @@ type choreOpts struct {
 	points   int64
 	pence    int64
 	approval bool
+	anyDay   bool // a flexible-day chore
 }
 
 func (f *fixture) chore(title string, o choreOpts) dbq.Chore {
@@ -96,6 +97,11 @@ func (f *fixture) chore(title string, o choreOpts) dbq.Chore {
 	})
 	if err != nil {
 		f.t.Fatalf("CreateChore: %v", err)
+	}
+	if o.anyDay {
+		if c, err = f.st.Q.SetChoreDayMode(f.t.Context(), dbq.SetChoreDayModeParams{DayMode: DayAny, HouseholdID: f.hh, ID: c.ID}); err != nil {
+			f.t.Fatalf("SetChoreDayMode: %v", err)
+		}
 	}
 	return c
 }

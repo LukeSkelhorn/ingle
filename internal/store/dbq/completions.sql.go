@@ -237,7 +237,8 @@ SELECT c.id, c.occurrence_id, c.person_id, c.completed_at, c.status
 FROM completions c
 JOIN chore_occurrences o ON o.id = c.occurrence_id
 WHERE c.household_id = ?1
-  AND o.due_on >= ?2 AND o.due_on <= ?3
+  AND o.due_on >= ?2
+  AND (o.due_on <= ?3 OR o.available_from <= ?3)
   AND c.status <> 'rejected'
 `
 
@@ -256,7 +257,7 @@ type ListLiveCompletionsForRangeRow struct {
 }
 
 // The live (pending or approved) completion for each occurrence due in
-// [from_date, to_date], for the board.
+// [from_date, to_date] (or whose window overlaps it), for the board.
 func (q *Queries) ListLiveCompletionsForRange(ctx context.Context, arg ListLiveCompletionsForRangeParams) ([]ListLiveCompletionsForRangeRow, error) {
 	rows, err := q.db.QueryContext(ctx, listLiveCompletionsForRange, arg.HouseholdID, arg.FromDate, arg.ToDate)
 	if err != nil {

@@ -109,6 +109,7 @@
 {{define "chore_meta"}}
 <span class="chore__meta">
   {{- if .Overdue}}<span class="tag tag--late">Overdue · {{shortDate .DueOn}}</span>{{end}}
+  {{- if .LastChance}}<span class="tag tag--last">Last chance</span>{{else if .Flex}}<span class="tag tag--flex">{{.Flex}}</span>{{end}}
   {{- if .Claimed}}<span class="tag">Claimed</span>{{end}}
   {{- with .DueTime}}<span>by {{.}}</span>{{end}}
   {{- with worth .Points .Pence}}<span class="chip">{{.}}</span>{{end -}}

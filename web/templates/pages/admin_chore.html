@@ -62,6 +62,25 @@
       </div>
       {{template "err" index .Errors "days"}}
     </fieldset>
+    <fieldset class="field" data-show-when="repeat=weekly,fortnightly,weekdays">
+      <legend>Which days?</legend>
+      <div class="choice">
+        <label class="choice__item">
+          <input type="radio" name="day_mode" value="each"{{if ne .Data.DayMode "any"}} checked{{end}}>
+          <span><strong>Every day ticked</strong>
+            <small class="muted" data-show-when="repeat=weekly,fortnightly">Due on each ticked day.</small>
+            <small class="muted" data-show-when="repeat=weekdays">Due every weekday.</small></span>
+        </label>
+        <label class="choice__item">
+          <input type="radio" name="day_mode" value="any"{{if eq .Data.DayMode "any"}} checked{{end}}>
+          <span><strong>Any one of these days</strong>
+            <small class="muted" data-show-when="repeat=weekly">Due once a week, on whichever ticked day suits.</small>
+            <small class="muted" data-show-when="repeat=fortnightly">Due once a fortnight, on whichever ticked day suits.</small>
+            <small class="muted" data-show-when="repeat=weekdays">Due once, on any weekday.</small></span>
+        </label>
+      </div>
+      {{template "err" index .Errors "day_mode"}}
+    </fieldset>
     <label class="field field--short" data-show-when="repeat=monthly">
       <span>Day of the month</span>
       <select name="month_day">

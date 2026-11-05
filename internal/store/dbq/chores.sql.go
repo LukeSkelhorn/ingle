@@ -35,7 +35,7 @@ INSERT INTO chores (
     household_id, title, emoji, description, mode, assignee_id, rrule, starts_on,
     due_time, points, pence, requires_approval, created_at, updated_at
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-RETURNING id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at, emoji
+RETURNING id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at, emoji, day_mode
 `
 
 type CreateChoreParams struct {
@@ -90,12 +90,13 @@ func (q *Queries) CreateChore(ctx context.Context, arg CreateChoreParams) (Chore
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Emoji,
+		&i.DayMode,
 	)
 	return i, err
 }
 
 const getChore = `-- name: GetChore :one
-SELECT id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at, emoji FROM chores WHERE household_id = ? AND id = ?
+SELECT id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at, emoji, day_mode FROM chores WHERE household_id = ? AND id = ?
 `
 
 type GetChoreParams struct {
@@ -123,12 +124,13 @@ func (q *Queries) GetChore(ctx context.Context, arg GetChoreParams) (Chore, erro
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Emoji,
+		&i.DayMode,
 	)
 	return i, err
 }
 
 const listChores = `-- name: ListChores :many
-SELECT id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at, emoji FROM chores
+SELECT id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at, emoji, day_mode FROM chores
 WHERE household_id = ? AND archived_at IS NULL
 ORDER BY title
 `
@@ -159,6 +161,7 @@ func (q *Queries) ListChores(ctx context.Context, householdID int64) ([]Chore, e
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Emoji,
+			&i.DayMode,
 		); err != nil {
 			return nil, err
 		}
@@ -173,12 +176,48 @@ func (q *Queries) ListChores(ctx context.Context, householdID int64) ([]Chore, e
 	return items, nil
 }
 
+const setChoreDayMode = `-- name: SetChoreDayMode :one
+UPDATE chores SET day_mode = ? WHERE household_id = ? AND id = ?
+RETURNING id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at, emoji, day_mode
+`
+
+type SetChoreDayModeParams struct {
+	DayMode     string `json:"day_mode"`
+	HouseholdID int64  `json:"household_id"`
+	ID          int64  `json:"id"`
+}
+
+func (q *Queries) SetChoreDayMode(ctx context.Context, arg SetChoreDayModeParams) (Chore, error) {
+	row := q.db.QueryRowContext(ctx, setChoreDayMode, arg.DayMode, arg.HouseholdID, arg.ID)
+	var i Chore
+	err := row.Scan(
+		&i.ID,
+		&i.HouseholdID,
+		&i.Title,
+		&i.Description,
+		&i.Mode,
+		&i.AssigneeID,
+		&i.Rrule,
+		&i.StartsOn,
+		&i.DueTime,
+		&i.Points,
+		&i.Pence,
+		&i.RequiresApproval,
+		&i.ArchivedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Emoji,
+		&i.DayMode,
+	)
+	return i, err
+}
+
 const updateChore = `-- name: UpdateChore :one
 UPDATE chores SET
     title = ?, emoji = ?, description = ?, mode = ?, assignee_id = ?, rrule = ?, starts_on = ?,
     due_time = ?, points = ?, pence = ?, requires_approval = ?, updated_at = ?
 WHERE household_id = ? AND id = ?
-RETURNING id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at, emoji
+RETURNING id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at, emoji, day_mode
 `
 
 type UpdateChoreParams struct {
@@ -233,6 +272,7 @@ func (q *Queries) UpdateChore(ctx context.Context, arg UpdateChoreParams) (Chore
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Emoji,
+		&i.DayMode,
 	)
 	return i, err
 }

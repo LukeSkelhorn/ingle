@@ -21,6 +21,7 @@ type Input struct {
 	Mode             string // ModeAssigned or ModePool
 	AssigneeID       *int64 // required for ModeAssigned, ignored for ModePool
 	Repeat           Recurrence
+	DayMode          string  // DayEach or DayAny; "" means DayEach
 	StartsOn         string  // YYYY-MM-DD
 	DueTime          *string // HH:MM, optional
 	Points           int64
@@ -58,6 +59,9 @@ func (s *Service) CreateChore(ctx context.Context, householdID, actorID int64, i
 		if err != nil {
 			return fmt.Errorf("create chore: %w", err)
 		}
+		if c, err = setDayMode(ctx, q, c, p.DayMode); err != nil {
+			return err
+		}
 		if err := s.refresh(ctx, q, c, nil, boardDay); err != nil {
 			return err
 		}
@@ -93,6 +97,9 @@ func (s *Service) UpdateChore(ctx context.Context, householdID, actorID, id int6
 		if err != nil {
 			return fmt.Errorf("update chore: %w", err)
 		}
+		if c, err = setDayMode(ctx, q, c, p.DayMode); err != nil {
+			return err
+		}
 		if err := s.refresh(ctx, q, c, &old, boardDay); err != nil {
 			return err
 		}
@@ -126,6 +133,18 @@ func (s *Service) ArchiveChore(ctx context.Context, householdID, actorID, id int
 	})
 }
 
+// setDayMode stores c's day mode when it differs.
+func setDayMode(ctx context.Context, q *dbq.Queries, c dbq.Chore, mode string) (dbq.Chore, error) {
+	if c.DayMode == mode {
+		return c, nil
+	}
+	c, err := q.SetChoreDayMode(ctx, dbq.SetChoreDayModeParams{DayMode: mode, HouseholdID: c.HouseholdID, ID: c.ID})
+	if err != nil {
+		return c, fmt.Errorf("set day mode: %w", err)
+	}
+	return c, nil
+}
+
 // refresh replaces c's not-yet-started occurrences and re-materialises the
 // window from boardDay. old is the chore before an edit (nil on create).
 func (s *Service) refresh(ctx context.Context, q *dbq.Queries, c dbq.Chore, old *dbq.Chore, boardDay time.Time) error {
@@ -155,6 +174,7 @@ func clearFrom(c dbq.Chore, old *dbq.Chore, boardDay time.Time) string {
 
 type validated struct {
 	Title, Emoji, Description, Mode, StartsOn string
+	DayMode                                   string
 	AssigneeID                                *int64
 	Rrule, DueTime                            *string
 	Points, Pence, RequiresApproval           int64
@@ -213,6 +233,19 @@ func (s *Service) validate(ctx context.Context, q *dbq.Queries, householdID int6
 		}
 	}
 	out.Rrule = rule
+	switch in.DayMode {
+	case "", DayEach:
+		out.DayMode = DayEach
+	case DayAny:
+		// Only weekly-style schedules have days to choose between; for the
+		// rest the choice is hidden, so it quietly means each.
+		out.DayMode = DayEach
+		if AnyDayAllowed(in.Repeat.Kind) {
+			out.DayMode = DayAny
+		}
+	default:
+		errs.Add("day_mode", "Choose how the days work.")
+	}
 	if _, err := time.Parse(DateLayout, in.StartsOn); err != nil {
 		errs.Add("starts_on", "Choose a start date.")
 	}

@@ -47,17 +47,19 @@ type Chore struct {
 	CreatedAt        int64   `json:"created_at"`
 	UpdatedAt        int64   `json:"updated_at"`
 	Emoji            string  `json:"emoji"`
+	DayMode          string  `json:"day_mode"`
 }
 
 type ChoreOccurrence struct {
-	ID          int64  `json:"id"`
-	HouseholdID int64  `json:"household_id"`
-	ChoreID     int64  `json:"chore_id"`
-	DueOn       string `json:"due_on"`
-	AssigneeID  *int64 `json:"assignee_id"`
-	ClaimedBy   *int64 `json:"claimed_by"`
-	ClaimedAt   *int64 `json:"claimed_at"`
-	Status      string `json:"status"`
+	ID            int64   `json:"id"`
+	HouseholdID   int64   `json:"household_id"`
+	ChoreID       int64   `json:"chore_id"`
+	DueOn         string  `json:"due_on"`
+	AssigneeID    *int64  `json:"assignee_id"`
+	ClaimedBy     *int64  `json:"claimed_by"`
+	ClaimedAt     *int64  `json:"claimed_at"`
+	Status        string  `json:"status"`
+	AvailableFrom *string `json:"available_from"`
 }
 
 type Completion struct {

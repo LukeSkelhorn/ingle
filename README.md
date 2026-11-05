@@ -72,6 +72,7 @@ The board has a column for each family member, adults included. Each column show
 - Turn on **Picture cards** for a child in **Admin › People** and their column becomes big emoji tiles, two across, for children who can't read yet. A chore without an emoji uses one suggested from its title, or ⭐.
 - Tap **Save for this** on a reward they can't afford yet to make it their goal (one each; picking another replaces it). Their column shows the reward's emoji, how far they've got and a progress bar, using what they can spend after waiting claims. When the bar fills, a small celebration plays once on each display (just a highlight with reduced motion) and **Claim** appears. The goal clears once that claim is approved, or if the reward is archived. Adults can also set it under **Admin › People**.
 - Missed chores stay up, marked **Overdue**, until they're done or the next one is due. A missed daily chore doesn't pile up.
+- Some chores only need doing once on one of several days. Set a weekly, fortnightly or weekday chore to **Any one of these days** and it's due once a week: it shows on each of its days ("Today or Thu") until someone does it, then it's gone until next week. Its last day says **Last chance**.
 
 Every open board (the wall iPad, a second display, an adult's phone) updates live when anything changes.
 

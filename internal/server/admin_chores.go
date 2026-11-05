@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/lukeskelhorn/domus/internal/chores"
@@ -160,7 +161,7 @@ func (s *Server) handleChores(w http.ResponseWriter, r *http.Request) {
 	}
 	page.Rows = make([]choreRow, 0, len(list))
 	for _, c := range list {
-		row := choreRow{Chore: c, Schedule: describeSchedule(chores.ParseRecurrence(c.Rrule), c.StartsOn)}
+		row := choreRow{Chore: c, Schedule: describeSchedule(chores.ParseRecurrence(c.Rrule), c.DayMode, c.StartsOn)}
 		if c.AssigneeID != nil {
 			row.Assignee = byID[*c.AssigneeID]
 		}
@@ -208,6 +209,7 @@ type choreForm struct {
 	AssigneeID       int64
 	Repeat           string
 	Days             []time.Weekday
+	DayMode          string // chores.DayEach or chores.DayAny
 	MonthDay         int
 	Custom           string // read-only RRULE for RepeatCustom
 	StartsOn         string
@@ -242,7 +244,7 @@ func (s *Server) newChoreForm(r *http.Request) (choreForm, error) {
 	}
 	return choreForm{
 		Back: choreBack(r.URL.Query().Get("back"), people), // a POST reads it in readChoreForm
-		Mode: chores.ModeAssigned, Repeat: chores.RepeatWeekly,
+		Mode: chores.ModeAssigned, Repeat: chores.RepeatWeekly, DayMode: chores.DayEach,
 		Days: []time.Weekday{today.Weekday()}, MonthDay: today.Day(),
 		StartsOn: today.Format(chores.DateLayout), Money: "0.00", Emoji: newEmojiField(emoji.Chore, ""),
 		People: people, WeekOrder: chores.WeekOrder, MonthDays: monthDays,
@@ -260,7 +262,7 @@ func (s *Server) choreFormFor(r *http.Request, c dbq.Chore) (choreForm, error) {
 	if c.AssigneeID != nil {
 		f.AssigneeID = *c.AssigneeID
 	}
-	f.Repeat, f.Days, f.Custom = rec.Kind, rec.Days, rec.Raw
+	f.Repeat, f.Days, f.Custom, f.DayMode = rec.Kind, rec.Days, rec.Raw, c.DayMode
 	if rec.Kind == chores.RepeatMonthly {
 		f.MonthDay = rec.MonthDay
 	}
@@ -345,6 +347,10 @@ func (s *Server) readChoreForm(w http.ResponseWriter, r *http.Request, f *choreF
 	f.Description = fm.str("description")
 	f.Mode = fm.str("mode")
 	f.Repeat = fm.str("repeat")
+	f.DayMode = fm.str("day_mode")
+	if f.DayMode == "" {
+		f.DayMode = chores.DayEach
+	}
 	f.StartsOn = fm.str("starts_on")
 	f.DueTime = fm.str("due_time")
 	f.Points = fm.int("points", "Enter a whole number of points.")
@@ -372,6 +378,7 @@ func (s *Server) readChoreForm(w http.ResponseWriter, r *http.Request, f *choreF
 	in := chores.Input{
 		Title: f.Title, Emoji: f.Emoji.Value, Description: f.Description, Mode: f.Mode,
 		Repeat:   chores.Recurrence{Kind: f.Repeat, Days: f.Days, MonthDay: f.MonthDay},
+		DayMode:  f.DayMode,
 		StartsOn: f.StartsOn, DueTime: fm.optStr("due_time"),
 		Points: f.Points, Pence: pence, RequiresApproval: f.RequiresApproval,
 	}
@@ -493,19 +500,21 @@ func (s *Server) boardDay(r *http.Request) time.Time {
 	return set.BoardDay(s.now())
 }
 
-// describeSchedule summarises a schedule for the chores list.
-func describeSchedule(rec chores.Recurrence, startsOn string) string {
+// describeSchedule summarises a schedule for the chores list. A
+// flexible-day chore's days read "Tue or Thu".
+func describeSchedule(rec chores.Recurrence, dayMode, startsOn string) string {
+	anyDay := dayMode == chores.DayAny && chores.AnyDayAllowed(rec.Kind)
 	days := func() string {
-		out := ""
+		var names []string
 		for _, d := range chores.WeekOrder {
 			if slices.Contains(rec.Days, d) {
-				if out != "" {
-					out += ", "
-				}
-				out += d.String()[:3]
+				names = append(names, d.String()[:3])
 			}
 		}
-		return out
+		if anyDay && len(names) > 1 {
+			return strings.Join(names[:len(names)-1], ", ") + " or " + names[len(names)-1]
+		}
+		return strings.Join(names, ", ")
 	}
 	switch rec.Kind {
 	case chores.RepeatOnce:
@@ -516,6 +525,9 @@ func describeSchedule(rec chores.Recurrence, startsOn string) string {
 	case chores.RepeatDaily:
 		return "Every day"
 	case chores.RepeatWeekdays:
+		if anyDay {
+			return "Once on a weekday"
+		}
 		return "Weekdays"
 	case chores.RepeatWeekly:
 		return "Weekly: " + days()

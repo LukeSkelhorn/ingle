@@ -234,6 +234,9 @@ button.chore__main:active { background: var(--line); }
 .tag { border-radius: 6px; padding: 0 6px; background: var(--line); color: var(--fg); }
 .tag--late { background: var(--danger); color: #fff; }
 .tag--wait { background: var(--ok-bg); color: var(--ok-fg); }
+/* Flexible-day chores: the days left, and the last of them. */
+.chore__meta .tag--flex { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--fg); }
+.chore__meta .tag--last { background: color-mix(in srgb, #e0a100 28%, transparent); color: var(--fg); font-weight: 600; }
 
 @keyframes chore-pop { 0% { transform: scale(0.4); } 60% { transform: scale(1.25); } 100% { transform: scale(1); } }
 .chore--just { opacity: 1; }
@@ -370,6 +373,20 @@ input, select, textarea { -webkit-user-select: text; user-select: text; }
 }
 .segmented input:checked + span { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
 .segmented input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Stacked radio choices with a line of explanation */
+.choice { display: grid; gap: 8px; }
+.choice__item {
+  display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; min-height: 44px;
+  border: 1px solid var(--line); border-radius: 12px; cursor: pointer; background: var(--surface);
+}
+.choice__item:has(input:checked) { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.choice__item input { margin: 3px 0 0; accent-color: var(--accent); width: 18px; height: 18px; flex: none; }
+/* The card shows focus (keyboard only), not a square ring round the radio. */
+.field .choice__item input:focus { outline: none; }
+.choice__item:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.choice__item span { display: grid; gap: 2px; font-weight: 400; }
+.choice__item small[hidden] { display: none; }
 
 /* Colour and emoji pickers */
 .swatches, .emojis, .days { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -568,6 +585,7 @@ details.card .list { margin: 8px -20px -20px; }
 .cal-item--event { border-left: 4px solid var(--item); }
 .cal-item--allday { background: color-mix(in srgb, var(--item) 22%, var(--surface)); border-left: 0; font-weight: 600; }
 .cal-item__when { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 0.8rem; }
+.cal-item__or { font-size: 0.8em; color: var(--muted); white-space: nowrap; }
 .cal-item--chore {
   display: grid; grid-template-columns: auto 1fr; column-gap: 6px; align-items: center; cursor: pointer;
   --item: var(--muted); border: 2px solid var(--item); background: var(--surface); touch-action: manipulation;

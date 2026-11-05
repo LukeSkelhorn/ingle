@@ -5,6 +5,8 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/lukeskelhorn/domus/internal/chores"
 )
 
 // order returns the titles in body, in the order they appear.
@@ -145,4 +147,32 @@ func TestChoresListBack(t *testing.T) {
 
 	// Archive comes back to the filtered list.
 	expectRedirect(t, phone.post("/admin/chores/"+itoa(bins.ID)+"/archive", url.Values{"back": {back}}), back)
+}
+
+func TestChoreFormDayMode(t *testing.T) {
+	h := newHarness(t)
+	h.setUp()
+	phone := h.phone()
+
+	expect(t, phone.get("/admin/chores/new"), http.StatusOK,
+		`data-show-when="repeat=weekly,fortnightly,weekdays"`,
+		`name="day_mode" value="each" checked`, `name="day_mode" value="any">`)
+
+	chore := url.Values{
+		"title": {"Stairs"}, "mode": {"pool"}, "repeat": {"weekly"}, "days": {"2", "4"},
+		"day_mode": {"any"}, "starts_on": {"2026-07-01"}, "suggest_offered": {"1"},
+	}
+	expectRedirect(t, phone.post("/admin/chores", chore), "/admin/chores")
+	stairs := h.chore("Stairs")
+	if stairs.DayMode != chores.DayAny {
+		t.Fatalf("day mode = %q, want any", stairs.DayMode)
+	}
+	expect(t, phone.get("/admin/chores/"+itoa(stairs.ID)), http.StatusOK, `name="day_mode" value="any" checked`)
+
+	chore = url.Values{
+		"title": {"Tidy"}, "mode": {"pool"}, "repeat": {"weekdays"},
+		"day_mode": {"any"}, "starts_on": {"2026-07-01"}, "suggest_offered": {"1"},
+	}
+	expectRedirect(t, phone.post("/admin/chores", chore), "/admin/chores")
+	expect(t, phone.get("/admin/chores"), http.StatusOK, "Weekly: Tue or Thu", "Once on a weekday")
 }

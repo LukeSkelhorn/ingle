@@ -63,6 +63,11 @@ type Card struct {
 	CompletionID int64 // set when Done
 	CompletedAt  int64 // unix seconds, set when Done
 	JustDone     bool  // completed in the last few seconds (for the tick animation)
+	// Flexible-day chores, not yet done: Flex names the days left ("Today or
+	// Thu"); LastChance marks the last of several days.
+	Flex       string
+	LastChance bool
+	SortOn     string // the day it sorts with: today, or an overdue due date
 }
 
 // FallbackEmoji leads a picture card for a chore with no emoji and nothing
@@ -126,12 +131,16 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 	for _, c := range comps {
 		byOcc[c.OccurrenceID] = c
 	}
-	latest := map[int64]string{} // chore → latest due_on up to today
+	// latest is when each chore's newest occurrence on the board came up:
+	// its due date, or the first day of a flexible-day window. An overdue
+	// occurrence older than that has been superseded.
+	latest := map[int64]string{}
 	for _, r := range rows {
-		if r.DueOn > latest[r.ChoreID] {
-			latest[r.ChoreID] = r.DueOn
+		if start := availableFrom(r); start > latest[r.ChoreID] {
+			latest[r.ChoreID] = start
 		}
 	}
+	loc := s.loc(ctx, householdID)
 
 	b := Board{Day: today, People: people}
 	cols := make(map[int64]*Column, len(people))
@@ -164,13 +173,12 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 			continue
 		}
 		comp, done := byOcc[r.ID]
-		if r.DueOn < today {
-			if latest[r.ChoreID] != r.DueOn {
-				continue // superseded by a newer occurrence
-			}
-			if done && comp.CompletedAt < boardDay.Unix() {
-				continue // caught up on an earlier day
-			}
+		flex := r.AvailableFrom != nil
+		if r.DueOn < today && latest[r.ChoreID] > r.DueOn {
+			continue // superseded by a newer occurrence
+		}
+		if (r.DueOn < today || flex) && done && comp.CompletedAt < boardDay.Unix() {
+			continue // caught up on an earlier day, or done earlier in its window
 		}
 		card := Card{
 			OccurrenceID: r.ID,
@@ -183,6 +191,12 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 			Pool:         r.Mode == ModePool,
 			Overdue:      r.DueOn < today && !done,
 			Done:         done,
+			SortOn:       min(r.DueOn, today),
+		}
+		if flex && !done && r.DueOn >= today {
+			days := windowDays(r.Rrule, r.StartsOn, today, r.DueOn, loc)
+			card.Flex = FlexLabel(today, days)
+			card.LastChance = r.DueOn == today && *r.AvailableFrom < today
 		}
 		if done {
 			card.Pending = comp.Status == StatusPending
@@ -238,7 +252,7 @@ func compareCards(a, b Card) int {
 	if d := cmp.Compare(rank(a), rank(b)); d != 0 {
 		return d
 	}
-	if d := cmp.Compare(a.DueOn, b.DueOn); d != 0 {
+	if d := cmp.Compare(a.SortOn, b.SortOn); d != 0 {
 		return d
 	}
 	switch {
@@ -281,4 +295,12 @@ func (s *Service) Undo(ctx context.Context, householdID, completionID int64) err
 		}
 		return s.activity(ctx, q, householdID, c.PersonID, "chore.undone", c.OccurrenceID)
 	})
+}
+
+// availableFrom is the first day r is on the board.
+func availableFrom(r dbq.ListBoardRow) string {
+	if r.AvailableFrom != nil {
+		return *r.AvailableFrom
+	}
+	return r.DueOn
 }

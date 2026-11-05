@@ -344,7 +344,7 @@ func (s *Server) handleCalendarChore(w http.ResponseWriter, r *http.Request) {
 	v := calChoreSheet{
 		Item:   calItem{Title: c.Title, Chore: &c},
 		Day:    d.Format("Monday 2 January"),
-		Repeat: describeSchedule(chores.ParseRecurrence(ch.Rrule), ch.StartsOn),
+		Repeat: describeSchedule(chores.ParseRecurrence(ch.Rrule), ch.DayMode, ch.StartsOn),
 		Chore:  ch,
 	}
 	if c.DueTime != nil {

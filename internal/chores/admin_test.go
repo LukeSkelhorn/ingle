@@ -118,3 +118,59 @@ func TestMovingOverdueOneOff(t *testing.T) {
 		t.Errorf("moved one-off %v, want only 2026-11-04", got)
 	}
 }
+
+func TestChoreDayMode(t *testing.T) {
+	f := newFixture(t)
+	ctx := t.Context()
+	day := f.svc.now() // Mon 2 Nov 2026
+	tueThu := Recurrence{Kind: RepeatWeekly, Days: []time.Weekday{time.Tuesday, time.Thursday}}
+	in := Input{Title: "Stairs", Mode: ModePool, Repeat: tueThu, StartsOn: "2026-11-02"}
+
+	c, err := f.svc.CreateChore(ctx, f.hh, f.adult.ID, in, day)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.DayMode != DayEach {
+		t.Errorf("default day mode = %q, want each", c.DayMode)
+	}
+	if got := windows(f.board("2026-11-02", "2026-11-15")); !slices.Equal(got, []string{"-..2026-11-03", "-..2026-11-05", "-..2026-11-10", "-..2026-11-12"}) {
+		t.Fatalf("each rows = %v", got)
+	}
+
+	// Switching to any re-materialises one row a week.
+	in.DayMode = DayAny
+	if c, err = f.svc.UpdateChore(ctx, f.hh, f.adult.ID, c.ID, in, day); err != nil {
+		t.Fatal(err)
+	}
+	if c.DayMode != DayAny {
+		t.Errorf("day mode = %q, want any", c.DayMode)
+	}
+	if got := windows(f.board("2026-11-02", "2026-11-15")); !slices.Equal(got, []string{"2026-11-03..2026-11-05", "2026-11-10..2026-11-12"}) {
+		t.Fatalf("any rows = %v", got)
+	}
+
+	// Edited on Wednesday: this week starts fresh from Wednesday.
+	wed := time.Date(2026, 11, 4, 0, 0, 0, 0, london)
+	in.Points = 3
+	if _, err = f.svc.UpdateChore(ctx, f.hh, f.adult.ID, c.ID, in, wed); err != nil {
+		t.Fatal(err)
+	}
+	if got := windows(f.board("2026-11-04", "2026-11-08")); !slices.Equal(got, []string{"2026-11-05..2026-11-05"}) {
+		t.Errorf("after mid-week edit = %v", got)
+	}
+
+	// Daily and monthly have no days to choose between: stored as each.
+	in.Repeat = Recurrence{Kind: RepeatDaily}
+	if c, err = f.svc.UpdateChore(ctx, f.hh, f.adult.ID, c.ID, in, day); err != nil {
+		t.Fatal(err)
+	}
+	if c.DayMode != DayEach {
+		t.Errorf("daily day mode = %q, want each", c.DayMode)
+	}
+
+	in.DayMode = "sometimes"
+	var ve valid.Errors
+	if _, err := f.svc.UpdateChore(ctx, f.hh, f.adult.ID, c.ID, in, day); !errors.As(err, &ve) || ve["day_mode"] == "" {
+		t.Errorf("bad day mode err = %v", err)
+	}
+}

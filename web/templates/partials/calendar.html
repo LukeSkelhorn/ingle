@@ -70,6 +70,7 @@
     <span class="cal-item__title">{{.Title}}</span>
     <span class="cal-item__meta">
       {{- with .When}}<span class="cal-item__when">{{.}}</span>{{end}}
+      {{- if and .Chore.Or (ne (print .Chore.Status) "done")}}<span class="cal-item__or" title="Any one of {{.Chore.Or}}">{{.Chore.Or}}</span>{{end}}
       {{- if eq (print .Chore.Status) "done"}}<span class="cal-item__tick" aria-label="Done{{with .DoneBy}} by {{.Name}}{{end}}">✓{{with .DoneBy}} {{template "avatar" (avatar . "xs")}}{{end}}</span>
       {{- else if eq (print .Chore.Status) "missed"}}<span class="cal-item__state">Missed</span>
       {{- else if .Person}}<span class="cal-item__who">{{.Person.Name}}</span>
@@ -104,7 +105,8 @@
     <dt>When</dt><dd>{{.Day}}{{with .Item.When}}, by {{.}}{{end}}</dd>
     <dt>Who</dt><dd>{{with .Item.Person}}{{template "avatar" (avatar . "xs")}} {{.Name}}{{else}}Up for grabs{{end}}</dd>
     {{with worth $c.Points $c.Pence}}<dt>Worth</dt><dd>{{.}}</dd>{{end}}
-    <dt>Repeats</dt><dd>{{.Repeat}}</dd>
+{{with $c.Or}}    <dt>Days</dt><dd>Any one of {{.}}</dd>
+{{end}}    <dt>Repeats</dt><dd>{{.Repeat}}</dd>
     <dt>Status</dt><dd>
       {{- if eq (print $c.Status) "done"}}Done{{with .Item.DoneBy}} by {{.Name}}{{end}}{{with .DoneAt}} at {{.}}{{end}}{{if $c.Pending}} (waiting for a grown-up){{end}}
       {{- else if eq (print $c.Status) "missed"}}Missed

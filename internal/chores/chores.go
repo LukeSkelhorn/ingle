@@ -122,6 +122,9 @@ func window(from time.Time, days int, loc *time.Location) (start, end time.Time)
 }
 
 func materialiseChore(ctx context.Context, q *dbq.Queries, c dbq.Chore, start, end time.Time, loc *time.Location) (int, error) {
+	if c.DayMode == DayAny && c.Rrule != nil {
+		return materialiseFlex(ctx, q, c, start, end, loc)
+	}
 	dates, err := occurrenceDates(c, start, end, loc)
 	if err != nil {
 		return 0, fmt.Errorf("chore %d: %w", c.ID, err)
@@ -133,6 +136,31 @@ func materialiseChore(ctx context.Context, q *dbq.Queries, c dbq.Chore, start, e
 			ChoreID:     c.ID,
 			DueOn:       d,
 			AssigneeID:  c.AssigneeID,
+		})
+		if err != nil {
+			return 0, fmt.Errorf("insert occurrence: %w", err)
+		}
+		created += int(n)
+	}
+	return created, nil
+}
+
+// materialiseFlex creates one occurrence per week for a flexible-day chore,
+// on the board from the week's first allowed day and due on its last.
+func materialiseFlex(ctx context.Context, q *dbq.Queries, c dbq.Chore, start, end time.Time, loc *time.Location) (int, error) {
+	ws, err := flexWindows(c, start, end, loc)
+	if err != nil {
+		return 0, fmt.Errorf("chore %d: %w", c.ID, err)
+	}
+	created := 0
+	for _, w := range ws {
+		from := w.From()
+		n, err := q.InsertOccurrence(ctx, dbq.InsertOccurrenceParams{
+			HouseholdID:   c.HouseholdID,
+			ChoreID:       c.ID,
+			DueOn:         w.Due(),
+			AssigneeID:    c.AssigneeID,
+			AvailableFrom: &from,
 		})
 		if err != nil {
 			return 0, fmt.Errorf("insert occurrence: %w", err)
