@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/lukeskelhorn/domus/internal/emoji"
 	"github.com/lukeskelhorn/domus/internal/household"
 	"github.com/lukeskelhorn/domus/internal/store/dbq"
 	"github.com/lukeskelhorn/domus/internal/valid"
@@ -34,18 +35,18 @@ func (s *Server) handleRewards(w http.ResponseWriter, r *http.Request) {
 type rewardForm struct {
 	ID          int64
 	Title       string
-	Emoji       string
+	Emoji       emojiField
 	Description string
 	CostPoints  int64
 	Money       string
 	Archived    bool
-
-	Emojis []string
 }
+
+func newRewardForm() rewardForm { return rewardForm{Emoji: newEmojiField(emoji.Reward, "")} }
 
 func rewardFormFor(rw dbq.Reward) rewardForm {
 	return rewardForm{
-		ID: rw.ID, Title: rw.Title, Emoji: rw.Emoji, Description: rw.Description,
+		ID: rw.ID, Title: rw.Title, Emoji: newEmojiField(emoji.Reward, rw.Emoji), Description: rw.Description,
 		CostPoints: rw.CostPoints, Money: formatMoneyInput(rw.CostPence), Archived: rw.ArchivedAt != nil,
 	}
 }
@@ -55,7 +56,6 @@ func (s *Server) renderReward(w http.ResponseWriter, r *http.Request, status int
 	if f.ID != 0 {
 		title = f.Title
 	}
-	f.Emojis = household.RewardEmojis
 	v := s.view(r, title, f)
 	v.Nav = "rewards"
 	v.Errors = errs
@@ -64,7 +64,9 @@ func (s *Server) renderReward(w http.ResponseWriter, r *http.Request, status int
 }
 
 func (s *Server) handleRewardNew(w http.ResponseWriter, r *http.Request) {
-	s.renderReward(w, r, http.StatusOK, rewardForm{Money: "0.00"}, nil, "")
+	f := newRewardForm()
+	f.Money = "0.00"
+	s.renderReward(w, r, http.StatusOK, f, nil, "")
 }
 
 func (s *Server) loadReward(w http.ResponseWriter, r *http.Request) (dbq.Reward, bool) {
@@ -99,7 +101,7 @@ func (s *Server) readRewardForm(w http.ResponseWriter, r *http.Request, f *rewar
 	}
 	fm := newForm(r)
 	f.Title = fm.str("title")
-	f.Emoji = fm.str("emoji")
+	f.Emoji.read(fm)
 	f.Description = fm.str("description")
 	f.CostPoints = fm.int("cost_points", "Enter a whole number of points.")
 	f.Money = fm.str("money")
@@ -107,11 +109,11 @@ func (s *Server) readRewardForm(w http.ResponseWriter, r *http.Request, f *rewar
 	if err != nil {
 		fm.errs.Add("money", "Enter an amount like 2.50.")
 	}
-	return household.RewardInput{Title: f.Title, Emoji: f.Emoji, Description: f.Description, CostPoints: f.CostPoints, CostPence: pence}, fm, nil
+	return household.RewardInput{Title: f.Title, Emoji: f.Emoji.Value, Description: f.Description, CostPoints: f.CostPoints, CostPence: pence}, fm, nil
 }
 
 func (s *Server) handleRewardCreate(w http.ResponseWriter, r *http.Request) {
-	var f rewardForm
+	f := newRewardForm()
 	in, fm, err := s.readRewardForm(w, r, &f)
 	if err != nil {
 		http.Error(w, "bad form", http.StatusBadRequest)
@@ -119,6 +121,10 @@ func (s *Server) handleRewardCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	if !fm.ok() {
 		s.renderReward(w, r, http.StatusUnprocessableEntity, f, fm.errs, "")
+		return
+	}
+	if e, ok := f.Emoji.offerSuggestion(f.Title); ok {
+		s.renderReward(w, r, http.StatusOK, f, nil, suggestionFlash(e, "reward"))
 		return
 	}
 	_, err = s.Household.CreateReward(r.Context(), s.HouseholdID, actor(r).Person.ID, in)
@@ -146,6 +152,10 @@ func (s *Server) handleRewardUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	if !fm.ok() {
 		s.renderReward(w, r, http.StatusUnprocessableEntity, f, fm.errs, "")
+		return
+	}
+	if e, ok := f.Emoji.offerSuggestion(f.Title); ok {
+		s.renderReward(w, r, http.StatusOK, f, nil, suggestionFlash(e, "reward"))
 		return
 	}
 	rw, err := s.Household.UpdateReward(r.Context(), s.HouseholdID, actor(r).Person.ID, cur.ID, in)

@@ -97,7 +97,7 @@ SELECT
     c.id, c.occurrence_id, c.person_id, c.completed_at, c.status, c.reviewed_at, c.points, c.pence,
     p.name AS person_name, p.colour AS person_colour, p.avatar AS person_avatar,
     r.name AS reviewer_name,
-    ch.title, o.due_on
+    ch.title, ch.emoji, o.due_on
 FROM completions c
 JOIN chore_occurrences o ON o.id = c.occurrence_id
 JOIN chores ch ON ch.id = o.chore_id
@@ -125,6 +125,7 @@ type GetCompletionDetailRow struct {
 	PersonAvatar *string `json:"person_avatar"`
 	ReviewerName *string `json:"reviewer_name"`
 	Title        string  `json:"title"`
+	Emoji        string  `json:"emoji"`
 	DueOn        string  `json:"due_on"`
 }
 
@@ -145,6 +146,7 @@ func (q *Queries) GetCompletionDetail(ctx context.Context, arg GetCompletionDeta
 		&i.PersonAvatar,
 		&i.ReviewerName,
 		&i.Title,
+		&i.Emoji,
 		&i.DueOn,
 	)
 	return i, err
@@ -155,7 +157,7 @@ SELECT
     c.id, c.occurrence_id, c.person_id, c.completed_at, c.status, c.reviewed_at, c.points, c.pence,
     p.name AS person_name, p.colour AS person_colour, p.avatar AS person_avatar,
     r.name AS reviewer_name,
-    ch.title, o.due_on
+    ch.title, ch.emoji, o.due_on
 FROM completions c
 JOIN chore_occurrences o ON o.id = c.occurrence_id
 JOIN chores ch ON ch.id = o.chore_id
@@ -185,6 +187,7 @@ type ListCompletionDetailsRow struct {
 	PersonAvatar *string `json:"person_avatar"`
 	ReviewerName *string `json:"reviewer_name"`
 	Title        string  `json:"title"`
+	Emoji        string  `json:"emoji"`
 	DueOn        string  `json:"due_on"`
 }
 
@@ -213,6 +216,7 @@ func (q *Queries) ListCompletionDetails(ctx context.Context, arg ListCompletionD
 			&i.PersonAvatar,
 			&i.ReviewerName,
 			&i.Title,
+			&i.Emoji,
 			&i.DueOn,
 		); err != nil {
 			return nil, err

@@ -1,6 +1,6 @@
 -- name: CreatePerson :one
-INSERT INTO people (household_id, name, kind, colour, avatar, sort_order, created_at)
-VALUES (?, ?, ?, ?, ?, ?, ?)
+INSERT INTO people (household_id, name, kind, colour, avatar, sort_order, picture_cards, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING *;
 
 -- name: GetPerson :one
@@ -12,7 +12,7 @@ WHERE household_id = ? AND archived_at IS NULL
 ORDER BY sort_order, name;
 
 -- name: UpdatePerson :one
-UPDATE people SET name = ?, kind = ?, colour = ?, avatar = ?, sort_order = ?
+UPDATE people SET name = ?, kind = ?, colour = ?, avatar = ?, sort_order = ?, picture_cards = ?
 WHERE household_id = ? AND id = ?
 RETURNING *;
 

@@ -46,6 +46,7 @@ type Chore struct {
 	ArchivedAt       *int64  `json:"archived_at"`
 	CreatedAt        int64   `json:"created_at"`
 	UpdatedAt        int64   `json:"updated_at"`
+	Emoji            string  `json:"emoji"`
 }
 
 type ChoreOccurrence struct {
@@ -143,6 +144,7 @@ type Person struct {
 	PinLength    *int64  `json:"pin_length"`
 	GoalRewardID *int64  `json:"goal_reward_id"`
 	GoalSetAt    *int64  `json:"goal_set_at"`
+	PictureCards int64   `json:"picture_cards"`
 }
 
 type Photo struct {

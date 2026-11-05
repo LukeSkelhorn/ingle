@@ -116,7 +116,7 @@ func (q *Queries) InsertOccurrence(ctx context.Context, arg InsertOccurrencePara
 const listBoard = `-- name: ListBoard :many
 SELECT
     o.id, o.chore_id, o.due_on, o.assignee_id, o.claimed_by, o.claimed_at, o.status,
-    c.title, c.description, c.mode, c.due_time, c.points, c.pence, c.requires_approval
+    c.title, c.emoji, c.description, c.mode, c.due_time, c.points, c.pence, c.requires_approval
 FROM chore_occurrences o
 JOIN chores c ON c.id = o.chore_id
 WHERE o.household_id = ?1
@@ -140,6 +140,7 @@ type ListBoardRow struct {
 	ClaimedAt        *int64  `json:"claimed_at"`
 	Status           string  `json:"status"`
 	Title            string  `json:"title"`
+	Emoji            string  `json:"emoji"`
 	Description      string  `json:"description"`
 	Mode             string  `json:"mode"`
 	DueTime          *string `json:"due_time"`
@@ -166,6 +167,7 @@ func (q *Queries) ListBoard(ctx context.Context, arg ListBoardParams) ([]ListBoa
 			&i.ClaimedAt,
 			&i.Status,
 			&i.Title,
+			&i.Emoji,
 			&i.Description,
 			&i.Mode,
 			&i.DueTime,

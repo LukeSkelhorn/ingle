@@ -131,19 +131,20 @@ func (q *Queries) CountAdultsWithCredential(ctx context.Context, householdID int
 }
 
 const createPerson = `-- name: CreatePerson :one
-INSERT INTO people (household_id, name, kind, colour, avatar, sort_order, created_at)
-VALUES (?, ?, ?, ?, ?, ?, ?)
-RETURNING id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash, pin_length, goal_reward_id, goal_set_at
+INSERT INTO people (household_id, name, kind, colour, avatar, sort_order, picture_cards, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash, pin_length, goal_reward_id, goal_set_at, picture_cards
 `
 
 type CreatePersonParams struct {
-	HouseholdID int64   `json:"household_id"`
-	Name        string  `json:"name"`
-	Kind        string  `json:"kind"`
-	Colour      string  `json:"colour"`
-	Avatar      *string `json:"avatar"`
-	SortOrder   int64   `json:"sort_order"`
-	CreatedAt   int64   `json:"created_at"`
+	HouseholdID  int64   `json:"household_id"`
+	Name         string  `json:"name"`
+	Kind         string  `json:"kind"`
+	Colour       string  `json:"colour"`
+	Avatar       *string `json:"avatar"`
+	SortOrder    int64   `json:"sort_order"`
+	PictureCards int64   `json:"picture_cards"`
+	CreatedAt    int64   `json:"created_at"`
 }
 
 func (q *Queries) CreatePerson(ctx context.Context, arg CreatePersonParams) (Person, error) {
@@ -154,6 +155,7 @@ func (q *Queries) CreatePerson(ctx context.Context, arg CreatePersonParams) (Per
 		arg.Colour,
 		arg.Avatar,
 		arg.SortOrder,
+		arg.PictureCards,
 		arg.CreatedAt,
 	)
 	var i Person
@@ -173,12 +175,13 @@ func (q *Queries) CreatePerson(ctx context.Context, arg CreatePersonParams) (Per
 		&i.PinLength,
 		&i.GoalRewardID,
 		&i.GoalSetAt,
+		&i.PictureCards,
 	)
 	return i, err
 }
 
 const getPerson = `-- name: GetPerson :one
-SELECT id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash, pin_length, goal_reward_id, goal_set_at FROM people WHERE household_id = ? AND id = ?
+SELECT id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash, pin_length, goal_reward_id, goal_set_at, picture_cards FROM people WHERE household_id = ? AND id = ?
 `
 
 type GetPersonParams struct {
@@ -205,12 +208,13 @@ func (q *Queries) GetPerson(ctx context.Context, arg GetPersonParams) (Person, e
 		&i.PinLength,
 		&i.GoalRewardID,
 		&i.GoalSetAt,
+		&i.PictureCards,
 	)
 	return i, err
 }
 
 const getPersonByEmail = `-- name: GetPersonByEmail :one
-SELECT id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash, pin_length, goal_reward_id, goal_set_at FROM people WHERE email = ? AND archived_at IS NULL
+SELECT id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash, pin_length, goal_reward_id, goal_set_at, picture_cards FROM people WHERE email = ? AND archived_at IS NULL
 `
 
 func (q *Queries) GetPersonByEmail(ctx context.Context, email *string) (Person, error) {
@@ -232,6 +236,7 @@ func (q *Queries) GetPersonByEmail(ctx context.Context, email *string) (Person, 
 		&i.PinLength,
 		&i.GoalRewardID,
 		&i.GoalSetAt,
+		&i.PictureCards,
 	)
 	return i, err
 }
@@ -253,7 +258,7 @@ func (q *Queries) LearnPINLength(ctx context.Context, arg LearnPINLengthParams) 
 }
 
 const listArchivedPeople = `-- name: ListArchivedPeople :many
-SELECT id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash, pin_length, goal_reward_id, goal_set_at FROM people
+SELECT id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash, pin_length, goal_reward_id, goal_set_at, picture_cards FROM people
 WHERE household_id = ? AND archived_at IS NOT NULL
 ORDER BY name
 `
@@ -283,6 +288,7 @@ func (q *Queries) ListArchivedPeople(ctx context.Context, householdID int64) ([]
 			&i.PinLength,
 			&i.GoalRewardID,
 			&i.GoalSetAt,
+			&i.PictureCards,
 		); err != nil {
 			return nil, err
 		}
@@ -298,7 +304,7 @@ func (q *Queries) ListArchivedPeople(ctx context.Context, householdID int64) ([]
 }
 
 const listPeople = `-- name: ListPeople :many
-SELECT id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash, pin_length, goal_reward_id, goal_set_at FROM people
+SELECT id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash, pin_length, goal_reward_id, goal_set_at, picture_cards FROM people
 WHERE household_id = ? AND archived_at IS NULL
 ORDER BY sort_order, name
 `
@@ -328,6 +334,7 @@ func (q *Queries) ListPeople(ctx context.Context, householdID int64) ([]Person, 
 			&i.PinLength,
 			&i.GoalRewardID,
 			&i.GoalSetAt,
+			&i.PictureCards,
 		); err != nil {
 			return nil, err
 		}
@@ -440,19 +447,20 @@ func (q *Queries) UnarchivePerson(ctx context.Context, arg UnarchivePersonParams
 }
 
 const updatePerson = `-- name: UpdatePerson :one
-UPDATE people SET name = ?, kind = ?, colour = ?, avatar = ?, sort_order = ?
+UPDATE people SET name = ?, kind = ?, colour = ?, avatar = ?, sort_order = ?, picture_cards = ?
 WHERE household_id = ? AND id = ?
-RETURNING id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash, pin_length, goal_reward_id, goal_set_at
+RETURNING id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash, pin_length, goal_reward_id, goal_set_at, picture_cards
 `
 
 type UpdatePersonParams struct {
-	Name        string  `json:"name"`
-	Kind        string  `json:"kind"`
-	Colour      string  `json:"colour"`
-	Avatar      *string `json:"avatar"`
-	SortOrder   int64   `json:"sort_order"`
-	HouseholdID int64   `json:"household_id"`
-	ID          int64   `json:"id"`
+	Name         string  `json:"name"`
+	Kind         string  `json:"kind"`
+	Colour       string  `json:"colour"`
+	Avatar       *string `json:"avatar"`
+	SortOrder    int64   `json:"sort_order"`
+	PictureCards int64   `json:"picture_cards"`
+	HouseholdID  int64   `json:"household_id"`
+	ID           int64   `json:"id"`
 }
 
 func (q *Queries) UpdatePerson(ctx context.Context, arg UpdatePersonParams) (Person, error) {
@@ -462,6 +470,7 @@ func (q *Queries) UpdatePerson(ctx context.Context, arg UpdatePersonParams) (Per
 		arg.Colour,
 		arg.Avatar,
 		arg.SortOrder,
+		arg.PictureCards,
 		arg.HouseholdID,
 		arg.ID,
 	)
@@ -482,6 +491,7 @@ func (q *Queries) UpdatePerson(ctx context.Context, arg UpdatePersonParams) (Per
 		&i.PinLength,
 		&i.GoalRewardID,
 		&i.GoalSetAt,
+		&i.PictureCards,
 	)
 	return i, err
 }

@@ -10,11 +10,11 @@ import (
 	"fmt"
 	"net/mail"
 	"regexp"
-	"slices"
 	"strings"
 	"time"
 
 	"github.com/lukeskelhorn/domus/internal/auth"
+	"github.com/lukeskelhorn/domus/internal/emoji"
 	"github.com/lukeskelhorn/domus/internal/store"
 	"github.com/lukeskelhorn/domus/internal/store/dbq"
 	"github.com/lukeskelhorn/domus/internal/valid"
@@ -50,23 +50,17 @@ type PersonInput struct {
 	Colour    string
 	Avatar    *string // "emoji:…" or "photo:…", nil for none
 	SortOrder int64
+	// PictureCards shows their column as big emoji tiles (children only).
+	PictureCards bool
 }
 
 // RewardInput is the editable part of a reward.
 type RewardInput struct {
 	Title       string
-	Emoji       string // one of RewardEmojis, or "" for none
+	Emoji       string // a single emoji, or "" for none
 	Description string
 	CostPoints  int64
 	CostPence   int64
-}
-
-// RewardEmojis is the picker for rewards: treats, outings and things to
-// save up for, easy to spot on the board.
-var RewardEmojis = []string{
-	"🧱", "🎮", "📚", "🧸", "🎨", "⚽", "🚲", "🛹", "🎧", "📱",
-	"🍕", "🍦", "🍫", "🍩", "🍿", "🎬", "🎟️", "🎡", "🏊", "🎳",
-	"🌙", "🛌", "📺", "🎁", "💷", "⭐", "👑", "🦄", "🦖", "🚀",
 }
 
 // SetupInput is the first-run form.
@@ -221,7 +215,7 @@ func (s *Service) UpdatePerson(ctx context.Context, householdID, actorID, id int
 		}
 		p, err = q.UpdatePerson(ctx, dbq.UpdatePersonParams{
 			Name: strings.TrimSpace(in.Name), Kind: in.Kind, Colour: strings.ToUpper(in.Colour),
-			Avatar: in.Avatar, SortOrder: in.SortOrder, HouseholdID: householdID, ID: id,
+			Avatar: in.Avatar, SortOrder: in.SortOrder, PictureCards: pictureCards(in), HouseholdID: householdID, ID: id,
 		})
 		if err != nil {
 			return uniqueErr(err)
@@ -410,7 +404,7 @@ func (s *Service) CreateReward(ctx context.Context, householdID, actorID int64, 
 	err := s.st.WithTx(ctx, func(q *dbq.Queries) error {
 		var err error
 		r, err = q.CreateReward(ctx, dbq.CreateRewardParams{
-			HouseholdID: householdID, Title: strings.TrimSpace(in.Title), Emoji: in.Emoji, Description: strings.TrimSpace(in.Description),
+			HouseholdID: householdID, Title: strings.TrimSpace(in.Title), Emoji: strings.TrimSpace(in.Emoji), Description: strings.TrimSpace(in.Description),
 			CostPoints: in.CostPoints, CostPence: in.CostPence, CreatedAt: now.Unix(),
 		})
 		if err != nil {
@@ -431,7 +425,7 @@ func (s *Service) UpdateReward(ctx context.Context, householdID, actorID, id int
 	err := s.st.WithTx(ctx, func(q *dbq.Queries) error {
 		var err error
 		r, err = q.UpdateReward(ctx, dbq.UpdateRewardParams{
-			Title: strings.TrimSpace(in.Title), Emoji: in.Emoji, Description: strings.TrimSpace(in.Description),
+			Title: strings.TrimSpace(in.Title), Emoji: strings.TrimSpace(in.Emoji), Description: strings.TrimSpace(in.Description),
 			CostPoints: in.CostPoints, CostPence: in.CostPence, HouseholdID: householdID, ID: id,
 		})
 		if err != nil {
@@ -478,12 +472,20 @@ func (s *Service) RestoreReward(ctx context.Context, householdID, actorID, id in
 func createPerson(ctx context.Context, q *dbq.Queries, householdID int64, in PersonInput, now time.Time) (dbq.Person, error) {
 	p, err := q.CreatePerson(ctx, dbq.CreatePersonParams{
 		HouseholdID: householdID, Name: strings.TrimSpace(in.Name), Kind: in.Kind,
-		Colour: strings.ToUpper(in.Colour), Avatar: in.Avatar, SortOrder: in.SortOrder, CreatedAt: now.Unix(),
+		Colour: strings.ToUpper(in.Colour), Avatar: in.Avatar, SortOrder: in.SortOrder, PictureCards: pictureCards(in), CreatedAt: now.Unix(),
 	})
 	if err != nil {
 		return dbq.Person{}, uniqueErr(err)
 	}
 	return p, nil
+}
+
+// pictureCards is the stored picture_cards flag: only children have them.
+func pictureCards(in PersonInput) int64 {
+	if in.PictureCards && in.Kind == KindChild {
+		return 1
+	}
+	return 0
 }
 
 func validatePerson(in PersonInput) valid.Errors {
@@ -508,8 +510,8 @@ func validateReward(in RewardInput) valid.Errors {
 	if n := len([]rune(strings.TrimSpace(in.Title))); n < 1 || n > 100 {
 		errs.Add("title", "Enter a title (up to 100 characters).")
 	}
-	if in.Emoji != "" && !slices.Contains(RewardEmojis, in.Emoji) {
-		errs.Add("emoji", "Choose an emoji from the list.")
+	if e := strings.TrimSpace(in.Emoji); e != "" && !emoji.Valid(e) {
+		errs.Add("emoji", "Use a single emoji.")
 	}
 	if len(in.Description) > 1000 {
 		errs.Add("description", "Keep it under 1,000 characters.")

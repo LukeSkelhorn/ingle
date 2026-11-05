@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lukeskelhorn/domus/internal/emoji"
 	"github.com/lukeskelhorn/domus/internal/store"
 	"github.com/lukeskelhorn/domus/internal/store/dbq"
 	"github.com/lukeskelhorn/domus/internal/valid"
@@ -15,6 +16,7 @@ import (
 // Input is the editable part of a chore, as submitted by the admin form.
 type Input struct {
 	Title            string
+	Emoji            string // a single emoji, or "" for none
 	Description      string
 	Mode             string // ModeAssigned or ModePool
 	AssigneeID       *int64 // required for ModeAssigned, ignored for ModePool
@@ -48,7 +50,7 @@ func (s *Service) CreateChore(ctx context.Context, householdID, actorID int64, i
 			return err
 		}
 		c, err = q.CreateChore(ctx, dbq.CreateChoreParams{
-			HouseholdID: householdID, Title: p.Title, Description: p.Description,
+			HouseholdID: householdID, Title: p.Title, Emoji: p.Emoji, Description: p.Description,
 			Mode: p.Mode, AssigneeID: p.AssigneeID, Rrule: p.Rrule, StartsOn: p.StartsOn,
 			DueTime: p.DueTime, Points: p.Points, Pence: p.Pence, RequiresApproval: p.RequiresApproval,
 			CreatedAt: now.Unix(), UpdatedAt: now.Unix(),
@@ -83,7 +85,7 @@ func (s *Service) UpdateChore(ctx context.Context, householdID, actorID, id int6
 			return err
 		}
 		c, err = q.UpdateChore(ctx, dbq.UpdateChoreParams{
-			Title: p.Title, Description: p.Description, Mode: p.Mode, AssigneeID: p.AssigneeID,
+			Title: p.Title, Emoji: p.Emoji, Description: p.Description, Mode: p.Mode, AssigneeID: p.AssigneeID,
 			Rrule: p.Rrule, StartsOn: p.StartsOn, DueTime: p.DueTime, Points: p.Points,
 			Pence: p.Pence, RequiresApproval: p.RequiresApproval, UpdatedAt: now.Unix(),
 			HouseholdID: householdID, ID: id,
@@ -152,16 +154,17 @@ func clearFrom(c dbq.Chore, old *dbq.Chore, boardDay time.Time) string {
 }
 
 type validated struct {
-	Title, Description, Mode, StartsOn string
-	AssigneeID                         *int64
-	Rrule, DueTime                     *string
-	Points, Pence, RequiresApproval    int64
+	Title, Emoji, Description, Mode, StartsOn string
+	AssigneeID                                *int64
+	Rrule, DueTime                            *string
+	Points, Pence, RequiresApproval           int64
 }
 
 func (s *Service) validate(ctx context.Context, q *dbq.Queries, householdID int64, in Input) (validated, error) {
 	errs := valid.Errors{}
 	out := validated{
 		Title:       strings.TrimSpace(in.Title),
+		Emoji:       strings.TrimSpace(in.Emoji),
 		Description: strings.TrimSpace(in.Description),
 		Mode:        in.Mode,
 		StartsOn:    in.StartsOn,
@@ -174,6 +177,9 @@ func (s *Service) validate(ctx context.Context, q *dbq.Queries, householdID int6
 	}
 	if n := len([]rune(out.Title)); n < 1 || n > 100 {
 		errs.Add("title", "Enter a title (up to 100 characters).")
+	}
+	if out.Emoji != "" && !emoji.Valid(out.Emoji) {
+		errs.Add("emoji", "Use a single emoji.")
 	}
 	if len(out.Description) > 1000 {
 		errs.Add("description", "Keep it under 1,000 characters.")

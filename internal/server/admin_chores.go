@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lukeskelhorn/domus/internal/chores"
+	"github.com/lukeskelhorn/domus/internal/emoji"
 	"github.com/lukeskelhorn/domus/internal/store/dbq"
 	"github.com/lukeskelhorn/domus/internal/valid"
 )
@@ -51,6 +52,7 @@ func (s *Server) handleChores(w http.ResponseWriter, r *http.Request) {
 type choreForm struct {
 	ID               int64
 	Title            string
+	Emoji            emojiField
 	Description      string
 	Mode             string
 	AssigneeID       int64
@@ -89,7 +91,7 @@ func (s *Server) newChoreForm(r *http.Request) (choreForm, error) {
 	return choreForm{
 		Mode: chores.ModeAssigned, Repeat: chores.RepeatWeekly,
 		Days: []time.Weekday{today.Weekday()}, MonthDay: today.Day(),
-		StartsOn: today.Format(chores.DateLayout), Money: "0.00",
+		StartsOn: today.Format(chores.DateLayout), Money: "0.00", Emoji: newEmojiField(emoji.Chore, ""),
 		People: people, WeekOrder: chores.WeekOrder, MonthDays: monthDays,
 	}, nil
 }
@@ -101,6 +103,7 @@ func (s *Server) choreFormFor(r *http.Request, c dbq.Chore) (choreForm, error) {
 	}
 	rec := chores.ParseRecurrence(c.Rrule)
 	f.ID, f.Title, f.Description, f.Mode = c.ID, c.Title, c.Description, c.Mode
+	f.Emoji.Value = c.Emoji
 	if c.AssigneeID != nil {
 		f.AssigneeID = *c.AssigneeID
 	}
@@ -177,6 +180,7 @@ func (s *Server) readChoreForm(w http.ResponseWriter, r *http.Request, f *choreF
 	}
 	fm := newForm(r)
 	f.Title = fm.str("title")
+	f.Emoji.read(fm)
 	f.Description = fm.str("description")
 	f.Mode = fm.str("mode")
 	f.Repeat = fm.str("repeat")
@@ -204,7 +208,7 @@ func (s *Server) readChoreForm(w http.ResponseWriter, r *http.Request, f *choreF
 		fm.errs.Add("money", "Enter an amount like 0.50.")
 	}
 	in := chores.Input{
-		Title: f.Title, Description: f.Description, Mode: f.Mode,
+		Title: f.Title, Emoji: f.Emoji.Value, Description: f.Description, Mode: f.Mode,
 		Repeat:   chores.Recurrence{Kind: f.Repeat, Days: f.Days, MonthDay: f.MonthDay},
 		StartsOn: f.StartsOn, DueTime: fm.optStr("due_time"),
 		Points: f.Points, Pence: pence, RequiresApproval: f.RequiresApproval,
@@ -239,6 +243,10 @@ func (s *Server) handleChoreCreate(w http.ResponseWriter, r *http.Request) {
 		s.renderChore(w, r, http.StatusUnprocessableEntity, f, fm.errs, "")
 		return
 	}
+	if e, ok := f.Emoji.offerSuggestion(f.Title); ok {
+		s.renderChore(w, r, http.StatusOK, f, nil, suggestionFlash(e, "chore"))
+		return
+	}
 	_, err = s.Chores.CreateChore(r.Context(), s.HouseholdID, actor(r).Person.ID, in, s.boardDay(r))
 	if errs, ok := validationErrors(err); ok {
 		s.renderChore(w, r, http.StatusUnprocessableEntity, f, errs, "")
@@ -268,6 +276,10 @@ func (s *Server) handleChoreUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	if !fm.ok() {
 		s.renderChore(w, r, http.StatusUnprocessableEntity, f, fm.errs, "")
+		return
+	}
+	if e, ok := f.Emoji.offerSuggestion(f.Title); ok {
+		s.renderChore(w, r, http.StatusOK, f, nil, suggestionFlash(e, "chore"))
 		return
 	}
 	c, err := s.Chores.UpdateChore(r.Context(), s.HouseholdID, actor(r).Person.ID, cur.ID, in, s.boardDay(r))

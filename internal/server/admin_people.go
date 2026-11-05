@@ -44,6 +44,7 @@ type personForm struct {
 	Emoji      string
 	Photo      string // current photo URL
 	SortOrder  int64
+	Pictures   bool // picture cards on the board
 	Archived   bool
 
 	IsAdult  bool
@@ -69,6 +70,7 @@ func newPersonForm() personForm {
 func (s *Server) personFormFor(r *http.Request, p dbq.Person) personForm {
 	f := newPersonForm()
 	f.ID, f.Name, f.Kind, f.Colour, f.SortOrder = p.ID, p.Name, p.Kind, p.Colour, p.SortOrder
+	f.Pictures = p.PictureCards == 1
 	f.Archived = p.ArchivedAt != nil
 	f.IsAdult = p.Kind == household.KindAdult
 	f.HasPIN = p.PinHash != nil
@@ -155,8 +157,9 @@ func (s *Server) readPersonForm(w http.ResponseWriter, r *http.Request, f *perso
 	f.AvatarMode = fm.str("avatar_mode")
 	f.Emoji = fm.str("emoji")
 	f.SortOrder = fm.int("sort_order", "Use a number from 0 to 999.")
+	f.Pictures = fm.checked("picture_cards")
 
-	in = household.PersonInput{Name: f.Name, Kind: f.Kind, Colour: f.Colour, SortOrder: f.SortOrder}
+	in = household.PersonInput{Name: f.Name, Kind: f.Kind, Colour: f.Colour, SortOrder: f.SortOrder, PictureCards: f.Pictures}
 	switch f.AvatarMode {
 	case "emoji":
 		v, ok := avatar.EmojiValue(f.Emoji)

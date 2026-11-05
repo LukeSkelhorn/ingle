@@ -9,7 +9,7 @@ SELECT * FROM chore_occurrences WHERE household_id = ? AND id = ?;
 -- name: ListBoard :many
 SELECT
     o.id, o.chore_id, o.due_on, o.assignee_id, o.claimed_by, o.claimed_at, o.status,
-    c.title, c.description, c.mode, c.due_time, c.points, c.pence, c.requires_approval
+    c.title, c.emoji, c.description, c.mode, c.due_time, c.points, c.pence, c.requires_approval
 FROM chore_occurrences o
 JOIN chores c ON c.id = o.chore_id
 WHERE o.household_id = sqlc.arg(household_id)

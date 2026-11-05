@@ -12,7 +12,7 @@
       <input name="title" value="{{.Data.Title}}" required maxlength="100" autocomplete="off" placeholder="Film night pick">
       {{template "err" index .Errors "title"}}
     </label>
-    {{template "emoji_picker" (dict "Selected" .Data.Emoji "Emojis" .Data.Emojis "None" true "Err" (index .Errors "emoji"))}}
+    {{template "emoji_field" (dict "F" .Data.Emoji "Err" (index .Errors "emoji"))}}
     <label class="field">
       <span>Details (optional)</span>
       <textarea name="description" maxlength="1000" rows="2">{{.Data.Description}}</textarea>

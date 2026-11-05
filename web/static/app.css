@@ -210,6 +210,21 @@ button.chore__main:active { background: var(--line); }
 .chore__meta { display: flex; flex-wrap: wrap; gap: 6px 10px; font-size: 0.9rem; color: var(--muted); }
 .chore--done { opacity: 0.6; }
 .chore--done .chore__title { text-decoration: line-through; }
+.chore__emoji { flex: none; font-size: 1.9rem; line-height: 1; }
+/* Picture cards: a child's column of big emoji tiles, two across, with the
+   tick in the corner. */
+.chores--pictures { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.chores--pictures .chore { flex-direction: column; gap: 0; }
+.chores--pictures .chore__main {
+  position: relative; flex-direction: column; justify-content: center; gap: 6px;
+  min-height: 150px; padding: 18px 8px 12px; text-align: center;
+}
+.chores--pictures .chore__emoji { font-size: clamp(2.6rem, 7vw, 3.8rem); }
+.chores--pictures .chore__text { align-items: center; }
+.chores--pictures .chore__title { font-size: 0.95rem; }
+.chores--pictures .chore__meta { justify-content: center; font-size: 0.8rem; }
+.chores--pictures .chore__check { position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; border-width: 2px; font-size: 1.05rem; }
+.chores--pictures .chore__aside { border-left: 0; border-top: 1px solid var(--line); border-radius: 0 0 12px 12px; padding: 10px; }
 .chore__aside {
   flex: none; border: 0; border-left: 1px solid var(--line); background: none; color: var(--muted);
   padding: 0 14px; font-size: 0.9rem; border-radius: 0 12px 12px 0; cursor: pointer; touch-action: manipulation;
@@ -231,6 +246,7 @@ button.chore__main:active { background: var(--line); }
 }
 .sheet::backdrop { background: rgb(0 0 0 / 0.45); }
 .picker__title { font-size: 1.4rem; margin: 0; outline: none; }
+.picker__emoji { font-size: 1.8rem; vertical-align: -0.15em; }
 .picker__ask { margin: 4px 0 16px; color: var(--muted); }
 .picker__people { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 10px; margin-bottom: 18px; }
 .picker__person {
@@ -368,6 +384,11 @@ input, select, textarea { -webkit-user-select: text; user-select: text; }
   border-radius: 12px; border: 2px solid transparent; cursor: pointer;
 }
 .emoji .emoji__none { width: auto; padding: 0 12px; font-size: 0.9rem; border-color: var(--line); }
+.emoji-field__more { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 10px; }
+.field .emoji-field__more input.emoji-field__typed:not([type=radio]):not([type=checkbox]) { flex: none; width: 9em; font-size: 1.2rem; }
+.emoji-field__hint { margin: 0; }
+.emoji-field__hint[hidden], .check[hidden] { display: none; }
+.emoji-field__suggest span { font-size: 1.3rem; vertical-align: -0.1em; }
 .emoji input:checked + span { border-color: var(--accent); background: var(--bg); }
 .emoji input:focus-visible + span { outline: 2px solid var(--accent); }
 .day { position: relative; }

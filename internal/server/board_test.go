@@ -618,7 +618,7 @@ func TestSaveForAReward(t *testing.T) {
 	goal := sheet + "/goal"
 	expectRedirect(t, phone.post("/admin/rewards", url.Values{"title": {"Lego set"}, "emoji": {"🧱"}, "cost_points": {"100"}}), "/admin/rewards")
 	expectRedirect(t, phone.post("/admin/rewards", url.Values{"title": {"Sweets"}, "cost_points": {"10"}}), "/admin/rewards")
-	expect(t, phone.post("/admin/rewards", url.Values{"title": {"Odd"}, "emoji": {"x"}, "cost_points": {"1"}}), http.StatusUnprocessableEntity, "Choose an emoji")
+	expect(t, phone.post("/admin/rewards", url.Values{"title": {"Odd"}, "emoji": {"x"}, "cost_points": {"1"}}), http.StatusUnprocessableEntity, "Use a single emoji")
 	var lego, sweets int64
 	for _, rw := range must(h.st.Q.ListRewards(t.Context(), h.hh)) {
 		switch rw.Title {

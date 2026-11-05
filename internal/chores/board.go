@@ -8,6 +8,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/lukeskelhorn/domus/internal/emoji"
 	"github.com/lukeskelhorn/domus/internal/store/dbq"
 )
 
@@ -49,6 +50,7 @@ type Column struct {
 type Card struct {
 	OccurrenceID int64
 	Title        string
+	Emoji        string // "" for none
 	DueOn        string
 	DueTime      *string
 	Points       int64
@@ -61,6 +63,22 @@ type Card struct {
 	CompletionID int64 // set when Done
 	CompletedAt  int64 // unix seconds, set when Done
 	JustDone     bool  // completed in the last few seconds (for the tick animation)
+}
+
+// FallbackEmoji leads a picture card for a chore with no emoji and nothing
+// to suggest from its title.
+const FallbackEmoji = "⭐"
+
+// PictureEmoji is the emoji for a picture card, which always leads with one:
+// the chore's own, or one suggested from its title, or FallbackEmoji.
+func (c Card) PictureEmoji() string {
+	if c.Emoji != "" {
+		return c.Emoji
+	}
+	if e := emoji.Suggest(c.Title, emoji.Chore); e != "" {
+		return e
+	}
+	return FallbackEmoji
 }
 
 // justDoneFor is how long a completed card counts as JustDone.
@@ -157,6 +175,7 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 		card := Card{
 			OccurrenceID: r.ID,
 			Title:        r.Title,
+			Emoji:        r.Emoji,
 			DueOn:        r.DueOn,
 			DueTime:      r.DueTime,
 			Points:       r.Points,

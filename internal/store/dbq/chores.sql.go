@@ -32,15 +32,16 @@ func (q *Queries) ArchiveChore(ctx context.Context, arg ArchiveChoreParams) erro
 
 const createChore = `-- name: CreateChore :one
 INSERT INTO chores (
-    household_id, title, description, mode, assignee_id, rrule, starts_on,
+    household_id, title, emoji, description, mode, assignee_id, rrule, starts_on,
     due_time, points, pence, requires_approval, created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-RETURNING id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at, emoji
 `
 
 type CreateChoreParams struct {
 	HouseholdID      int64   `json:"household_id"`
 	Title            string  `json:"title"`
+	Emoji            string  `json:"emoji"`
 	Description      string  `json:"description"`
 	Mode             string  `json:"mode"`
 	AssigneeID       *int64  `json:"assignee_id"`
@@ -58,6 +59,7 @@ func (q *Queries) CreateChore(ctx context.Context, arg CreateChoreParams) (Chore
 	row := q.db.QueryRowContext(ctx, createChore,
 		arg.HouseholdID,
 		arg.Title,
+		arg.Emoji,
 		arg.Description,
 		arg.Mode,
 		arg.AssigneeID,
@@ -87,12 +89,13 @@ func (q *Queries) CreateChore(ctx context.Context, arg CreateChoreParams) (Chore
 		&i.ArchivedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Emoji,
 	)
 	return i, err
 }
 
 const getChore = `-- name: GetChore :one
-SELECT id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at FROM chores WHERE household_id = ? AND id = ?
+SELECT id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at, emoji FROM chores WHERE household_id = ? AND id = ?
 `
 
 type GetChoreParams struct {
@@ -119,12 +122,13 @@ func (q *Queries) GetChore(ctx context.Context, arg GetChoreParams) (Chore, erro
 		&i.ArchivedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Emoji,
 	)
 	return i, err
 }
 
 const listChores = `-- name: ListChores :many
-SELECT id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at FROM chores
+SELECT id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at, emoji FROM chores
 WHERE household_id = ? AND archived_at IS NULL
 ORDER BY title
 `
@@ -154,6 +158,7 @@ func (q *Queries) ListChores(ctx context.Context, householdID int64) ([]Chore, e
 			&i.ArchivedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Emoji,
 		); err != nil {
 			return nil, err
 		}
@@ -170,14 +175,15 @@ func (q *Queries) ListChores(ctx context.Context, householdID int64) ([]Chore, e
 
 const updateChore = `-- name: UpdateChore :one
 UPDATE chores SET
-    title = ?, description = ?, mode = ?, assignee_id = ?, rrule = ?, starts_on = ?,
+    title = ?, emoji = ?, description = ?, mode = ?, assignee_id = ?, rrule = ?, starts_on = ?,
     due_time = ?, points = ?, pence = ?, requires_approval = ?, updated_at = ?
 WHERE household_id = ? AND id = ?
-RETURNING id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at
+RETURNING id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at, emoji
 `
 
 type UpdateChoreParams struct {
 	Title            string  `json:"title"`
+	Emoji            string  `json:"emoji"`
 	Description      string  `json:"description"`
 	Mode             string  `json:"mode"`
 	AssigneeID       *int64  `json:"assignee_id"`
@@ -195,6 +201,7 @@ type UpdateChoreParams struct {
 func (q *Queries) UpdateChore(ctx context.Context, arg UpdateChoreParams) (Chore, error) {
 	row := q.db.QueryRowContext(ctx, updateChore,
 		arg.Title,
+		arg.Emoji,
 		arg.Description,
 		arg.Mode,
 		arg.AssigneeID,
@@ -225,6 +232,7 @@ func (q *Queries) UpdateChore(ctx context.Context, arg UpdateChoreParams) (Chore
 		&i.ArchivedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Emoji,
 	)
 	return i, err
 }

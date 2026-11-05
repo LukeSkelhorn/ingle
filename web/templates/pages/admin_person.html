@@ -43,6 +43,11 @@
       <small class="muted">JPEG, PNG or GIF up to 8 MB. It's cropped to a square.</small>
       {{template "err" index .Errors "photo"}}
     </label>
+    <label class="check" data-show-when="kind=child">
+      <input type="checkbox" name="picture_cards" value="1"{{if .Data.Pictures}} checked{{end}}>
+      <span>Picture cards
+        <small class="muted">Big picture tiles in their column, for children who can't read yet.</small></span>
+    </label>
     {{if .Data.Rewards}}
     <label class="field">
       <span>Saving for</span>

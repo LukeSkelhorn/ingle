@@ -271,3 +271,29 @@ func TestRewardEmojiAndGoals(t *testing.T) {
 		t.Errorf("goal after archive = %v, %v", p.GoalRewardID, p.GoalSetAt)
 	}
 }
+
+func TestTypedRewardEmojiAndPictureCards(t *testing.T) {
+	f := newFixture(t)
+	ctx := t.Context()
+	r, err := f.svc.CreateReward(ctx, f.hh, f.mum.ID, RewardInput{Title: "Dino park", Emoji: "🦕", CostPoints: 10})
+	if err != nil || r.Emoji != "🦕" {
+		t.Fatalf("typed emoji = %+v, %v", r, err)
+	}
+	if _, err := f.svc.CreateReward(ctx, f.hh, f.mum.ID, RewardInput{Title: "Two", Emoji: "🦕🦖", CostPoints: 10}); err == nil {
+		t.Error("two emoji accepted")
+	}
+
+	kid, err := f.svc.CreatePerson(ctx, f.hh, f.mum.ID, PersonInput{Name: "Alfie", Kind: KindChild, Colour: "#46A758", PictureCards: true})
+	if err != nil || kid.PictureCards != 1 {
+		t.Fatalf("child with picture cards = %d, %v", kid.PictureCards, err)
+	}
+	kid, err = f.svc.UpdatePerson(ctx, f.hh, f.mum.ID, kid.ID, PersonInput{Name: "Alfie", Kind: KindChild, Colour: "#46A758"})
+	if err != nil || kid.PictureCards != 0 {
+		t.Fatalf("turned off = %d, %v", kid.PictureCards, err)
+	}
+	// Only children have them.
+	dad, err := f.svc.CreatePerson(ctx, f.hh, f.mum.ID, PersonInput{Name: "Dad", Kind: KindAdult, Colour: "#46A758", PictureCards: true})
+	if err != nil || dad.PictureCards != 0 {
+		t.Fatalf("adult with picture cards = %d, %v", dad.PictureCards, err)
+	}
+}

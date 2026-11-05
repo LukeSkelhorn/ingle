@@ -190,6 +190,16 @@ func (d *device) get(path string) resp {
 
 func (d *device) post(path string, form url.Values) resp {
 	d.h.t.Helper()
+	// Chore and reward forms behave like a browser running the page's
+	// script, which offers emoji suggestions itself. Pass suggest_offered
+	// (even empty) to act otherwise.
+	if (strings.HasPrefix(path, "/admin/chores") || strings.HasPrefix(path, "/admin/rewards")) && !form.Has("suggest_offered") {
+		f := url.Values{"suggest_offered": {"1"}}
+		for k, v := range form {
+			f[k] = v
+		}
+		form = f
+	}
 	req, err := http.NewRequestWithContext(d.h.t.Context(), http.MethodPost, d.h.ts.URL+path, strings.NewReader(form.Encode()))
 	if err != nil {
 		d.h.t.Fatal(err)

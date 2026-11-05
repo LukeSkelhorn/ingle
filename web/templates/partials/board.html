@@ -41,7 +41,9 @@
       </div>
       {{end}}
       {{if .Cards}}
-      <ul class="chores">{{range .Cards}}{{template "card" (dict "Card" . "Adult" $.Adult)}}{{end}}</ul>
+      <ul class="chores{{if .Person.PictureCards}} chores--pictures{{end}}">
+        {{- range .Cards}}{{template "card" (dict "Card" . "Adult" $.Adult "Pictures" $col.Person.PictureCards)}}{{end -}}
+      </ul>
       {{else}}
       <p class="column__empty">Nothing today.</p>
       {{end}}
@@ -52,23 +54,25 @@
 </div>
 {{end}}
 
-{{/* One chore: dict "Card" chores.Card "Adult" bool. Pool chores open the
+{{/* One chore: dict "Card" chores.Card "Adult" bool "Pictures" (picture
+     cards: a big emoji tile, never without an emoji). Pool chores open the
      picker; assigned and claimed chores are completed with one tap; done
      chores open the review sheet for an adult, and are inert otherwise. */}}
 {{define "card"}}
-{{- $adult := .Adult}}{{with .Card}}
+{{- $adult := .Adult}}{{$e := .Card.Emoji}}{{if .Pictures}}{{$e = .Card.PictureEmoji}}{{end}}{{with .Card}}
 <li class="chore{{if .Done}} chore--done{{if .JustDone}} chore--just{{end}}{{end}}{{if .Overdue}} chore--overdue{{end}}{{if .Claimed}} chore--claimed{{end}}">
   {{if and .Done $adult .CompletionID}}
   <button class="chore__main" type="button"
           hx-get="/board/completions/{{.CompletionID}}/review" hx-target="#sheet-body" hx-swap="innerHTML">
-    {{template "done_body" .}}
+    {{template "done_body" (dict "C" . "E" $e)}}
   </button>
   {{else if .Done}}
-  <div class="chore__main">{{template "done_body" .}}</div>
+  <div class="chore__main">{{template "done_body" (dict "C" . "E" $e)}}</div>
   {{else if and .Pool (not .Claimed)}}
   <button class="chore__main" type="button"
           hx-get="/board/occurrences/{{.OccurrenceID}}/pick" hx-target="#sheet-body" hx-swap="innerHTML">
     <span class="chore__check chore__check--pool" aria-hidden="true">+</span>
+    {{with $e}}<span class="chore__emoji" aria-hidden="true">{{.}}</span>{{end}}
     <span class="chore__text">
       <span class="chore__title">{{.Title}}</span>
       {{template "chore_meta" .}}
@@ -78,6 +82,7 @@
   <button class="chore__main" type="button" hx-disabled-elt="this"
           hx-post="/board/occurrences/{{.OccurrenceID}}/complete" hx-target="#board" hx-swap="outerHTML">
     <span class="chore__check" aria-hidden="true"></span>
+    {{with $e}}<span class="chore__emoji" aria-hidden="true">{{.}}</span>{{end}}
     <span class="chore__text">
       <span class="visually-hidden">Mark done: </span><span class="chore__title">{{.Title}}</span>
       {{template "chore_meta" .}}
@@ -92,13 +97,14 @@
 {{end}}
 {{- end}}
 
-{{define "done_body"}}
+{{define "done_body"}}{{$e := .E}}{{with .C}}
 <span class="chore__check chore__check--on" aria-hidden="true">✓</span>
+{{with $e}}<span class="chore__emoji" aria-hidden="true">{{.}}</span>{{end}}
 <span class="chore__text">
   <span class="chore__title">{{.Title}}</span>
   <span class="chore__meta">{{if .Pending}}<span class="tag tag--wait">Waiting for a grown-up</span>{{else}}Done{{end}}</span>
 </span>
-{{end}}
+{{end}}{{end}}
 
 {{define "chore_meta"}}
 <span class="chore__meta">
@@ -113,7 +119,7 @@
 {{define "picker"}}
 <form class="picker" hx-target="#board" hx-swap="outerHTML" onsubmit="return false">
   {{/* Focus the title, not the first avatar, so nobody looks pre-chosen. */}}
-  <h2 class="picker__title" tabindex="-1" autofocus>{{.Card.Title}}</h2>
+  <h2 class="picker__title" tabindex="-1" autofocus>{{with .Card.Emoji}}<span class="picker__emoji" aria-hidden="true">{{.}}</span> {{end}}{{.Card.Title}}</h2>
   <p class="picker__ask">Who's doing this?</p>
   <div class="picker__people">
     {{range .People}}
@@ -139,7 +145,7 @@
 {{define "review"}}
 {{with .C}}
 <div class="picker" hx-target="#board" hx-swap="outerHTML">
-  <h2 class="picker__title" tabindex="-1" autofocus>{{.Title}}</h2>
+  <h2 class="picker__title" tabindex="-1" autofocus>{{with .Emoji}}<span class="picker__emoji" aria-hidden="true">{{.}}</span> {{end}}{{.Title}}</h2>
   <div class="review__who">
     {{template "avatar" (avatar .Person "md")}}
     <p>{{.Person.Name}} · {{when .CompletedAt}}{{with worth .Points .Pence}}<br><span class="chip">{{.}}</span>{{end}}</p>
