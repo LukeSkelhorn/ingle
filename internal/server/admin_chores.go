@@ -1,8 +1,11 @@
 package server
 
 import (
+	"cmp"
 	"errors"
+	"fmt"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"time"
@@ -17,6 +20,121 @@ type choreRow struct {
 	Chore    dbq.Chore
 	Assignee *dbq.Person
 	Schedule string
+}
+
+// Admin chores list sorts.
+const (
+	sortPoints = "points"
+	sortMoney  = "money"
+	// personPool is the person filter for chores anyone can claim.
+	personPool = "pool"
+)
+
+// choresQuery is the chores list's filter and sort, kept in the URL so
+// going into a chore and back returns to the same list.
+type choresQuery struct {
+	Person string // "", personPool or a person's ID
+	Sort   string // "", sortPoints or sortMoney
+}
+
+// parseChoresQuery reads the filter and sort from q, ignoring a person who
+// isn't active in the household and any sort it doesn't know.
+func parseChoresQuery(q url.Values, people []dbq.Person) choresQuery {
+	var out choresQuery
+	switch p := q.Get("person"); p {
+	case personPool:
+		out.Person = p
+	default:
+		if id, err := strconv.ParseInt(p, 10, 64); err == nil {
+			for _, pp := range people {
+				if pp.ID == id {
+					out.Person = p
+				}
+			}
+		}
+	}
+	if v := q.Get("sort"); v == sortPoints || v == sortMoney {
+		out.Sort = v
+	}
+	return out
+}
+
+// Encode is the query string, without the empty parts.
+func (q choresQuery) Encode() string {
+	v := url.Values{}
+	if q.Person != "" {
+		v.Set("person", q.Person)
+	}
+	if q.Sort != "" {
+		v.Set("sort", q.Sort)
+	}
+	return v.Encode()
+}
+
+// Path is the list's URL for q.
+func (q choresQuery) Path() string {
+	if e := q.Encode(); e != "" {
+		return "/admin/chores?" + e
+	}
+	return "/admin/chores"
+}
+
+// choreBack is where to return after adding or archiving a chore: the
+// form's back value if it's the chores list with a valid filter, else the
+// plain list. Anything else (another page, another site) is ignored.
+func choreBack(back string, people []dbq.Person) string {
+	u, err := url.Parse(back)
+	if err != nil || u.Scheme != "" || u.Host != "" || u.User != nil || u.Path != "/admin/chores" {
+		return "/admin/chores"
+	}
+	return parseChoresQuery(u.Query(), people).Path()
+}
+
+// choresPage is the admin chores list.
+type choresPage struct {
+	Rows   []choreRow
+	People []dbq.Person
+	Q      choresQuery
+	Person *dbq.Person // the person filtered on
+	Pool   bool        // filtered to up for grabs
+	Total  int         // chores before filtering
+}
+
+// Heading is "Chores", "Chores · 6 for Alfie" or "Chores · 3 up for grabs".
+func (p choresPage) Heading() string {
+	switch {
+	case p.Person != nil:
+		return fmt.Sprintf("Chores · %d for %s", len(p.Rows), p.Person.Name)
+	case p.Pool:
+		return fmt.Sprintf("Chores · %d up for grabs", len(p.Rows))
+	}
+	return "Chores"
+}
+
+// ChipURL is the list filtered to person ("" for everyone), keeping the sort.
+func (p choresPage) ChipURL(person string) string {
+	return choresQuery{Person: person, Sort: p.Q.Sort}.Path()
+}
+
+// Back is this list, for the chore pages to come back to.
+func (p choresPage) Back() string { return p.Q.Path() }
+
+// NewURL is "Add a chore", for the filtered person if there is one.
+func (p choresPage) NewURL() string {
+	v := url.Values{"back": {p.Back()}}
+	if p.Person != nil {
+		v.Set("assignee", strconv.FormatInt(p.Person.ID, 10))
+	}
+	return "/admin/chores/new?" + v.Encode()
+}
+
+// EditURL is a chore's page, coming back to this list.
+func (p choresPage) EditURL(id int64) string {
+	u := "/admin/chores/" + strconv.FormatInt(id, 10)
+	if b := p.Back(); b != "/admin/chores" {
+		u += "?" + url.Values{"back": {b}}.Encode()
+	}
+	return u
 }
 
 func (s *Server) handleChores(w http.ResponseWriter, r *http.Request) {
@@ -35,17 +153,49 @@ func (s *Server) handleChores(w http.ResponseWriter, r *http.Request) {
 	for i := range people {
 		byID[people[i].ID] = &people[i]
 	}
-	rows := make([]choreRow, 0, len(list))
+	page := choresPage{People: people, Q: parseChoresQuery(r.URL.Query(), people), Total: len(list)}
+	page.Pool = page.Q.Person == personPool
+	if id, err := strconv.ParseInt(page.Q.Person, 10, 64); err == nil {
+		page.Person = byID[id]
+	}
+	page.Rows = make([]choreRow, 0, len(list))
 	for _, c := range list {
 		row := choreRow{Chore: c, Schedule: describeSchedule(chores.ParseRecurrence(c.Rrule), c.StartsOn)}
 		if c.AssigneeID != nil {
 			row.Assignee = byID[*c.AssigneeID]
 		}
-		rows = append(rows, row)
+		switch {
+		case page.Pool && c.AssigneeID != nil,
+			page.Person != nil && (c.AssigneeID == nil || *c.AssigneeID != page.Person.ID):
+			continue
+		}
+		page.Rows = append(page.Rows, row)
 	}
-	v := s.view(r, "Chores", rows)
+	sortChoreRows(page.Rows, page.Q.Sort)
+	v := s.view(r, "Chores", page)
 	v.Nav = "chores"
 	s.render(w, r, http.StatusOK, "admin_chores", v)
+}
+
+// sortChoreRows orders rows by sort: by points or money, high to low (the
+// other amount, then the title, breaking ties), or leaves the title order.
+func sortChoreRows(rows []choreRow, sort string) {
+	if sort != sortPoints && sort != sortMoney {
+		return
+	}
+	slices.SortStableFunc(rows, func(a, b choreRow) int {
+		first, second := func(r choreRow) int64 { return r.Chore.Points }, func(r choreRow) int64 { return r.Chore.Pence }
+		if sort == sortMoney {
+			first, second = second, first
+		}
+		if d := cmp.Compare(first(b), first(a)); d != 0 {
+			return d
+		}
+		if d := cmp.Compare(second(b), second(a)); d != 0 {
+			return d
+		}
+		return cmp.Compare(a.Chore.Title, b.Chore.Title)
+	})
 }
 
 // choreForm is the chore edit page.
@@ -65,6 +215,8 @@ type choreForm struct {
 	Points           int64
 	Money            string
 	RequiresApproval bool
+	// Back is the chores list to return to, with its filter.
+	Back string
 
 	People    []dbq.Person
 	WeekOrder []time.Weekday
@@ -89,6 +241,7 @@ func (s *Server) newChoreForm(r *http.Request) (choreForm, error) {
 		monthDays[i] = i + 1
 	}
 	return choreForm{
+		Back: choreBack(r.URL.Query().Get("back"), people), // a POST reads it in readChoreForm
 		Mode: chores.ModeAssigned, Repeat: chores.RepeatWeekly,
 		Days: []time.Weekday{today.Weekday()}, MonthDay: today.Day(),
 		StartsOn: today.Format(chores.DateLayout), Money: "0.00", Emoji: newEmojiField(emoji.Chore, ""),
@@ -136,6 +289,14 @@ func (s *Server) handleChoreNew(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.serverError(w, r, err)
 		return
+	}
+	// "Add a chore for Alfie" from a filtered list.
+	if id, err := strconv.ParseInt(r.URL.Query().Get("assignee"), 10, 64); err == nil {
+		for _, p := range f.People {
+			if p.ID == id {
+				f.Mode, f.AssigneeID = chores.ModeAssigned, id
+			}
+		}
 	}
 	s.renderChore(w, r, http.StatusOK, f, nil, "")
 }
@@ -198,6 +359,7 @@ func (s *Server) readChoreForm(w http.ResponseWriter, r *http.Request, f *choreF
 	if n, err := strconv.Atoi(fm.str("month_day")); err == nil {
 		f.MonthDay = n
 	}
+	f.Back = choreBack(fm.str("back"), f.People)
 	f.AssigneeID = 0
 	if id := fm.optID("assignee_id"); id != nil {
 		f.AssigneeID = *id
@@ -256,7 +418,7 @@ func (s *Server) handleChoreCreate(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	redirect(w, r, "/admin/chores")
+	redirect(w, r, f.Back)
 }
 
 func (s *Server) handleChoreUpdate(w http.ResponseWriter, r *http.Request) {
@@ -291,11 +453,13 @@ func (s *Server) handleChoreUpdate(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
+	back := f.Back
 	f, err = s.choreFormFor(r, c)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
+	f.Back = back
 	s.renderChore(w, r, http.StatusOK, f, nil, "Saved. Upcoming days have been updated.")
 }
 
@@ -304,11 +468,20 @@ func (s *Server) handleChoreArchive(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if err := parseForm(w, r); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
 	if err := s.Chores.ArchiveChore(r.Context(), s.HouseholdID, actor(r).Person.ID, c.ID, s.boardDay(r)); err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	redirect(w, r, "/admin/chores")
+	people, err := s.Household.People(r.Context(), s.HouseholdID)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	redirect(w, r, choreBack(r.PostFormValue("back"), people))
 }
 
 // boardDay is the household's current board day (after the reset time).

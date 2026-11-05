@@ -1,14 +1,43 @@
 {{define "bodyclass"}}admin{{end}}
 {{define "content"}}
 {{template "admin_nav" .}}
+{{$p := .Data}}
 <main class="admin__main">
   <div class="admin__head">
-    <h1>Chores</h1>
-    <a class="btn btn--primary" href="/admin/chores/new">Add a chore</a>
+    <h1>{{$p.Heading}}</h1>
+    <a class="btn btn--primary" href="{{$p.NewURL}}">Add a chore</a>
   </div>
+  {{if $p.Total}}
+  <div class="chores-filter">
+    <nav class="chips" aria-label="Show chores for">
+      <a href="{{$p.ChipURL ""}}"{{if eq $p.Q.Person ""}} aria-current="true"{{end}}>Everyone</a>
+      {{range $p.People}}
+      <a href="{{$p.ChipURL (print .ID)}}" style="--person: {{.Colour}}"{{if eq $p.Q.Person (print .ID)}} aria-current="true"{{end}}>{{template "avatar" (avatar . "xs")}} {{.Name}}</a>
+      {{end}}
+      <a href="{{$p.ChipURL "pool"}}"{{if $p.Pool}} aria-current="true"{{end}}>✋ Up for grabs</a>
+    </nav>
+    <form class="sort" method="get" action="/admin/chores">
+      {{with $p.Q.Person}}<input type="hidden" name="person" value="{{.}}">{{end}}
+      <label for="chores-sort">Sort</label>
+      <select id="chores-sort" name="sort" onchange="this.form.requestSubmit()">
+        <option value=""{{if eq $p.Q.Sort ""}} selected{{end}}>Name</option>
+        <option value="points"{{if eq $p.Q.Sort "points"}} selected{{end}}>Points, high to low</option>
+        <option value="money"{{if eq $p.Q.Sort "money"}} selected{{end}}>Money, high to low</option>
+      </select>
+      <noscript><button class="btn" type="submit">Sort</button></noscript>
+    </form>
+  </div>
+  <script>
+    // On a phone the chips scroll sideways: keep the chosen one in view.
+    (function () {
+      var c = document.querySelector('.chips [aria-current="true"]');
+      if (c) c.scrollIntoView({ block: "nearest", inline: "center" });
+    })();
+  </script>
+  {{end}}
   <ul class="list card">
-    {{range .Data}}
-    <li><a class="list__row" href="/admin/chores/{{.Chore.ID}}">
+    {{range $p.Rows}}
+    <li><a class="list__row" href="{{$p.EditURL .Chore.ID}}">
       {{with .Assignee}}{{template "avatar" (avatar . "sm")}}{{else}}<span class="avatar avatar--sm avatar--pool" aria-hidden="true">✋</span>{{end}}
       <span class="list__main"><strong>{{with .Chore.Emoji}}{{.}} {{end}}{{.Chore.Title}}</strong>
         <small class="muted">{{with .Assignee}}{{.Name}}{{else}}Anyone can claim{{end}} · {{.Schedule}}{{with .Chore.DueTime}} · by {{.}}{{end}}</small></span>
@@ -16,7 +45,11 @@
       <span aria-hidden="true">›</span>
     </a></li>
     {{else}}
-    <li class="list__empty muted">No chores yet.</li>
+    <li class="list__empty muted">
+      {{- if $p.Person}}No chores for {{$p.Person.Name}} yet. <a class="btn" href="{{$p.NewURL}}">Add a chore for {{$p.Person.Name}}</a>
+      {{- else if $p.Pool}}Nothing up for grabs. <a class="btn" href="{{$p.NewURL}}">Add a chore</a>
+      {{- else}}No chores yet.{{end -}}
+    </li>
     {{end}}
   </ul>
 </main>

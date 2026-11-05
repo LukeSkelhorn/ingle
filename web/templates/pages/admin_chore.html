@@ -2,10 +2,11 @@
 {{define "content"}}
 {{template "admin_nav" .}}
 <main class="admin__main">
-  <p><a href="/admin/chores">‹ Chores</a></p>
+  <p><a href="{{.Data.Back}}">‹ Chores</a></p>
   <h1>{{if .Data.ID}}{{.Data.Title}}{{else}}Add a chore{{end}}</h1>
   {{template "flash" .}}
   <form class="card stack chore-form" method="post" action="{{if .Data.ID}}/admin/chores/{{.Data.ID}}{{else}}/admin/chores{{end}}">
+    <input type="hidden" name="back" value="{{.Data.Back}}">
     <label class="field">
       <span>What needs doing?</span>
       <input name="title" value="{{.Data.Title}}" required maxlength="100" autocomplete="off" placeholder="Feed the cat">
@@ -110,7 +111,7 @@
   <section class="card stack">
     <h2>Archive</h2>
     <p class="muted">Removes this chore from upcoming days. Anything already done stays in the history.</p>
-    <form method="post" action="/admin/chores/{{.Data.ID}}/archive"><button class="btn btn--danger" type="submit">Archive chore</button></form>
+    <form method="post" action="/admin/chores/{{.Data.ID}}/archive"><input type="hidden" name="back" value="{{.Data.Back}}"><button class="btn btn--danger" type="submit">Archive chore</button></form>
   </section>
   {{end}}
 </main>
