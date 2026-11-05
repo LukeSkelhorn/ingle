@@ -358,59 +358,6 @@ func (s *Service) reviewTx(ctx context.Context, q *dbq.Queries, householdID, com
 	return s.activity(ctx, q, householdID, reviewerID, verb, completionID)
 }
 
-// Redeem spends personID's balance on a reward. It fails with
-// ErrInsufficientBalance if either points or pence would go negative.
-func (s *Service) Redeem(ctx context.Context, householdID, rewardID, personID int64) (dbq.Redemption, error) {
-	var out dbq.Redemption
-	err := s.st.WithTx(ctx, func(q *dbq.Queries) error {
-		if _, err := getPerson(ctx, q, householdID, personID); err != nil {
-			return err
-		}
-		reward, err := q.GetReward(ctx, dbq.GetRewardParams{HouseholdID: householdID, ID: rewardID})
-		if err != nil {
-			return notFound(err)
-		}
-		if reward.ArchivedAt != nil {
-			return ErrNotFound
-		}
-		bal, err := q.BalanceForPerson(ctx, dbq.BalanceForPersonParams{HouseholdID: householdID, PersonID: personID})
-		if err != nil {
-			return fmt.Errorf("balance: %w", err)
-		}
-		if bal.Points < reward.CostPoints || bal.Pence < reward.CostPence {
-			return ErrInsufficientBalance
-		}
-
-		now := s.now().Unix()
-		out, err = q.CreateRedemption(ctx, dbq.CreateRedemptionParams{
-			HouseholdID: householdID,
-			RewardID:    rewardID,
-			PersonID:    personID,
-			Points:      reward.CostPoints,
-			Pence:       reward.CostPence,
-			Status:      StatusApproved,
-			RequestedAt: now,
-		})
-		if err != nil {
-			return fmt.Errorf("create redemption: %w", err)
-		}
-		if _, err := q.InsertLedgerEntry(ctx, dbq.InsertLedgerEntryParams{
-			HouseholdID:  householdID,
-			PersonID:     personID,
-			Points:       -reward.CostPoints,
-			Pence:        -reward.CostPence,
-			Kind:         "redemption",
-			RedemptionID: &out.ID,
-			Note:         reward.Title,
-			CreatedAt:    now,
-		}); err != nil {
-			return fmt.Errorf("ledger: %w", err)
-		}
-		return s.activity(ctx, q, householdID, personID, "reward.redeemed", out.ID)
-	})
-	return out, err
-}
-
 func creditCompletion(ctx context.Context, q *dbq.Queries, c dbq.Completion, by *int64, now int64) error {
 	if _, err := q.InsertLedgerEntry(ctx, dbq.InsertLedgerEntryParams{
 		HouseholdID:  c.HouseholdID,
@@ -429,14 +376,17 @@ func creditCompletion(ctx context.Context, q *dbq.Queries, c dbq.Completion, by 
 
 func (s *Service) activity(ctx context.Context, q *dbq.Queries, householdID, actorID int64, verb string, subjectID int64) error {
 	subjectType := map[string]string{
-		"chore.claimed":   "occurrence",
-		"chore.released":  "occurrence",
-		"chore.completed": "completion",
-		"chore.undone":    "occurrence",
-		"chore.approved":  "completion",
-		"chore.rejected":  "completion",
-		"chore.reversed":  "completion",
-		"reward.redeemed": "redemption",
+		"chore.claimed":    "occurrence",
+		"chore.released":   "occurrence",
+		"chore.completed":  "completion",
+		"chore.undone":     "occurrence",
+		"chore.approved":   "completion",
+		"chore.rejected":   "completion",
+		"chore.reversed":   "completion",
+		"reward.requested": "redemption",
+		"reward.redeemed":  "redemption",
+		"reward.declined":  "redemption",
+		"reward.cancelled": "redemption",
 	}[verb]
 	if err := q.InsertActivity(ctx, dbq.InsertActivityParams{
 		HouseholdID: householdID,

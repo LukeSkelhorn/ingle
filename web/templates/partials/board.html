@@ -29,6 +29,7 @@
           <span class="column__who">
             <span class="column__name">{{.Person.Name}}</span>
             <span class="column__balance">{{pts .Points}}{{if .Pence}} · {{money .Pence}}{{end}}</span>
+            {{if .Waiting}}<span class="tag tag--wait column__waiting">🎁 {{.Waiting}} waiting</span>{{end}}
           </span>
         </button>
       </h2>
@@ -163,8 +164,9 @@
 {{end}}
 {{end}}
 
-{{/* A person's sheet, opened from their column: balance, what they've
-     earned this week, and the rewards in cost order.
+{{/* A person's sheet, opened from their column: what they can spend (and
+     what waiting claims hold), what they've earned this week, their waiting
+     claims, and the rewards in cost order, with Claim on the affordable ones.
      data-refresh lets the page re-fetch it when the board changes. */}}
 {{define "person"}}
 <div class="person" style="--person: {{.Person.Colour}}" data-refresh="/board/people/{{.Person.ID}}">
@@ -172,18 +174,46 @@
     {{template "avatar" (avatar .Person "lg")}}
     <h2 class="picker__title" tabindex="-1" autofocus>{{.Person.Name}}</h2>
   </div>
-  <p class="person__balance">{{pts .Points}}{{if .Pence}} <span class="person__money">{{money .Pence}}</span>{{end}}</p>
+  <p class="person__balance">{{pts .Points}}{{if .Pence}} <span class="person__money">{{money .Pence}}</span>{{end}}
+    {{- with worth .HeldPoints .HeldPence}} <span class="person__held">({{.}} held)</span>{{end}}</p>
   <p class="person__week">This week: {{with worth .WeekPoints .WeekPence}}{{.}}{{else}}nothing yet{{end}}</p>
+  {{if .Waiting}}
+  <h3 class="person__sub">Waiting for a grown-up</h3>
+  <ul class="rewards" hx-target="#board" hx-swap="outerHTML">
+    {{range .Waiting}}
+    <li class="reward reward--waiting">
+      {{if $.Adult}}
+      <button class="reward__open" type="button"
+              hx-get="/board/redemptions/{{.ID}}/review" hx-target="#sheet-body" hx-swap="innerHTML">
+        <span class="reward__text">
+          <span class="reward__title">{{.Title}}</span>
+          {{with worth .Points .Pence}}<span class="chip">{{.}}</span>{{end}}
+        </span>
+        <span class="reward__status">Check ›</span>
+      </button>
+      {{else}}
+      <span class="reward__text">
+        <span class="reward__title">{{.Title}}</span>
+        {{with worth .Points .Pence}}<span class="chip">{{.}}</span>{{end}}
+      </span>
+      <button class="btn btn--ghost reward__action" type="button" hx-disabled-elt="this"
+              hx-post="/board/redemptions/{{.ID}}/cancel">Cancel</button>
+      {{end}}
+    </li>
+    {{end}}
+  </ul>
+  {{end}}
   <h3 class="person__sub">Rewards</h3>
   {{if .Rewards}}
-  <ul class="rewards">
+  <ul class="rewards" hx-target="#board" hx-swap="outerHTML">
     {{range .Rewards}}
     <li class="reward{{if .Affordable}} reward--affordable{{end}}">
       <span class="reward__text">
         <span class="reward__title">{{.Title}}</span>
         {{with worth .CostPoints .CostPence}}<span class="chip">{{.}}</span>{{end}}
       </span>
-      {{if .Affordable}}<span class="reward__status">You can get this</span>
+      {{if .Affordable}}<button class="btn btn--primary reward__action" type="button" hx-disabled-elt="this"
+              hx-post="/board/rewards/{{.ID}}/claim" hx-vals='{"person": "{{$.Person.ID}}"}'>Claim</button>
       {{else}}<span class="reward__need">
         {{- if .NeedPoints}}{{pts .NeedPoints}} more{{end}}
         {{- if and .NeedPoints .NeedPence}} · {{end}}
@@ -199,4 +229,26 @@
     <button class="btn btn--ghost btn--block" type="button" data-close>Close</button>
   </div>
 </div>
+{{end}}
+
+{{/* An adult's sheet for a waiting reward claim: approve spends the held
+     points, decline lets them go. */}}
+{{define "claim_review"}}
+{{with .D}}
+<div class="picker" hx-target="#board" hx-swap="outerHTML">
+  <h2 class="picker__title" tabindex="-1" autofocus>{{.Title}}</h2>
+  <div class="review__who">
+    {{template "avatar" (avatar .Person "md")}}
+    <p>{{.Person.Name}} · asked {{when .RequestedAt}}{{with worth .Points .Pence}}<br><span class="chip">{{.}}</span>{{end}}</p>
+  </div>
+  <div class="picker__actions">
+    <button class="btn btn--block" type="button" hx-disabled-elt="this"
+            hx-post="/board/redemptions/{{.ID}}/decline">Decline</button>
+    <button class="btn btn--primary btn--block" type="button" hx-disabled-elt="this"
+            hx-post="/board/redemptions/{{.ID}}/approve">Approve</button>
+    <button class="btn btn--ghost btn--block" type="button"
+            hx-get="/board/people/{{.Person.ID}}" hx-target="#sheet-body" hx-swap="innerHTML">Back</button>
+  </div>
+</div>
+{{end}}
 {{end}}

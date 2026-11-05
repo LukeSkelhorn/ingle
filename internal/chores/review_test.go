@@ -131,7 +131,7 @@ func TestReverseAfterSpendingGoesNegative(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.svc.Redeem(ctx, f.hh, film.ID, f.kid.ID); err != nil {
+	if _, err := f.svc.ClaimReward(ctx, f.hh, film.ID, f.kid.ID, &f.adult.ID); err != nil {
 		t.Fatal(err)
 	}
 	if err := f.svc.Reverse(ctx, f.hh, c.ID, f.adult.ID); err != nil {

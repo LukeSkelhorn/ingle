@@ -83,7 +83,7 @@ func TestLockedDisplayShowsNothingPersonal(t *testing.T) {
 			t.Errorf("locked page shows %q", secret)
 		}
 	}
-	for _, p := range []string{"/board", "/screensaver", "/avatars/x.jpg", "/board/occurrences/1/pick", "/board/people/1"} {
+	for _, p := range []string{"/board", "/screensaver", "/avatars/x.jpg", "/board/occurrences/1/pick", "/board/people/1", "/board/redemptions/1/review"} {
 		if r := wall.get(p); r.status != http.StatusLocked {
 			t.Errorf("GET %s = %d, want 423", p, r.status)
 		}

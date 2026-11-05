@@ -44,6 +44,11 @@ func (s *Server) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
+	claims, err := s.Store.Q.ListPendingRedemptions(ctx, s.HouseholdID)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
 	act, err := s.Store.Q.ListRecentActivityWithActor(ctx, dbq.ListRecentActivityWithActorParams{HouseholdID: s.HouseholdID, Limit: 20})
 	if err != nil {
 		s.serverError(w, r, err)
@@ -55,7 +60,7 @@ func (s *Server) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v := s.view(r, "Admin", adminHome{
-		People: len(people), Chores: len(chs), Rewards: len(rewards), Pending: len(pending), Lock: lv, Activity: act,
+		People: len(people), Chores: len(chs), Rewards: len(rewards), Pending: len(pending) + len(claims), Lock: lv, Activity: act,
 	})
 	v.Nav = "home"
 	s.render(w, r, http.StatusOK, "admin_home", v)
@@ -108,7 +113,10 @@ var activityText = map[string]string{
 	"reward.updated":          "edited a reward",
 	"reward.archived":         "archived a reward",
 	"reward.restored":         "restored a reward",
-	"reward.redeemed":         "redeemed a reward",
+	"reward.requested":        "asked for",
+	"reward.redeemed":         "claimed",
+	"reward.declined":         "declined a claim for",
+	"reward.cancelled":        "cancelled a claim for",
 	"photo.added":             "added a photo",
 	"photo.removed":           "removed a photo",
 	"calendar.added":          "added a calendar",

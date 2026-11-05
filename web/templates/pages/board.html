@@ -120,7 +120,7 @@
     document.addEventListener("visibilitychange", function () { if (!document.hidden) refresh(); });
   })();
 </script>
-<script src="/static/saver.js"></script>
+<script src="{{asset "saver.js"}}"></script>
 <script>
   // Screensaver. On a household display it starts after
   // {{.Viewer.ScreensaverSeconds}}s without a tap (0 = never); the moon

@@ -93,11 +93,11 @@ func (s *Server) Handler() http.Handler {
 
 	// Open routes: no household data.
 	mux.HandleFunc("GET /healthz", s.handleHealth)
-	mux.Handle("GET /static/", http.StripPrefix("/static/", files))
+	mux.Handle("GET /static/", http.StripPrefix("/static/", staticCache(files)))
 	// The manifest and service worker must live at the root so the SW can
 	// control the whole origin.
 	mux.HandleFunc("GET /manifest.webmanifest", serveFile(static, "manifest.webmanifest", "application/manifest+json"))
-	mux.HandleFunc("GET /sw.js", serveFile(static, "sw.js", "text/javascript; charset=utf-8"))
+	mux.HandleFunc("GET /sw.js", serveServiceWorker(static))
 	mux.HandleFunc("GET /setup", s.handleSetupForm)
 	mux.HandleFunc("POST /setup", s.handleSetup)
 	mux.HandleFunc("GET /signin", s.handleSignInForm)
@@ -130,6 +130,11 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /board/completions/{id}/approve", viewer(s.boardReview(s.Chores.Approve, "Approved. Points added.")))
 	mux.Handle("POST /board/completions/{id}/reject", viewer(s.boardReview(s.Chores.Reject, "Not counted. It's back on the board.")))
 	mux.Handle("POST /board/completions/{id}/reverse", viewer(s.boardReview(s.Chores.Reverse, "Reversed. Points taken back.")))
+	mux.Handle("POST /board/rewards/{id}/claim", viewer(s.handleRewardClaim))
+	mux.Handle("GET /board/redemptions/{id}/review", viewer(s.handleClaimReviewSheet))
+	mux.Handle("POST /board/redemptions/{id}/approve", viewer(s.boardReview(s.Chores.ApproveRedemption, "Approved. Enjoy! 🎁")))
+	mux.Handle("POST /board/redemptions/{id}/decline", viewer(s.boardReview(s.Chores.DeclineRedemption, "Declined. Points are free again.")))
+	mux.Handle("POST /board/redemptions/{id}/cancel", viewer(s.handleClaimCancel))
 
 	// Admin routes: a signed-in adult (PIN on a display, password elsewhere).
 	// Any admin write may change what the board shows, so open boards are
@@ -168,6 +173,9 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /admin/completions/{id}/approve", admin(s.adminReview(s.Chores.Approve, "Approved.")))
 	mux.Handle("POST /admin/completions/{id}/reject", admin(s.adminReview(s.Chores.Reject, "Not counted; the chore is back on the board.")))
 	mux.Handle("POST /admin/completions/{id}/reverse", admin(s.adminReview(s.Chores.Reverse, "Reversed; points taken back and the chore is back on the board.")))
+
+	mux.Handle("POST /admin/rewards/claims/{id}/approve", admin(s.adminReview(s.Chores.ApproveRedemption, "Reward approved.")))
+	mux.Handle("POST /admin/rewards/claims/{id}/decline", admin(s.adminReview(s.Chores.DeclineRedemption, "Reward declined; the points are free again.")))
 
 	mux.Handle("GET /admin/photos", admin(s.handlePhotos))
 	mux.Handle("POST /admin/photos", admin(s.handlePhotoUpload))
@@ -309,6 +317,34 @@ func serveFile(fsys fs.FS, name, contentType string) http.HandlerFunc {
 		w.Header().Set("Content-Type", contentType)
 		w.Header().Set("Cache-Control", "no-cache")
 		_, _ = w.Write(b)
+	}
+}
+
+// staticCache lets browsers keep versioned asset URLs (?v=, from the asset
+// template function) for good, and makes them check anything else.
+func staticCache(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("v") != "" {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else {
+			w.Header().Set("Cache-Control", "no-cache")
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// serveServiceWorker serves sw.js with its cache named after the static
+// files' hash, so a build with new CSS or JS replaces the cached copies.
+func serveServiceWorker(fsys fs.FS) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		b, err := fs.ReadFile(fsys, "sw.js")
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache")
+		_, _ = w.Write(bytes.ReplaceAll(b, []byte("{{VERSION}}"), []byte(web.StaticVersion())))
 	}
 }
 

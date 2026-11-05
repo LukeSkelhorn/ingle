@@ -7,10 +7,12 @@ import (
 	"github.com/lukeskelhorn/domus/internal/chores"
 )
 
-// completionsPage is Admin › Completions: what's waiting for a grown-up, and
-// the last week of completions that can still be reversed.
+// completionsPage is Admin › Completions: chores and reward claims waiting
+// for a grown-up, and the last week of completions that can still be
+// reversed.
 type completionsPage struct {
 	Pending []chores.CompletionDetail
+	Claims  []chores.RedemptionDetail
 	Recent  []chores.CompletionDetail
 }
 
@@ -24,7 +26,12 @@ func (s *Server) renderCompletions(w http.ResponseWriter, r *http.Request, statu
 		s.serverError(w, r, err)
 		return
 	}
-	var p completionsPage
+	claims, err := s.Chores.PendingRedemptions(r.Context(), s.HouseholdID, nil)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	p := completionsPage{Claims: claims}
 	for _, c := range all {
 		if c.Pending() {
 			p.Pending = append(p.Pending, c)
@@ -38,8 +45,9 @@ func (s *Server) renderCompletions(w http.ResponseWriter, r *http.Request, statu
 	s.render(w, r, status, "admin_completions", v)
 }
 
-// adminReview runs approve, reject or reverse as the signed-in adult.
-func (s *Server) adminReview(fn func(ctx context.Context, hh, completionID, reviewerID int64) error, msg string) http.HandlerFunc {
+// adminReview runs approve, reject or reverse (of a completion, or a reward
+// claim) as the signed-in adult.
+func (s *Server) adminReview(fn func(ctx context.Context, hh, id, reviewerID int64) error, msg string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, ok := pathID(r)
 		if !ok {

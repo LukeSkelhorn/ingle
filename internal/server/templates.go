@@ -165,9 +165,12 @@ func (s *Server) funcs() template.FuncMap {
 			}
 			return done * 100 / total
 		},
-		"dict":          dict,
-		"list":          func(v ...string) []string { return v },
-		"activity":      describeActivity,
+		"dict":     dict,
+		"list":     func(v ...string) []string { return v },
+		"activity": describeActivity,
+		// asset is a static file's URL with the build's asset hash, so a new
+		// build's CSS and JS are never served from an old cache.
+		"asset":         func(name string) string { return "/static/" + name + "?v=" + web.StaticVersion() },
 		"activityActor": activityActor,
 	}
 }

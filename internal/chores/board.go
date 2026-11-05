@@ -30,13 +30,15 @@ type Board struct {
 	People  []dbq.Person // active people, for the "who's doing this?" picker
 }
 
-// Column is one person's chores and balance. TotalToday counts every card
+// Column is one person's chores and balance (what they can spend: waiting
+// reward claims are held back, and Waiting counts them). TotalToday counts every card
 // in the column (today's chores plus any overdue ones), so "all done" means
 // nothing is left, not just today's.
 type Column struct {
 	Person     dbq.Person
 	Points     int64
 	Pence      int64
+	Waiting    int
 	DoneToday  int
 	TotalToday int
 	Cards      []Card
@@ -82,6 +84,10 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 	if err != nil {
 		return Board{}, fmt.Errorf("balances: %w", err)
 	}
+	held, err := q.HeldForHousehold(ctx, householdID)
+	if err != nil {
+		return Board{}, fmt.Errorf("held: %w", err)
+	}
 	rows, err := q.ListBoard(ctx, dbq.ListBoardParams{HouseholdID: householdID, FromDate: from, ToDate: today})
 	if err != nil {
 		return Board{}, fmt.Errorf("list board: %w", err)
@@ -114,6 +120,13 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 	for _, bal := range balances {
 		if c := cols[bal.PersonID]; c != nil {
 			c.Points, c.Pence = bal.Points, bal.Pence
+		}
+	}
+	for _, h := range held {
+		if c := cols[h.PersonID]; c != nil {
+			c.Points -= h.Points
+			c.Pence -= h.Pence
+			c.Waiting = int(h.Waiting)
 		}
 	}
 

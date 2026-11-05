@@ -30,6 +30,7 @@ import (
 	"github.com/lukeskelhorn/domus/internal/settings"
 	"github.com/lukeskelhorn/domus/internal/store"
 	"github.com/lukeskelhorn/domus/internal/store/dbq"
+	"github.com/lukeskelhorn/domus/web"
 )
 
 type harness struct {
@@ -282,7 +283,7 @@ func TestOpenRoutes(t *testing.T) {
 	}{
 		{"/healthz", "text/plain", "ok v9.8.7"},
 		{"/manifest.webmanifest", "application/manifest+json", `"display": "standalone"`},
-		{"/sw.js", "text/javascript", "domus-static"},
+		{"/sw.js", "text/javascript", `"domus-static-` + web.StaticVersion() + `"`},
 		{"/static/htmx.min.js", "javascript", "htmx"},
 		{"/static/icons/icon-192.png", "image/png", ""},
 	}
@@ -294,6 +295,27 @@ func TestOpenRoutes(t *testing.T) {
 				t.Errorf("Content-Type = %q, want %q", ct, tt.contentType)
 			}
 		})
+	}
+}
+
+// Pages link static files with the build's asset hash, and the service
+// worker's cache is named after it, so a new build never shows old CSS.
+func TestStaticAssetsAreVersioned(t *testing.T) {
+	h := newHarness(t)
+	d := h.device()
+	v := web.StaticVersion()
+	if len(v) != 12 {
+		t.Fatalf("StaticVersion = %q", v)
+	}
+	expect(t, d.get("/setup"), http.StatusOK, `href="/static/app.css?v=`+v+`"`, `src="/static/htmx.min.js?v=`+v+`"`)
+	if r := d.get("/sw.js"); strings.Contains(r.body, "{{VERSION}}") || r.header.Get("Cache-Control") != "no-cache" {
+		t.Errorf("sw.js: placeholder left or Cache-Control %q", r.header.Get("Cache-Control"))
+	}
+	if cc := d.get("/static/app.css?v=" + v).header.Get("Cache-Control"); !strings.Contains(cc, "immutable") {
+		t.Errorf("versioned asset Cache-Control = %q", cc)
+	}
+	if cc := d.get("/static/app.css").header.Get("Cache-Control"); cc != "no-cache" {
+		t.Errorf("unversioned asset Cache-Control = %q", cc)
 	}
 }
 

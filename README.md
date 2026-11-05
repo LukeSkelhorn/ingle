@@ -67,6 +67,7 @@ The board has a column for each family member, adults included. Each column show
 - Tapped the wrong thing? **Undo** appears for a few seconds after each completion.
 - **Grown-ups can put it right.** Completions run on the honour system: points count straight away. If something was marked done that wasn't, an adult (unlocked on the display, or signed in on a phone) taps the done chore and chooses **Reverse**. The points come off and the chore goes back on the board. Chores set to need a grown-up's check show **Approve** and **Not done yet** instead. Completions can be reversed for 7 days.
 - Tap a person's avatar or name to open their sheet: their balance, what they've earned this week (reversals come off, spending doesn't), and the household's rewards. Rewards they can afford are highlighted; the rest show how much more they need.
+- Tap **Claim** on an affordable reward to ask for it. The points are held while it waits for a grown-up, so they can't be spent twice: the balance shows what's left, the held amount is shown next to it, and the column shows "🎁 1 waiting". The child can cancel a waiting claim. With admin unlocked on the display, tapping a waiting claim opens **Approve** / **Decline**, and anything claimed while an adult is unlocked or signed in is approved straight away.
 - Missed chores stay up, marked **Overdue**, until they're done or the next one is due. A missed daily chore doesn't pile up.
 
 Every open board (the wall iPad, a second display, an adult's phone) updates live when anything changes.
@@ -97,7 +98,7 @@ Domus knows two kinds of device:
 
 Any other device (not a display, not signed in) only sees the sign-in page: no board, names or photos.
 
-**Admin › Completions** lists everything waiting for a grown-up, plus the last 7 days of completions with a **Reverse** button. A reversal never deletes history: the points come back off through a separate ledger adjustment, so a balance can go negative if the reward has already been spent.
+**Admin › Completions** lists everything waiting for a grown-up (chores, and reward claims under "Rewards waiting"), plus the last 7 days of completions with a **Reverse** button. A reversal never deletes history: the points come back off through a separate ledger adjustment, so a balance can go negative if the reward has already been spent.
 
 Admin covers family members (with an emoji or photo, PINs and sign-ins), chores (assigned or shared, repeating daily/weekly/fortnightly/monthly, points and £), rewards, screensaver photos and calendars, devices and settings (household name, timezone, when the board's day rolls over, admin auto-lock, screensaver delay, the lock schedule, idle lock and household unlock code). Every change appears in the activity feed.
 
@@ -173,7 +174,7 @@ Every table has a `household_id`, so one database can hold several households. A
 - **devices** are registered household displays, and **sessions** are adult sign-ins (PIN on a display, or password elsewhere). Only sha256 hashes of their tokens are stored.
 - **chores** are either *assigned* to one person or sit in the shared *pool*. Recurrence is an iCal `RRULE` evaluated in the household timezone. A chore can award points, pence or both, and can require an adult's approval.
 - **chore_occurrences**: the concrete instances that appear on the board. They're materialised 14 days ahead on startup, then refreshed every hour. Each pool occurrence can be claimed by one person.
-- **completions** are pending, approved or rejected. Only approved completions credit the **ledger_entries** table, and balances are the sum of a person's entries. Rewards are bought from the ledger through **redemptions**.
+- **completions** are pending, approved or rejected. Only approved completions credit the **ledger_entries** table, and balances are the sum of a person's entries. Rewards are claimed through **redemptions**: a pending claim holds its cost (what a person can spend is their balance less their pending claims) but writes nothing to the ledger; approving it adds one negative `redemption` entry, and declining or cancelling (stored as rejected) just lets the hold go.
 - **household_lock** says whether the displays are locked, why, and which schedule window was last applied. The unlock code (hashed), lock schedule and idle hours live in **household_settings**.
 - **photos** are the screensaver photos uploaded in admin. Folder photos are indexed in memory and never stored.
 - **calendar_feeds** are the ICS addresses for the screensaver. Events are fetched into memory and not stored.

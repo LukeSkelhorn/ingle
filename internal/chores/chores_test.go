@@ -323,30 +323,6 @@ func TestApprovalFlow(t *testing.T) {
 	}
 }
 
-func TestRedeem(t *testing.T) {
-	f := newFixture(t)
-	ctx := t.Context()
-	f.chore("Tidy room", choreOpts{assignee: &f.kid.ID, points: 15})
-	occ := f.onlyOccurrence()
-	if _, err := f.svc.Complete(ctx, f.hh, occ.ID, f.kid.ID); err != nil {
-		t.Fatal(err)
-	}
-
-	film, err := f.st.Q.CreateReward(ctx, dbq.CreateRewardParams{HouseholdID: f.hh, Title: "Pick the film", CostPoints: 10, CreatedAt: 1})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.svc.Redeem(ctx, f.hh, film.ID, f.kid.ID); err != nil {
-		t.Fatalf("Redeem: %v", err)
-	}
-	if b := f.balance(f.kid); b.Points != 5 {
-		t.Errorf("points = %d, want 5", b.Points)
-	}
-	if _, err := f.svc.Redeem(ctx, f.hh, film.ID, f.kid.ID); !errors.Is(err, ErrInsufficientBalance) {
-		t.Errorf("err = %v, want ErrInsufficientBalance", err)
-	}
-}
-
 func TestCrossHouseholdPersonRejected(t *testing.T) {
 	f := newFixture(t)
 	ctx := t.Context()

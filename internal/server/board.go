@@ -4,7 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"strings"
+	"unicode/utf16"
+	"unicode/utf8"
 
 	"github.com/lukeskelhorn/domus/internal/chores"
 	"github.com/lukeskelhorn/domus/internal/store/dbq"
@@ -209,7 +213,7 @@ func (s *Server) handleReviewSheet(w http.ResponseWriter, r *http.Request) {
 const needAdult = "Ask a grown-up to unlock admin."
 
 // boardReview runs an adult action (approve, reject, reverse) from the board.
-func (s *Server) boardReview(fn func(ctx context.Context, hh, completionID, reviewerID int64) error, msg string) http.HandlerFunc {
+func (s *Server) boardReview(fn func(ctx context.Context, hh, id, reviewerID int64) error, msg string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, _, ok := s.boardAction(w, r)
 		if !ok {
@@ -256,7 +260,25 @@ func setToast(w http.ResponseWriter, t toast) {
 	if err != nil {
 		return
 	}
-	w.Header().Set("HX-Trigger", string(b))
+	w.Header().Set("HX-Trigger", asciiJSON(b))
+}
+
+// asciiJSON escapes non-ASCII characters in JSON as \uXXXX. Browsers read
+// header values as Latin-1, so "Zoë" or an emoji sent as UTF-8 in a header
+// comes out garbled. Non-ASCII can only be inside JSON strings, so escaping
+// it there is safe.
+func asciiJSON(b []byte) string {
+	var sb strings.Builder
+	for _, r := range string(b) {
+		if r < utf8.RuneSelf {
+			sb.WriteRune(r)
+			continue
+		}
+		for _, u := range utf16.Encode([]rune{r}) {
+			fmt.Fprintf(&sb, `\u%04x`, u)
+		}
+	}
+	return sb.String()
 }
 
 // boardDone finishes a successful board action: tell every other screen and
@@ -304,8 +326,10 @@ func boardErrorText(err error) (string, bool) {
 		return "Someone has already checked that one.", true
 	case errors.Is(err, chores.ErrNotAdult):
 		return needAdult, true
+	case errors.Is(err, chores.ErrInsufficientBalance):
+		return "Not enough for that yet.", true
 	case errors.Is(err, chores.ErrNotFound):
-		return "That chore has gone.", true
+		return "That's gone.", true
 	}
 	return "", false
 }
@@ -318,10 +342,14 @@ func (s *Server) personName(r *http.Request, id int64) string {
 	return p.Name
 }
 
-// personSheetView is a person's sheet: balance, this week, and the rewards.
+// personSheetView is a person's sheet: balance, this week, their waiting
+// reward claims and the rewards. Adult makes waiting claims tappable for
+// review.
 type personSheetView struct {
 	chores.Summary
+	Waiting []chores.RedemptionDetail
 	Rewards []rewardRow
+	Adult   bool
 }
 
 // rewardRow is one reward on a person's sheet. NeedPoints and NeedPence are
@@ -357,7 +385,15 @@ func (s *Server) handlePersonSheet(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	v := personSheetView{Summary: sum, Rewards: make([]rewardRow, 0, len(rewards))}
+	waiting, err := s.Chores.PendingRedemptions(ctx, s.HouseholdID, &id)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	v := personSheetView{
+		Summary: sum, Waiting: waiting, Rewards: make([]rewardRow, 0, len(rewards)),
+		Adult: boardAdult(r) != nil,
+	}
 	for _, rw := range rewards {
 		v.Rewards = append(v.Rewards, rewardRow{
 			Reward:     rw,
@@ -366,4 +402,72 @@ func (s *Server) handlePersonSheet(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	s.renderPartial(w, r, "person", v)
+}
+
+// handleRewardClaim is a child asking for a reward from their sheet. With an
+// adult there (signed in or unlocked) it's approved at once.
+func (s *Server) handleRewardClaim(w http.ResponseWriter, r *http.Request) {
+	id, person, ok := s.boardAction(w, r)
+	if !ok {
+		return
+	}
+	if person == nil {
+		http.Error(w, "who is claiming?", http.StatusBadRequest)
+		return
+	}
+	var approver *int64
+	if adult := boardAdult(r); adult != nil {
+		approver = &adult.ID
+	}
+	red, err := s.Chores.ClaimReward(r.Context(), s.HouseholdID, id, *person, approver)
+	if err != nil {
+		s.boardError(w, r, err)
+		return
+	}
+	msg := "Asked a grown-up 🎁"
+	if red.Status == chores.StatusApproved {
+		msg = "Enjoy, " + s.personName(r, *person) + "! 🎁"
+	}
+	s.boardDone(w, r, toast{Message: msg})
+}
+
+// claimReviewView is an adult's sheet for a waiting reward claim.
+type claimReviewView struct {
+	D chores.RedemptionDetail
+}
+
+func (s *Server) handleClaimReviewSheet(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	if boardAdult(r) == nil {
+		s.boardFailed(w, r, needAdult)
+		return
+	}
+	d, err := s.Chores.Redemption(r.Context(), s.HouseholdID, id)
+	if err != nil {
+		s.boardError(w, r, err)
+		return
+	}
+	if !d.Pending() {
+		s.boardError(w, r, chores.ErrNotPending)
+		return
+	}
+	s.renderPartial(w, r, "claim_review", claimReviewView{D: d})
+}
+
+// handleClaimCancel is a child changing their mind about a waiting claim.
+// Like completing a chore, anyone at the board can do it.
+func (s *Server) handleClaimCancel(w http.ResponseWriter, r *http.Request) {
+	id, _, ok := s.boardAction(w, r)
+	if !ok {
+		return
+	}
+	if err := s.Chores.CancelRedemption(r.Context(), s.HouseholdID, id); err != nil {
+		s.boardError(w, r, err)
+		return
+	}
+	s.boardDone(w, r, toast{Message: "Cancelled. Points are free again."})
 }

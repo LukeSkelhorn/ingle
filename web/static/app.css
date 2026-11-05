@@ -147,6 +147,7 @@ h2 { margin: 0 0 8px; font-size: 1.15rem; }
 .column__who { display: flex; flex-direction: column; min-width: 0; }
 .column__name { font-size: 1.3rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .column__balance { color: var(--muted); font-variant-numeric: tabular-nums; }
+.column__waiting { align-self: flex-start; margin-top: 2px; }
 .column__empty { margin: 8px 0 0; color: var(--muted); }
 .progress { display: flex; flex-direction: column; gap: 4px; font-size: 0.9rem; color: var(--muted); }
 .progress__bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
@@ -224,6 +225,15 @@ button.chore__main:active { background: var(--line); }
 .reward__need { flex: none; color: var(--muted); font-size: 0.9rem; font-variant-numeric: tabular-nums; }
 .reward__status { flex: none; font-size: 0.9rem; font-weight: 600; }
 .reward--affordable { border: 2px solid var(--person); }
+.reward__action { flex: none; min-height: 44px; padding: 8px 16px; touch-action: manipulation; }
+.reward--waiting { border-style: dashed; }
+/* An adult taps a waiting claim to check it. */
+.reward__open {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 44px;
+  padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left;
+  cursor: pointer; touch-action: manipulation;
+}
+.person__held { white-space: nowrap; font-size: 1.1rem; font-weight: 600; color: var(--muted); }
 /* The "who's doing this?" form waits for someone to be picked. */
 form.picker:not(:has(input:checked)) [hx-post] { opacity: 0.4; pointer-events: none; }
 

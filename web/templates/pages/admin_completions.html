@@ -26,6 +26,25 @@
   </section>
   {{end}}
 
+  {{if .Data.Claims}}
+  <section>
+    <h2>Rewards waiting</h2>
+    <ul class="list card">
+      {{range .Data.Claims}}
+      <li class="list__row list__row--review">
+        {{template "avatar" (avatar .Person "sm")}}
+        <span class="list__main"><strong>{{.Title}}</strong>
+          <small class="muted">{{.Person.Name}} · {{when .RequestedAt}}{{with worth .Points .Pence}} · {{.}}{{end}}</small></span>
+        <span class="list__actions">
+          <form method="post" action="/admin/rewards/claims/{{.ID}}/decline"><button class="btn btn--ghost" type="submit">Decline</button></form>
+          <form method="post" action="/admin/rewards/claims/{{.ID}}/approve"><button class="btn btn--primary" type="submit">Approve</button></form>
+        </span>
+      </li>
+      {{end}}
+    </ul>
+  </section>
+  {{end}}
+
   <section>
     <h2>Last 7 days</h2>
     <p class="muted">Marked something done that wasn't? Reverse it: the points come off and the chore goes back on the board.</p>

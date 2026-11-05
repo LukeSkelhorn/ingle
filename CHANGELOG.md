@@ -9,6 +9,11 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 ### Added
 
 - **Person sheet:** tap someone's avatar or name on the board to see their balance, what they've earned this week, and the rewards, with the ones they can afford highlighted and how much more they need for the rest. It updates live and never shows on a locked display. ([DOM-9](https://linear.app/skeltech/issue/DOM-9), [#12](https://github.com/lukeskelhorn/domus/pull/12))
+- **Claim rewards:** on their sheet, a child taps **Claim** on a reward they can afford. The points are held straight away, so their balance shows what's left plus "(30 pts held)", and their column shows "🎁 1 waiting". An adult approves or declines it from the sheet (with admin unlocked) or in **Admin › Completions** under "Rewards waiting". Approving spends the points, and declining or the child cancelling frees them again. If an adult is already signed in or unlocked, a claim is approved straight away. The activity feed names the reward ("Alfie claimed Screen time"). ([DOM-10](https://linear.app/skeltech/issue/DOM-10), [#14](https://github.com/lukeskelhorn/domus/pull/14))
+
+### Fixed
+
+- **Stale styles after an update:** a display could keep using the previous version's CSS and JavaScript, for example showing the board's name plates as plain white buttons until it was refreshed. The service worker cached static files under a name that had to be changed by hand. Asset links now carry a hash of the files, and the cache is named after it, so each update replaces them. ([#14](https://github.com/lukeskelhorn/domus/pull/14))
 
 ## [v0.1.1] - 2026-11-05
 
