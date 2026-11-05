@@ -66,6 +66,7 @@ The board has a column for each family member, adults included. Each column show
 - Tap a shared chore, pick who you are, then choose **I'll do it** (it moves to your column) or **It's done**. Use **Give back** to return a claimed chore to the pool.
 - Tapped the wrong thing? **Undo** appears for a few seconds after each completion.
 - **Grown-ups can put it right.** Completions run on the honour system: points count straight away. If something was marked done that wasn't, an adult (unlocked on the display, or signed in on a phone) taps the done chore and chooses **Reverse**. The points come off and the chore goes back on the board. Chores set to need a grown-up's check show **Approve** and **Not done yet** instead. Completions can be reversed for 7 days.
+- Tap a person's avatar or name to open their sheet: their balance, what they've earned this week (reversals come off, spending doesn't), and the household's rewards. Rewards they can afford are highlighted; the rest show how much more they need.
 - Missed chores stay up, marked **Overdue**, until they're done or the next one is due. A missed daily chore doesn't pile up.
 
 Every open board (the wall iPad, a second display, an adult's phone) updates live when anything changes.

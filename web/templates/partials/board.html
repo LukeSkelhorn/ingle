@@ -21,13 +21,17 @@
   <div class="columns">
     {{range .Columns}}
     <section class="column" style="--person: {{.Person.Colour}}" aria-label="{{.Person.Name}}">
-      <header class="column__head">
-        {{template "avatar" (avatar .Person "md")}}
-        <div class="column__who">
-          <h2 class="column__name">{{.Person.Name}}</h2>
-          <p class="column__balance">{{pts .Points}}{{if .Pence}} · {{money .Pence}}{{end}}</p>
-        </div>
-      </header>
+      {{/* Tapping the avatar or name opens their sheet: balance and rewards. */}}
+      <h2 class="column__heading">
+        <button class="column__head" type="button"
+                hx-get="/board/people/{{.Person.ID}}" hx-target="#sheet-body" hx-swap="innerHTML">
+          {{template "avatar" (avatar .Person "md")}}
+          <span class="column__who">
+            <span class="column__name">{{.Person.Name}}</span>
+            <span class="column__balance">{{pts .Points}}{{if .Pence}} · {{money .Pence}}{{end}}</span>
+          </span>
+        </button>
+      </h2>
       {{if .TotalToday}}
       <div class="progress" role="img" aria-label="{{.DoneToday}} of {{.TotalToday}} done today">
         <div class="progress__bar"><span style="width: {{percent .DoneToday .TotalToday}}%"></span></div>
@@ -157,4 +161,42 @@
   </div>
 </div>
 {{end}}
+{{end}}
+
+{{/* A person's sheet, opened from their column: balance, what they've
+     earned this week, and the rewards in cost order.
+     data-refresh lets the page re-fetch it when the board changes. */}}
+{{define "person"}}
+<div class="person" style="--person: {{.Person.Colour}}" data-refresh="/board/people/{{.Person.ID}}">
+  <div class="person__head">
+    {{template "avatar" (avatar .Person "lg")}}
+    <h2 class="picker__title" tabindex="-1" autofocus>{{.Person.Name}}</h2>
+  </div>
+  <p class="person__balance">{{pts .Points}}{{if .Pence}} <span class="person__money">{{money .Pence}}</span>{{end}}</p>
+  <p class="person__week">This week: {{with worth .WeekPoints .WeekPence}}{{.}}{{else}}nothing yet{{end}}</p>
+  <h3 class="person__sub">Rewards</h3>
+  {{if .Rewards}}
+  <ul class="rewards">
+    {{range .Rewards}}
+    <li class="reward{{if .Affordable}} reward--affordable{{end}}">
+      <span class="reward__text">
+        <span class="reward__title">{{.Title}}</span>
+        {{with worth .CostPoints .CostPence}}<span class="chip">{{.}}</span>{{end}}
+      </span>
+      {{if .Affordable}}<span class="reward__status">You can get this</span>
+      {{else}}<span class="reward__need">
+        {{- if .NeedPoints}}{{pts .NeedPoints}} more{{end}}
+        {{- if and .NeedPoints .NeedPence}} · {{end}}
+        {{- if .NeedPence}}{{money .NeedPence}} more{{end -}}
+      </span>{{end}}
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="muted">No rewards yet. A grown-up can add some in Admin.</p>
+  {{end}}
+  <div class="picker__actions">
+    <button class="btn btn--ghost btn--block" type="button" data-close>Close</button>
+  </div>
+</div>
 {{end}}

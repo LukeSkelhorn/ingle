@@ -6,6 +6,10 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ## [Unreleased]
 
+### Added
+
+- **Person sheet:** tap someone's avatar or name on the board to see their balance, what they've earned this week, and the rewards, with the ones they can afford highlighted and how much more they need for the rest. It updates live and never shows on a locked display. ([DOM-9](https://linear.app/skeltech/issue/DOM-9), [#12](https://github.com/lukeskelhorn/domus/pull/12))
+
 ## [v0.1.1] - 2026-11-05
 
 A small update to unlocking the displays.

@@ -120,6 +120,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /activity", viewer(s.handleActivity))
 	mux.Handle("GET /board", viewer(s.handleBoard))
 	mux.Handle("GET /board/events", viewer(s.handleBoardEvents))
+	mux.Handle("GET /board/people/{id}", viewer(s.handlePersonSheet))
 	mux.Handle("GET /board/occurrences/{id}/pick", viewer(s.handlePick))
 	mux.Handle("POST /board/occurrences/{id}/claim", viewer(s.handleClaim))
 	mux.Handle("POST /board/occurrences/{id}/complete", viewer(s.handleComplete))

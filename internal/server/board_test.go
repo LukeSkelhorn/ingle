@@ -106,7 +106,7 @@ func TestBoardShowsColumnsAndPool(t *testing.T) {
 func TestBoardStrangerSeesNothing(t *testing.T) {
 	h, _, _ := boardHousehold(t)
 	stranger := h.device()
-	for _, p := range []string{"/board", "/board/events", "/board/occurrences/1/pick"} {
+	for _, p := range []string{"/board", "/board/events", "/board/occurrences/1/pick", "/board/people/1"} {
 		expectRedirect(t, stranger.get(p), "/signin")
 	}
 	expectRedirect(t, stranger.post("/board/occurrences/1/complete", nil), "/signin")
@@ -423,5 +423,74 @@ func waitEvent(t *testing.T, events <-chan string) {
 		}
 	case <-time.After(3 * time.Second):
 		t.Error("no board event")
+	}
+}
+
+func TestPersonSheet(t *testing.T) {
+	h, wall, phone := boardHousehold(t)
+	alfie := h.person("Alfie")
+	sheet := "/board/people/" + itoa(alfie.ID)
+
+	// The column header opens the sheet.
+	if col := section(wall.get("/").body, "Alfie"); !strings.Contains(col, `hx-get="`+sheet+`"`) {
+		t.Errorf("Alfie's column doesn't open his sheet\n%s", col)
+	}
+
+	// Rewards: one he'll afford, one he won't, one archived.
+	for _, v := range []url.Values{
+		{"title": {"Film night pick"}, "cost_points": {"40"}},
+		{"title": {"Comic"}, "cost_points": {"60"}, "money": {"2.50"}},
+		{"title": {"Sweets"}, "cost_points": {"10"}},
+	} {
+		expectRedirect(t, phone.post("/admin/rewards", v), "/admin/rewards")
+	}
+	rewards := must(h.st.Q.ListRewards(t.Context(), h.hh))
+	for _, rw := range rewards {
+		if rw.Title == "Sweets" {
+			expectRedirect(t, phone.post("/admin/rewards/"+itoa(rw.ID)+"/archive", nil), "/admin/rewards")
+		}
+	}
+
+	// 40 pts and £1 from last week (it's Wednesday 1 July; the week began
+	// Monday 29 June), plus Feed the cat (2 pts) today.
+	if _, err := h.st.Q.InsertLedgerEntry(t.Context(), dbq.InsertLedgerEntryParams{
+		HouseholdID: h.hh, PersonID: alfie.ID, Points: 40, Pence: 100, Kind: "completion",
+		CreatedAt: time.Date(2026, 6, 28, 12, 0, 0, 0, time.UTC).Unix(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	expect(t, wall.post("/board/occurrences/"+itoa(h.occurrence("Feed the cat").ID)+"/complete", nil), http.StatusOK)
+
+	r := wall.get(sheet)
+	expect(t, r, http.StatusOK, "Alfie", "🦖", "42 pts", "£1.00", "This week: 2 pts",
+		`data-refresh="`+sheet+`"`, "Film night pick", "Comic", "18 pts more · £1.50 more")
+	if strings.Contains(r.body, "Sweets") {
+		t.Error("archived reward on the sheet")
+	}
+	film := r.body[strings.Index(r.body, "Film night pick")-200:]
+	if !strings.Contains(film[:200], "reward--affordable") {
+		t.Errorf("Film night pick not marked affordable\n%s", film[:300])
+	}
+	comic := r.body[strings.Index(r.body, "Comic")-200:]
+	if strings.Contains(comic[:200], "reward--affordable") {
+		t.Error("Comic marked affordable")
+	}
+
+	// Phones (adults) can open it too; a stranger can't.
+	expect(t, phone.get(sheet), http.StatusOK, "42 pts")
+	expectRedirect(t, h.device().get(sheet), "/signin")
+
+	// Isla has nothing yet.
+	expect(t, wall.get("/board/people/"+itoa(h.person("Isla").ID)), http.StatusOK, "0 pts", "This week: nothing yet", "40 pts more")
+
+	// Unknown and archived people are gone from the board.
+	for _, p := range []string{"/board/people/9999", "/board/people/x"} {
+		if got := wall.get(p).status; got != http.StatusConflict && got != http.StatusNotFound {
+			t.Errorf("GET %s = %d", p, got)
+		}
+	}
+	r = wall.get("/board/people/9999")
+	if got := toastOf(t, r); !got.Error || got.Message == "" {
+		t.Errorf("unknown person toast = %+v", got)
 	}
 }

@@ -24,3 +24,14 @@ ORDER BY p.sort_order, p.name;
 
 -- name: DeleteLedgerForCompletion :exec
 DELETE FROM ledger_entries WHERE household_id = ? AND completion_id = ?;
+
+-- name: EarnedSinceForPerson :one
+-- What a person has earned since since_unix: completions, less any
+-- adjustments (reversals). Spending (redemptions, payouts) isn't counted.
+SELECT
+    CAST(COALESCE(SUM(points), 0) AS INTEGER) AS points,
+    CAST(COALESCE(SUM(pence), 0) AS INTEGER) AS pence
+FROM ledger_entries
+WHERE household_id = sqlc.arg(household_id) AND person_id = sqlc.arg(person_id)
+  AND kind IN ('completion', 'adjustment')
+  AND created_at >= sqlc.arg(since_unix);

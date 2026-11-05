@@ -317,3 +317,53 @@ func (s *Server) personName(r *http.Request, id int64) string {
 	}
 	return p.Name
 }
+
+// personSheetView is a person's sheet: balance, this week, and the rewards.
+type personSheetView struct {
+	chores.Summary
+	Rewards []rewardRow
+}
+
+// rewardRow is one reward on a person's sheet. NeedPoints and NeedPence are
+// how much more they need; a reward is affordable when both are zero.
+type rewardRow struct {
+	dbq.Reward
+	NeedPoints, NeedPence int64
+}
+
+func (r rewardRow) Affordable() bool { return r.NeedPoints == 0 && r.NeedPence == 0 }
+
+func (s *Server) handlePersonSheet(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	ctx := r.Context()
+	loc := s.Locale
+	loc.Location = s.Settings.Location(ctx, s.HouseholdID)
+	sum, err := s.Chores.PersonSummary(ctx, s.HouseholdID, id, loc.StartOfWeek(s.now()))
+	if errors.Is(err, chores.ErrNotFound) {
+		// Archived since this screen last refreshed.
+		s.boardFailed(w, r, "They're not on the board any more.")
+		return
+	}
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	rewards, err := s.Household.Rewards(ctx, s.HouseholdID)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	v := personSheetView{Summary: sum, Rewards: make([]rewardRow, 0, len(rewards))}
+	for _, rw := range rewards {
+		v.Rewards = append(v.Rewards, rewardRow{
+			Reward:     rw,
+			NeedPoints: max(0, rw.CostPoints-sum.Points),
+			NeedPence:  max(0, rw.CostPence-sum.Pence),
+		})
+	}
+	s.renderPartial(w, r, "person", v)
+}

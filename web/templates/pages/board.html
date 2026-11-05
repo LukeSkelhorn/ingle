@@ -59,6 +59,9 @@
     function refresh() {
       var b = document.getElementById("board");
       if (b && window.htmx) htmx.trigger(b, "refresh");
+      // An open person sheet shows balances too, so it re-fetches itself.
+      var live = sheet.open && sheetBody.querySelector("[data-refresh]");
+      if (live && window.htmx) htmx.ajax("GET", live.dataset.refresh, { target: sheetBody, swap: "innerHTML" });
     }
 
     // Picker sheet: open when its content arrives, close after an action.
