@@ -363,9 +363,10 @@ func (s *Server) personName(r *http.Request, id int64) string {
 // review.
 type personSheetView struct {
 	chores.Summary
-	Waiting []chores.RedemptionDetail
-	Rewards []rewardRow
-	Adult   bool
+	Waiting     []chores.RedemptionDetail
+	Rewards     []rewardRow
+	Adjustments []chores.Adjustment // recent bonuses and points taken away
+	Adult       bool
 }
 
 // rewardRow is one reward on a person's sheet. NeedPoints and NeedPence are
@@ -406,9 +407,14 @@ func (s *Server) handlePersonSheet(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
+	adjustments, err := s.Chores.Adjustments(ctx, s.HouseholdID, id, s.now().Add(-adjustmentHistory), 5)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
 	v := personSheetView{
 		Summary: sum, Waiting: waiting, Rewards: make([]rewardRow, 0, len(rewards)),
-		Adult: boardAdult(r) != nil,
+		Adjustments: adjustments, Adult: boardAdult(r) != nil,
 	}
 	for _, rw := range rewards {
 		v.Rewards = append(v.Rewards, rewardRow{

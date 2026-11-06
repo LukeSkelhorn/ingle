@@ -6,6 +6,18 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ## [Unreleased]
 
+## [v0.2.2] - 2026-11-06
+
+Give a bonus, or take points away.
+
+### Added
+
+- **Adjust points:** in **Admin › People**, each person has a **Points** section. Choose **Take away** or **Give**, tap 1, 2, 5 or 10 (or **Other** for any amount up to 1,000) and say why, e.g. "Hit his sister. We don't hurt people." The reason is required, and ones used before are suggested. **Undo** takes it back for 10 minutes. Points can go below zero, so a balance can read "−5 pts" until they earn it back; points held for a waiting reward claim stay held. The person's sheet on the board lists their recent points changes with the reasons, "This week" counts them, and the person's admin page shows the last 30 days with who made each one. Points only: money isn't changed here. ([DOM-43](https://linear.app/skeltech/issue/DOM-43))
+
+### Upgrade notes
+
+- This release has a database migration (the points history gets a new kind of entry). Ingle takes care of it on start. To go back to v0.2.1 afterwards, restore the backup taken before upgrading.
+
 ## [v0.2.1] - 2026-11-06
 
 A small update to the Missed list.
@@ -81,7 +93,8 @@ The first release: a family chores board for a wall tablet, ready to run on a ho
 
 - First release: nothing to upgrade from. New installs start at the setup page.
 
-[Unreleased]: https://github.com/lukeskelhorn/ingle/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/lukeskelhorn/ingle/compare/v0.2.2...HEAD
+[v0.2.2]: https://github.com/lukeskelhorn/ingle/compare/v0.2.1...v0.2.2
 [v0.2.1]: https://github.com/lukeskelhorn/ingle/compare/v0.2.0...v0.2.1
 [v0.2.0]: https://github.com/lukeskelhorn/ingle/compare/v0.1.1...v0.2.0
 [v0.1.1]: https://github.com/lukeskelhorn/ingle/compare/v0.1.0...v0.1.1

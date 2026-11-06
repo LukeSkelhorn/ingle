@@ -4,7 +4,12 @@
 <main class="admin__main">
   <p><a href="/admin/people">‹ People</a></p>
   <h1>{{if .Data.ID}}{{.Data.Name}}{{else}}Add someone{{end}}</h1>
-  {{template "flash" .}}
+  {{if .Data.Points.Undo}}
+  <form class="flash flash--undo" role="status" method="post" action="/admin/people/{{.Data.ID}}/points/{{.Data.Points.Undo}}/undo">
+    <span>{{.Flash}}</span>
+    <button class="btn btn--ghost" type="submit">Undo</button>
+  </form>
+  {{else}}{{template "flash" .}}{{end}}
   {{if .Data.Archived}}<p class="flash">Archived. Restore them from the People list to show them on the board again.</p>{{end}}
 
   <form class="card stack" method="post" enctype="multipart/form-data"
@@ -65,6 +70,57 @@
     </label>
     <button class="btn btn--primary" type="submit">{{if .Data.ID}}Save{{else}}Add{{end}}</button>
   </form>
+
+  {{if and .Data.ID (not .Data.Archived)}}
+  {{with .Data.Points}}
+  <section class="card stack" id="points">
+    <h2>Points</h2>
+    <p class="muted">{{$.Data.Name}} has <strong class="points-balance">{{pts .Points}}</strong>{{if .HeldPoints}} ({{pts .HeldPoints}} held for a reward){{end}}.</p>
+    <form class="stack" method="post" action="/admin/people/{{$.Data.ID}}/points">
+      <fieldset class="field">
+        <legend>Adjust points</legend>
+        <div class="segmented">
+          <label><input type="radio" name="direction" value="take"{{if ne .Direction "give"}} checked{{end}}> <span>Take away</span></label>
+          <label><input type="radio" name="direction" value="give"{{if eq .Direction "give"}} checked{{end}}> <span>Give</span></label>
+        </div>
+      </fieldset>
+      <fieldset class="field">
+        <legend>How many</legend>
+        <div class="segmented">
+          {{range .QuickAmounts}}<label><input type="radio" name="amount" value="{{.}}"{{if eq $.Data.Points.Amount .}} checked{{end}}> <span>{{.}}</span></label>{{end}}
+          <label><input type="radio" name="amount" value="custom"{{if eq .Amount "custom"}} checked{{end}}> <span>Other</span></label>
+        </div>
+        {{template "err" index $.Errors "amount"}}
+      </fieldset>
+      <label class="field field--short" data-show-when="amount=custom">
+        <span>Points</span>
+        <input type="number" name="amount_custom" value="{{.Custom}}" min="1" max="1000" inputmode="numeric">
+      </label>
+      <label class="field">
+        <span>Reason</span>
+        <input name="reason" value="{{.Reason}}" required maxlength="200" autocomplete="off"
+               list="reason-suggestions" placeholder="e.g. Hit his sister. We don't hurt people.">
+        {{with .Suggestions}}<datalist id="reason-suggestions">{{range .}}<option value="{{.}}">{{end}}</datalist>{{end}}
+        <small class="muted">Say what they did and why it matters. Everyone sees this on the board.</small>
+        {{template "err" index $.Errors "reason"}}
+      </label>
+      <button class="btn" type="submit">Save</button>
+    </form>
+    {{if .History}}
+    <h3>Last 30 days</h3>
+    <ul class="adjustments">
+      {{range .History}}
+      <li class="adjustment">
+        <span class="adjustment__points{{if gt .Points 0}} adjustment__points--plus{{end}}">{{signedPts .Points}}</span>
+        <span class="adjustment__text">{{.Note}}
+          <small class="muted">{{with .By}}{{.}} · {{end}}{{when .At.Unix}}</small></span>
+      </li>
+      {{end}}
+    </ul>
+    {{end}}
+  </section>
+  {{end}}
+  {{end}}
 
   {{if and .Data.ID .Data.IsAdult (not .Data.Archived)}}
   <section class="card stack">

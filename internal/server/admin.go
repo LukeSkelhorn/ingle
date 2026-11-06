@@ -117,6 +117,8 @@ var activityText = map[string]string{
 	"reward.redeemed":         "claimed",
 	"reward.declined":         "declined a claim for",
 	"reward.cancelled":        "cancelled a claim for",
+	"points.adjusted":         "changed someone's points",
+	"points.undone":           "undid a points change",
 	"photo.added":             "added a photo",
 	"photo.removed":           "removed a photo",
 	"calendar.added":          "added a calendar",

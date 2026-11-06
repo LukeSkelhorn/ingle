@@ -480,6 +480,8 @@ func (s *Service) activity(ctx context.Context, q *dbq.Queries, householdID, act
 		"reward.redeemed":  "redemption",
 		"reward.declined":  "redemption",
 		"reward.cancelled": "redemption",
+		"points.adjusted":  "ledger_entry",
+		"points.undone":    "ledger_entry",
 	}[verb]
 	if err := q.InsertActivity(ctx, dbq.InsertActivityParams{
 		HouseholdID: householdID,

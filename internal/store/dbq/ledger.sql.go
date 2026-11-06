@@ -89,13 +89,34 @@ func (q *Queries) DeleteLedgerForCompletion(ctx context.Context, arg DeleteLedge
 	return err
 }
 
+const deleteManualEntry = `-- name: DeleteManualEntry :execrows
+DELETE FROM ledger_entries
+WHERE household_id = ?1 AND id = ?2
+  AND kind = 'manual' AND created_at >= ?3
+`
+
+type DeleteManualEntryParams struct {
+	HouseholdID int64 `json:"household_id"`
+	ID          int64 `json:"id"`
+	SinceUnix   int64 `json:"since_unix"`
+}
+
+// Undoes a manual adjustment made since since_unix.
+func (q *Queries) DeleteManualEntry(ctx context.Context, arg DeleteManualEntryParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteManualEntry, arg.HouseholdID, arg.ID, arg.SinceUnix)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const earnedSinceForPerson = `-- name: EarnedSinceForPerson :one
 SELECT
     CAST(COALESCE(SUM(points), 0) AS INTEGER) AS points,
     CAST(COALESCE(SUM(pence), 0) AS INTEGER) AS pence
 FROM ledger_entries
 WHERE household_id = ?1 AND person_id = ?2
-  AND kind IN ('completion', 'adjustment')
+  AND kind IN ('completion', 'adjustment', 'manual')
   AND created_at >= ?3
 `
 
@@ -110,8 +131,9 @@ type EarnedSinceForPersonRow struct {
 	Pence  int64 `json:"pence"`
 }
 
-// What a person has earned since since_unix: completions, less any
-// adjustments (reversals). Spending (redemptions, payouts) isn't counted.
+// What a person has earned since since_unix, net: completions, reversals and
+// manual adjustments (bonuses and points taken away). Spending (redemptions,
+// payouts) isn't counted.
 func (q *Queries) EarnedSinceForPerson(ctx context.Context, arg EarnedSinceForPersonParams) (EarnedSinceForPersonRow, error) {
 	row := q.db.QueryRowContext(ctx, earnedSinceForPerson, arg.HouseholdID, arg.PersonID, arg.SinceUnix)
 	var i EarnedSinceForPersonRow
@@ -167,4 +189,97 @@ func (q *Queries) InsertLedgerEntry(ctx context.Context, arg InsertLedgerEntryPa
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const listManualAdjustments = `-- name: ListManualAdjustments :many
+SELECT l.id, l.points, l.note, l.created_at, COALESCE(p.name, '') AS by_name
+FROM ledger_entries l
+LEFT JOIN people p ON p.id = l.created_by
+WHERE l.household_id = ?1 AND l.person_id = ?2
+  AND l.kind = 'manual' AND l.created_at >= ?3
+ORDER BY l.created_at DESC, l.id DESC
+LIMIT ?4
+`
+
+type ListManualAdjustmentsParams struct {
+	HouseholdID int64 `json:"household_id"`
+	PersonID    int64 `json:"person_id"`
+	SinceUnix   int64 `json:"since_unix"`
+	Lim         int64 `json:"lim"`
+}
+
+type ListManualAdjustmentsRow struct {
+	ID        int64  `json:"id"`
+	Points    int64  `json:"points"`
+	Note      string `json:"note"`
+	CreatedAt int64  `json:"created_at"`
+	ByName    string `json:"by_name"`
+}
+
+// A person's manual adjustments (bonuses and points taken away) since
+// since_unix, newest first, with who made each one.
+func (q *Queries) ListManualAdjustments(ctx context.Context, arg ListManualAdjustmentsParams) ([]ListManualAdjustmentsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listManualAdjustments,
+		arg.HouseholdID,
+		arg.PersonID,
+		arg.SinceUnix,
+		arg.Lim,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListManualAdjustmentsRow{}
+	for rows.Next() {
+		var i ListManualAdjustmentsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Points,
+			&i.Note,
+			&i.CreatedAt,
+			&i.ByName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const recentManualNotes = `-- name: RecentManualNotes :many
+SELECT note FROM ledger_entries
+WHERE household_id = ? AND kind = 'manual'
+GROUP BY note
+ORDER BY MAX(created_at) DESC
+LIMIT 10
+`
+
+// The last few distinct reasons used, to suggest on the form.
+func (q *Queries) RecentManualNotes(ctx context.Context, householdID int64) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, recentManualNotes, householdID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var note string
+		if err := rows.Scan(&note); err != nil {
+			return nil, err
+		}
+		items = append(items, note)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
