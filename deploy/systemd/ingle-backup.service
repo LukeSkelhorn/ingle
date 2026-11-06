@@ -1,0 +1,32 @@
+# Take one Ingle backup now, with the same user and settings as the
+# service: sudo systemctl start ingle-backup
+# Do this before an upgrade. The nightly backup runs inside Ingle itself,
+# so this unit has no timer.
+
+[Unit]
+Description=Ingle backup
+Documentation=https://ingleboard.app/docs/self-hosting/backups/
+
+[Service]
+Type=oneshot
+User=ingle
+Group=ingle
+ExecStart=/usr/local/bin/ingle backup
+
+Environment=INGLE_ADDR=127.0.0.1:8080
+Environment=INGLE_DB_PATH=/var/lib/ingle/ingle.db
+Environment=INGLE_BACKUP_DIR=/var/lib/ingle/backups
+EnvironmentFile=-/etc/ingle/ingle.env
+
+StateDirectory=ingle
+StateDirectoryMode=0750
+UMask=0027
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+RestrictAddressFamilies=AF_UNIX
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service

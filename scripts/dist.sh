@@ -9,6 +9,7 @@ CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags="$ldflags" -o "$
 cp LICENSE README.md CHANGELOG.md "$stage/"
 cp -R deploy "$stage/deploy"
 rm -f "$stage/deploy/.env"
-tar -C "$dist" -czf "$dist/$name.tar.gz" "$name"
+# No macOS extended attributes: GNU tar on Linux warns about every one.
+COPYFILE_DISABLE=1 tar --no-xattrs -C "$dist" -czf "$dist/$name.tar.gz" "$name"
 rm -rf "$stage"
 echo "built $dist/$name.tar.gz"

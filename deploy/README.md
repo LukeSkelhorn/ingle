@@ -1,41 +1,16 @@
 # Running Ingle on a home server
 
-This folder runs Ingle with [Docker Compose](https://docs.docker.com/compose/), with [Caddy](https://caddyserver.com) in front for HTTPS. You end up with:
+The full guide is at **[ingleboard.app/docs/self-hosting](https://ingleboard.app/docs/self-hosting/install/)**. This folder has the files it uses.
 
-- Ingle at an address like `https://ingle.home.example.com`, reachable only on your home network.
-- A real HTTPS certificate. The iPad needs HTTPS to install Ingle as a home-screen app and keep working through Wi-Fi blips.
-- A backup every night, with the last 14 kept.
+| File | What it's for |
+| ---- | ------------- |
+| `compose.yaml`, `.env.example` | Ingle with [Docker Compose](https://docs.docker.com/compose/), with Caddy in front for HTTPS |
+| `Caddyfile`, `caddy/Dockerfile` | Caddy, built with the Cloudflare DNS plugin, so the certificate needs nothing opened to the internet |
+| [`systemd/`](systemd/) | Running the binary directly, without Docker: see [Without Docker](https://ingleboard.app/docs/self-hosting/without-docker/) |
 
-The image runs on both Intel/AMD (`amd64`) and ARM (`arm64`, e.g. a Raspberry Pi 4 or 5).
+## Docker Compose, in short
 
-## What you need
-
-- A machine on your home network with Docker and Docker Compose.
-- A domain whose DNS is on Cloudflare (these steps use `example.com`). Caddy proves to Let's Encrypt that you own it through Cloudflare's API, so **nothing has to be opened to the internet**. If your DNS is somewhere else, see [Other DNS hosts](#other-dns-hosts).
-- The server's LAN IP address, e.g. `192.168.1.10`. Give it a fixed IP (a DHCP reservation) in your router.
-
-## 1. DNS record
-
-In Cloudflare, add a DNS record:
-
-| Type | Name | Content | Proxy status |
-| ---- | ---- | ------- | ------------ |
-| A | `ingle.home` | `192.168.1.10` (your server) | **DNS only** (grey cloud) |
-
-It has to be **DNS only**: Cloudflare can't reach a LAN address.
-
-Some routers block DNS answers that point to a private address ("DNS rebinding protection"). If the name doesn't resolve at home, allow-list your domain (`example.com` here) in the router (on a FRITZ!Box: Home Network › Network › Network Settings › DNS rebind protection), or add a local DNS entry for it in the router or Pi-hole.
-
-## 2. Cloudflare API token
-
-In Cloudflare, go to **My Profile › API Tokens › Create Token** and use the **Edit zone DNS** template:
-
-- **Permissions:** Zone › DNS › Edit
-- **Zone resources:** Include › Specific zone › `example.com`
-
-Copy the token. Caddy only uses it to add and remove a temporary `_acme-challenge` TXT record when it gets or renews the certificate.
-
-## 3. Start it
+You need Docker with Compose, a domain whose DNS is on Cloudflare, an A record for Ingle's address pointing at the server's LAN IP (**DNS only**), and a Cloudflare API token with Zone › DNS › Edit on that domain. The [Install](https://ingleboard.app/docs/self-hosting/install/) guide walks through each one.
 
 ```sh
 git clone https://github.com/lukeskelhorn/ingle.git
@@ -50,98 +25,25 @@ docker compose up -d
 docker compose logs -f     # wait for Caddy to log "certificate obtained successfully"
 ```
 
-Open `https://ingle.home.example.com` on your phone or laptop. The first time, Ingle asks you to name the household and create the first adult (name, email, password and PIN).
+Then open your address, and Ingle walks you through setting up the household.
 
-## 4. The wall iPad
+## More
 
-1. In Safari, open `https://ingle.home.example.com`.
-2. Sign in, then go to **Admin › Devices › Make this a household display**. (Or tick "use this device as the household display" if you run setup on the iPad.)
-3. Tap **Share › Add to Home Screen**, and open Ingle from the new icon. It runs fullscreen like an app.
-4. **Settings › Display & Brightness › Auto-Lock › Never**, so the screensaver stays up instead of the screen going dark. Keep the iPad plugged in.
-5. **Settings › Accessibility › Guided Access** on, then triple-click the side (or home) button inside Ingle to lock the iPad to the board.
-
-Phones work the same way. Sign in with your email and password and add Ingle to the home screen.
-
-## Backups
-
-Every night at `INGLE_BACKUP_AT` (03:00 by default, household time) Ingle writes `ingle-YYYYMMDD-HHMMSS.tar.gz` into `BACKUP_PATH` and keeps the newest `INGLE_BACKUP_KEEP` (14). Each one holds:
-
-- `ingle.db`: a consistent snapshot of the database, taken while Ingle keeps running
-- `photos/` and `avatars/`: everything uploaded in Admin
-
-The read-only photos folder (`PHOTOS_PATH`) isn't included: it's your own files.
-
-Backups on the same disk don't help if that disk dies. Point `BACKUP_PATH` at a NAS mount or a USB drive if you can, or copy the folder somewhere else on a schedule.
-
-Take a backup now (for example, before an upgrade):
-
-```sh
-docker compose exec ingle /ingle backup
-```
-
-### Restoring
-
-Pick a backup, then:
-
-```sh
-docker compose stop ingle
-docker run --rm -v domus_domus-data:/data -v "$PWD/backups:/backups:ro" alpine sh -c '
-  rm -rf /data/ingle.db* /data/domus.db* /data/photos /data/avatars /data/photo-cache &&
-  tar -xzf /backups/ingle-20261104-030000.tar.gz -C /data &&
-  chown -R 65532:65532 /data'
-docker compose start ingle
-```
-
-The `-wal` and `-shm` files belong to the old database, so they have to go too. Backups from before the rename (`domus-….tar.gz`) restore the same way: they hold a `domus.db`, which Ingle opens when there's no `ingle.db`. The volume is still called `domus_domus-data`, so upgrades keep their data.
+- [Configuration](https://ingleboard.app/docs/self-hosting/configuration/): every setting in `.env`.
+- [Backups and restore](https://ingleboard.app/docs/self-hosting/backups/): `docker compose exec ingle /ingle backup` takes one now.
+- [Upgrades](https://ingleboard.app/docs/self-hosting/upgrades/): `git pull`, `docker compose pull` and `docker compose up -d`.
+- [Reverse proxy](https://ingleboard.app/docs/self-hosting/reverse-proxy/): Traefik, nginx, other DNS hosts, or plain HTTP.
+- [Troubleshooting](https://ingleboard.app/docs/self-hosting/troubleshooting/).
 
 ## Upgrading from Domus
 
-Ingle used to be called Domus. Your household, devices, photos, backups and HTTPS certificate all carry over, and your `.env` keeps working as it is. The project and container names change, though, so stop the old stack **before** pulling the new files:
+Ingle used to be called Domus. Your data, devices and certificate carry over, but stop the old stack **before** pulling the new files:
 
 ```sh
 docker compose exec domus /domus backup   # one last backup, with the old version
-docker compose down                       # stops the old containers; your data volume stays
+docker compose down                       # your data volume stays; never add -v
 git pull
 docker compose up -d
 ```
 
-If you pulled first, stop the old stack by its old name instead: `docker compose -p domus down`. (Never add `-v` to `down`: that deletes the data volume.)
-
-Optionally, rename the settings in `.env` to the new names: `sed -i.bak 's/DOMUS_/INGLE_/g' .env`. The old `DOMUS_*` names still work, and Ingle's log reminds you which ones are left.
-
-## Updating
-
-```sh
-docker compose exec ingle /ingle backup
-docker compose pull
-docker compose up -d
-```
-
-Database changes are applied automatically when Ingle starts. To stay on a release instead of following `latest`, set `INGLE_TAG=v0.1.0` (for example) in `.env`.
-
-Building from this checkout instead of pulling: uncomment `build: ..` in `compose.yaml`, then run `git pull && docker compose up -d --build`.
-
-## A photos folder
-
-To mix a folder of photos (a NAS share, say) into the screensaver, set `PHOTOS_PATH=/mnt/nas/photos` and `INGLE_PHOTOS_DIR=/photos` in `.env`, uncomment the photos line under `volumes:` in `compose.yaml`, then `docker compose up -d`. Ingle only reads that folder, and checks it for new photos every 10 minutes.
-
-## Plain HTTP, without Caddy
-
-If you don't have a domain, you can run Ingle on `http://192.168.1.10:8080`. It works, but the iPad won't install it as an offline-capable app, and sign-in cookies aren't marked secure. Delete the `caddy` service from `compose.yaml`, remove `INGLE_TRUSTED_PROXIES`, and add this to the `ingle` service:
-
-```yaml
-    ports:
-      - "8080:8080"
-```
-
-## Other DNS hosts
-
-Caddy supports many DNS providers through plugins (see [caddy-dns](https://github.com/caddy-dns)). Swap `github.com/caddy-dns/cloudflare` in `caddy/Dockerfile` for yours, change the `dns` line in `Caddyfile` to match, and pass that provider's credentials instead of `CLOUDFLARE_API_TOKEN`.
-
-## Troubleshooting
-
-- **The page doesn't load at home:** check that `ingle.home.example.com` resolves to the server's LAN IP (`nslookup ingle.home.example.com`). If it doesn't, see the DNS rebinding note in step 1.
-- **Certificate errors:** `docker compose logs caddy`. A token without DNS edit permission on the right zone is the usual cause.
-- **"backup.failed … permission denied" in the logs:** the backup folder isn't writable by UID 65532. Run `sudo chown 65532:65532 backups`, or set the owner in your NAS mount options.
-- **Subnet clash:** if `172.30.40.0/24` is already used on your network, set `INGLE_SUBNET` and `INGLE_PROXY_IP` (an address inside it) in `.env` to another private range, then run `docker compose down && docker compose up -d`.
-- **Is it healthy?** `docker compose ps` shows `healthy` once Ingle answers on `/healthz`.
+If you pulled first, use `docker compose -p domus down` instead. The details are in [Upgrading from Domus](https://ingleboard.app/docs/self-hosting/upgrades/#upgrading-from-domus).
