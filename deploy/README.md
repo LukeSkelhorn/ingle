@@ -24,7 +24,7 @@ In Cloudflare, add a DNS record:
 
 It has to be **DNS only**: Cloudflare can't reach a LAN address.
 
-Some routers block DNS answers that point to a private address ("DNS rebinding protection"). If the name doesn't resolve at home, allow-list `example.com` in the router (on a FRITZ!Box: Home Network › Network › Network Settings › DNS rebind protection), or add a local DNS entry for it in the router or Pi-hole.
+Some routers block DNS answers that point to a private address ("DNS rebinding protection"). If the name doesn't resolve at home, allow-list your domain (`example.com` here) in the router (on a FRITZ!Box: Home Network › Network › Network Settings › DNS rebind protection), or add a local DNS entry for it in the router or Pi-hole.
 
 ## 2. Cloudflare API token
 
