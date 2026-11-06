@@ -2,7 +2,7 @@
      (fired by the page when a server-sent event arrives) and every five
      minutes, which also catches the board day rolling over. */}}
 {{define "board"}}
-<div id="board" class="board__body" hx-get="/board" hx-trigger="refresh, every 5m" hx-swap="outerHTML">
+<div id="board" class="board__body" data-day="{{.Day}}" hx-get="/board" hx-trigger="refresh, every 5m" hx-swap="outerHTML">
   {{if not .Columns}}
   <div class="board__empty">
     <p>No one's here yet.</p>
@@ -20,7 +20,7 @@
   </section>
   <div class="columns">
     {{range $col := .Columns}}
-    <section class="column" style="--person: {{.Person.Colour}}" aria-label="{{.Person.Name}}">
+    <section class="column" style="--person: {{.Person.Colour}}" aria-label="{{.Person.Name}}" data-person="{{.Person.ID}}">
       {{/* Tapping the avatar or name opens their sheet: balance and rewards. */}}
       <h2 class="column__heading">
         <button class="column__head" type="button"

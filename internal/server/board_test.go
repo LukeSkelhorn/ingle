@@ -803,3 +803,14 @@ func TestBoardSharedChore(t *testing.T) {
 		t.Error("not ticked in Isla's column")
 	}
 }
+
+// The page script keeps each column's scroll position across refreshes by
+// person, and starts afresh when the board day changes.
+func TestBoardScrollHooks(t *testing.T) {
+	h, wall, _ := boardHousehold(t)
+	alfie := h.person("Alfie")
+	expect(t, wall.get("/board"), http.StatusOK,
+		`id="board" class="board__body" data-day="2026-07-01"`,
+		`aria-label="Alfie" data-person="`+itoa(alfie.ID)+`"`)
+	expect(t, wall.get("/"), http.StatusOK, "htmx:beforeSwap", "has-more")
+}

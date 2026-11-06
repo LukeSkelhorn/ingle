@@ -20,6 +20,7 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ### Changed
 
+- **Board on tablets and wall displays:** the board now fits the screen. The household name, clock and **Up for grabs** stay put, and each person's chores scroll inside their own column, so scrolling Alfie's list doesn't move Isla's. A soft fade at the bottom of a column shows there's more below. A long Up for grabs is capped at about a third of the screen and scrolls too. Each column keeps its place when the board updates, and goes back to the top when the day rolls over. Phones, a phone turned sideways and short windows still scroll the whole page. ([DOM-35](https://linear.app/skeltech/issue/DOM-35), [#22](https://github.com/lukeskelhorn/domus/pull/22))
 - **Calendar feeds** now keep events from about 10 weeks back to 14 weeks ahead in memory, instead of the next week, so the board calendar has them to show. ([#17](https://github.com/lukeskelhorn/domus/pull/17))
 
 ### Fixed

@@ -275,6 +275,59 @@
     }, { capture: true });
   })();
 </script>
+<script>
+  // Columns that scroll on their own (tablets and wall displays): a fade at
+  // the bottom while there's more below, and each column's scroll position
+  // kept when the board refreshes (every tick and live update replaces it),
+  // unless the day has rolled over.
+  (function () {
+    function lists() { return document.querySelectorAll("#board .column > .chores"); }
+    function updateMore(ul) {
+      ul.classList.toggle("has-more", ul.scrollTop + ul.clientHeight < ul.scrollHeight - 4);
+    }
+    function updateAll() { lists().forEach(updateMore); }
+
+    var pending = 0;
+    document.addEventListener("scroll", function (e) {
+      var ul = e.target;
+      if (!ul.classList || !ul.classList.contains("chores") || pending) return;
+      pending = requestAnimationFrame(function () { pending = 0; updateMore(ul); });
+    }, { capture: true, passive: true });
+    window.addEventListener("resize", updateAll);
+
+    var saved = null;
+    document.addEventListener("htmx:beforeSwap", function (e) {
+      var b = e.detail.target;
+      if (!b || b.id !== "board") return;
+      var cols = {}, columns = b.querySelector(".columns"), pool = b.querySelector(".pool");
+      b.querySelectorAll(".column[data-person]").forEach(function (c) {
+        var ul = c.querySelector(":scope > .chores");
+        if (ul) cols[c.dataset.person] = ul.scrollTop;
+      });
+      saved = {
+        day: b.dataset.day, cols: cols,
+        left: columns ? columns.scrollLeft : 0, pool: pool ? pool.scrollTop : 0
+      };
+    });
+    document.addEventListener("htmx:afterSwap", function () {
+      var b = document.getElementById("board");
+      if (!b) return;
+      var s = saved;
+      saved = null;
+      if (s && s.day === b.dataset.day) {
+        b.querySelectorAll(".column[data-person]").forEach(function (c) {
+          var ul = c.querySelector(":scope > .chores");
+          if (ul && s.cols[c.dataset.person]) ul.scrollTop = s.cols[c.dataset.person];
+        });
+        var columns = b.querySelector(".columns"), pool = b.querySelector(".pool");
+        if (columns) columns.scrollLeft = s.left;
+        if (pool) pool.scrollTop = s.pool;
+      }
+      updateAll();
+    });
+    updateAll();
+  })();
+</script>
 <script src="{{asset "saver.js"}}"></script>
 <script>
   // Screensaver. On a household display it starts after

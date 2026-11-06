@@ -679,3 +679,40 @@ details.card .list { margin: 8px -20px -20px; }
   .chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; }
   .sort select { flex: 1; }
 }
+
+/* Tablets and wall displays: the board fits the screen. The header and Up
+   for grabs stay put, and each person's chores scroll inside their column,
+   so scrolling one child's list doesn't move everyone's. Phones, a phone
+   turned sideways and short windows keep the page scroll. */
+@media (min-width: 700px) and (min-height: 600px) {
+  body.is-board { overflow: hidden; }
+  .is-board .board {
+    box-sizing: border-box; min-height: 0;
+    height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    display: flex; flex-direction: column; padding-bottom: 72px;
+  }
+  .is-board .board__locked, .is-board .board__header { flex: none; }
+  .is-board .views { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .is-board .views__panel:not([hidden]) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .is-board .views__panel.cal:not([hidden]) { display: block; overflow-y: auto; overscroll-behavior: contain; }
+  .is-board .board__body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .is-board .board__empty { overflow-y: auto; }
+
+  .is-board .pool { flex: none; max-height: 33dvh; overflow-y: auto; overscroll-behavior: contain; padding-top: 0; }
+  .is-board .pool__title { position: sticky; top: 0; z-index: 1; background: var(--surface); margin: 0; padding: 14px 0 10px; }
+
+  .is-board .columns { flex: 1; min-height: 0; grid-template-rows: minmax(0, 1fr); }
+  .is-board .column { min-height: 0; overflow: hidden; }
+  .is-board .column > :not(.chores):not(.column__empty) { flex: none; }
+  .is-board .column > .chores {
+    flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+    align-content: start; padding: 3px; margin: -3px;
+  }
+}
+
+/* More chores below: the bottom of the list fades out until it's
+   scrolled to the end (set by the board's script). */
+.chores.has-more {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 56px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 56px), transparent);
+}
