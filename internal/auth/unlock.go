@@ -8,9 +8,9 @@ import (
 	"log/slog"
 	"strconv"
 
-	"github.com/lukeskelhorn/domus/internal/settings"
-	"github.com/lukeskelhorn/domus/internal/store"
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/settings"
+	"github.com/lukeskelhorn/ingle/internal/store"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
 // ErrNoUnlockCode is returned when clearing a code that isn't set.

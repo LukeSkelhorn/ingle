@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
 // ReverseWindow is how long an adult can take back an approved completion.

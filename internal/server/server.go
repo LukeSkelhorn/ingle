@@ -1,4 +1,4 @@
-// Package server wires HTTP routes for the Domus board and admin.
+// Package server wires HTTP routes for the Ingle board and admin.
 package server
 
 import (
@@ -12,17 +12,17 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lukeskelhorn/domus/internal/auth"
-	"github.com/lukeskelhorn/domus/internal/avatar"
-	"github.com/lukeskelhorn/domus/internal/calendar"
-	"github.com/lukeskelhorn/domus/internal/chores"
-	"github.com/lukeskelhorn/domus/internal/household"
-	"github.com/lukeskelhorn/domus/internal/locale"
-	"github.com/lukeskelhorn/domus/internal/lock"
-	"github.com/lukeskelhorn/domus/internal/photos"
-	"github.com/lukeskelhorn/domus/internal/settings"
-	"github.com/lukeskelhorn/domus/internal/store"
-	"github.com/lukeskelhorn/domus/web"
+	"github.com/lukeskelhorn/ingle/internal/auth"
+	"github.com/lukeskelhorn/ingle/internal/avatar"
+	"github.com/lukeskelhorn/ingle/internal/calendar"
+	"github.com/lukeskelhorn/ingle/internal/chores"
+	"github.com/lukeskelhorn/ingle/internal/household"
+	"github.com/lukeskelhorn/ingle/internal/locale"
+	"github.com/lukeskelhorn/ingle/internal/lock"
+	"github.com/lukeskelhorn/ingle/internal/photos"
+	"github.com/lukeskelhorn/ingle/internal/settings"
+	"github.com/lukeskelhorn/ingle/internal/store"
+	"github.com/lukeskelhorn/ingle/web"
 )
 
 // Deps are the services the server is built from.
@@ -45,7 +45,7 @@ type Deps struct {
 	Version string
 }
 
-// Server serves the Domus web UI.
+// Server serves the Ingle web UI.
 type Server struct {
 	Deps
 	db     *sql.DB

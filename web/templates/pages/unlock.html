@@ -21,7 +21,7 @@
     <script>
       (function () {
         var form = document.getElementById("pinform");
-        DomusPinpad(form.querySelector("[data-pinpad]"), {
+        InglePinpad(form.querySelector("[data-pinpad]"), {
           onSubmit: function (code) { document.getElementById("pin").value = code; form.submit(); },
         });
       })();

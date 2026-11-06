@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lukeskelhorn/domus/internal/auth"
-	"github.com/lukeskelhorn/domus/internal/store"
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
-	"github.com/lukeskelhorn/domus/internal/valid"
+	"github.com/lukeskelhorn/ingle/internal/auth"
+	"github.com/lukeskelhorn/ingle/internal/store"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/valid"
 )
 
 type fixture struct {
@@ -23,7 +23,7 @@ type fixture struct {
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	ctx := t.Context()
-	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "domus.db"))
+	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "ingle.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestSetup(t *testing.T) {
 
 func TestSetupValidation(t *testing.T) {
 	ctx := t.Context()
-	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "domus.db"))
+	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "ingle.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

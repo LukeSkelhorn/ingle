@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
 // Summary is one person's money at a glance: what they can spend, what

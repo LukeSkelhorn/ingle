@@ -1,6 +1,6 @@
 // Package photos is the screensaver's slideshow library: photos adults
 // upload in admin (stored next to the database) plus, optionally, a
-// read-only folder such as a NAS share (DOMUS_PHOTOS_DIR) that Domus indexes
+// read-only folder such as a NAS share (INGLE_PHOTOS_DIR) that Ingle indexes
 // but never writes to.
 package photos
 
@@ -25,9 +25,9 @@ import (
 
 	"github.com/disintegration/imaging"
 
-	"github.com/lukeskelhorn/domus/internal/picture"
-	"github.com/lukeskelhorn/domus/internal/store"
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/picture"
+	"github.com/lukeskelhorn/ingle/internal/store"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
 // Sizes of stored and served photos, in pixels.
@@ -42,7 +42,7 @@ const (
 // MaxUpload is the largest accepted upload, in bytes.
 const MaxUpload = 20 << 20
 
-// maxFolderFile is the largest folder photo Domus will decode.
+// maxFolderFile is the largest folder photo Ingle will decode.
 const maxFolderFile = 64 << 20
 
 // MaxFolderPhotos caps how many folder photos are indexed.

@@ -19,18 +19,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lukeskelhorn/domus/internal/auth"
-	"github.com/lukeskelhorn/domus/internal/avatar"
-	"github.com/lukeskelhorn/domus/internal/calendar"
-	"github.com/lukeskelhorn/domus/internal/chores"
-	"github.com/lukeskelhorn/domus/internal/household"
-	"github.com/lukeskelhorn/domus/internal/locale"
-	"github.com/lukeskelhorn/domus/internal/lock"
-	"github.com/lukeskelhorn/domus/internal/photos"
-	"github.com/lukeskelhorn/domus/internal/settings"
-	"github.com/lukeskelhorn/domus/internal/store"
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
-	"github.com/lukeskelhorn/domus/web"
+	"github.com/lukeskelhorn/ingle/internal/auth"
+	"github.com/lukeskelhorn/ingle/internal/avatar"
+	"github.com/lukeskelhorn/ingle/internal/calendar"
+	"github.com/lukeskelhorn/ingle/internal/chores"
+	"github.com/lukeskelhorn/ingle/internal/household"
+	"github.com/lukeskelhorn/ingle/internal/locale"
+	"github.com/lukeskelhorn/ingle/internal/lock"
+	"github.com/lukeskelhorn/ingle/internal/photos"
+	"github.com/lukeskelhorn/ingle/internal/settings"
+	"github.com/lukeskelhorn/ingle/internal/store"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/web"
 )
 
 type harness struct {
@@ -39,7 +39,7 @@ type harness struct {
 	st   *store.Store
 	hh   int64
 	auth *auth.Service
-	// photoDir is the read-only photos folder (DOMUS_PHOTOS_DIR).
+	// photoDir is the read-only photos folder (INGLE_PHOTOS_DIR).
 	photoDir string
 	lib      *photos.Library
 	lock     *lock.Service
@@ -73,7 +73,7 @@ func newHarness(t *testing.T) *harness {
 	t.Helper()
 	ctx := t.Context()
 	dir := t.TempDir()
-	db, err := store.Open(ctx, filepath.Join(dir, "domus.db"))
+	db, err := store.Open(ctx, filepath.Join(dir, "ingle.db"))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -294,7 +294,7 @@ func TestOpenRoutes(t *testing.T) {
 	}{
 		{"/healthz", "text/plain", "ok v9.8.7"},
 		{"/manifest.webmanifest", "application/manifest+json", `"display": "standalone"`},
-		{"/sw.js", "text/javascript", `"domus-static-` + web.StaticVersion() + `"`},
+		{"/sw.js", "text/javascript", `"ingle-static-` + web.StaticVersion() + `"`},
 		{"/static/htmx.min.js", "javascript", "htmx"},
 		{"/static/icons/icon-192.png", "image/png", ""},
 	}
@@ -336,7 +336,7 @@ func TestEverythingGoesToSetupFirst(t *testing.T) {
 	for _, p := range []string{"/", "/admin", "/signin", "/admin/unlock", "/clock"} {
 		expectRedirect(t, d.get(p), "/setup")
 	}
-	expect(t, d.get("/setup"), http.StatusOK, "Welcome to Domus", `name="pin"`)
+	expect(t, d.get("/setup"), http.StatusOK, "Welcome to Ingle", `name="pin"`)
 }
 
 func TestSetupValidation(t *testing.T) {
@@ -660,7 +660,7 @@ func TestPhotoAvatar(t *testing.T) {
 	if err != nil || cfg.Width != avatar.Size || cfg.Height != avatar.Size {
 		t.Errorf("served avatar %dx%d (%v), want %d square", cfg.Width, cfg.Height, err, avatar.Size)
 	}
-	expect(t, wall.get("/avatars/..%2fdomus.db"), http.StatusNotFound)
+	expect(t, wall.get("/avatars/..%2fingle.db"), http.StatusNotFound)
 	expect(t, wall.get("/avatars/nope.jpg"), http.StatusNotFound)
 
 	// Saving again without a new file keeps the photo; switching to an emoji

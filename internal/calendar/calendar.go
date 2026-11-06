@@ -17,10 +17,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lukeskelhorn/domus/internal/household"
-	"github.com/lukeskelhorn/domus/internal/store"
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
-	"github.com/lukeskelhorn/domus/internal/valid"
+	"github.com/lukeskelhorn/ingle/internal/household"
+	"github.com/lukeskelhorn/ingle/internal/store"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/valid"
 )
 
 // Limits for fetching a feed.
@@ -289,7 +289,7 @@ func (s *Service) fetch(ctx context.Context, householdID int64, u string) ([]Eve
 	if err != nil {
 		return nil, errors.New("bad address")
 	}
-	req.Header.Set("User-Agent", "Domus")
+	req.Header.Set("User-Agent", "Ingle")
 	req.Header.Set("Accept", "text/calendar, */*;q=0.5")
 	resp, err := s.client.Do(req)
 	if err != nil {

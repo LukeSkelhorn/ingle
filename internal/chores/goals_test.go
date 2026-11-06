@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
 func TestNewGoalProgress(t *testing.T) {

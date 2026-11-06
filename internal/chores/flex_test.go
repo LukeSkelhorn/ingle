@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
 // Mon 2 Nov 2026 is the fixture's first day; Tue 3, Thu 5, Sat 7, Sun 8.

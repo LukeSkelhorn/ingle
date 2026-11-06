@@ -1,4 +1,4 @@
-// DomusPinpad drives the shared PIN pad (the "pinpad" template): digits
+// InglePinpad drives the shared PIN pad (the "pinpad" template): digits
 // from the keys or a keyboard, drawn as dots. When the PIN's length is known
 // (data-length, or reset's second argument) it shows that many dots and
 // submits as soon as the last digit goes in. Otherwise it takes up to six,
@@ -6,7 +6,7 @@
 // opts.onSubmit(code) does the unlock; opts.active() (optional) says whether
 // keyboard input is for this pad.
 (function () {
-  window.DomusPinpad = function (root, opts) {
+  window.InglePinpad = function (root, opts) {
     var dots = root.querySelector(".pinpad__dots"),
         msg = root.querySelector(".pinpad__msg"),
         code = "", length = 0;

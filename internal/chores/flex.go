@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
 // Day modes: how a chore's scheduled days work.

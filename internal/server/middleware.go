@@ -6,11 +6,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lukeskelhorn/domus/internal/auth"
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/auth"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
-// Cookie names.
+// Cookie names. They keep the app's old name, Domus, so devices and
+// sessions from before the rename stay signed in.
 const (
 	deviceCookie  = "domus_device"
 	sessionCookie = "domus_session"

@@ -9,12 +9,12 @@ import (
 
 	"github.com/pressly/goose/v3"
 
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
 func TestOpenRunsMigrations(t *testing.T) {
 	ctx := t.Context()
-	path := filepath.Join(t.TempDir(), "nested", "domus.db")
+	path := filepath.Join(t.TempDir(), "nested", "ingle.db")
 
 	db, err := Open(ctx, path)
 	if err != nil {
@@ -43,7 +43,7 @@ func TestOpenRunsMigrations(t *testing.T) {
 
 func openTest(t *testing.T) *Store {
 	t.Helper()
-	db, err := Open(t.Context(), filepath.Join(t.TempDir(), "domus.db"))
+	db, err := Open(t.Context(), filepath.Join(t.TempDir(), "ingle.db"))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}

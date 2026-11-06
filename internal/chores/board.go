@@ -8,8 +8,8 @@ import (
 	"slices"
 	"time"
 
-	"github.com/lukeskelhorn/domus/internal/emoji"
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/emoji"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
 // OverdueDays is how far back the board looks for missed chores.

@@ -1,4 +1,4 @@
-module github.com/lukeskelhorn/domus
+module github.com/lukeskelhorn/ingle
 
 go 1.27.1
 

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lukeskelhorn/domus/internal/valid"
+	"github.com/lukeskelhorn/ingle/internal/valid"
 )
 
 func TestCreateChoreValidation(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/lukeskelhorn/domus/internal/valid"
+	"github.com/lukeskelhorn/ingle/internal/valid"
 )
 
 func TestChoreEmoji(t *testing.T) {

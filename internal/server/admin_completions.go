@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/lukeskelhorn/domus/internal/chores"
+	"github.com/lukeskelhorn/ingle/internal/chores"
 )
 
 // completionsPage is Admin › Completions: chores and reward claims waiting

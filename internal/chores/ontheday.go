@@ -8,7 +8,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
 // ErrTooLate is returned when completing or claiming an Only on the day

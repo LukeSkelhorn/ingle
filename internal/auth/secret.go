@@ -73,7 +73,7 @@ func verifySecret(encoded, secret string) bool {
 // dummyHash is verified against when an account doesn't exist, so a failed
 // sign-in takes the same time whether or not the email is known.
 var dummyHash = func() string {
-	h, err := hashSecret("domus-dummy-password")
+	h, err := hashSecret("ingle-dummy-password")
 	if err != nil {
 		panic(err)
 	}

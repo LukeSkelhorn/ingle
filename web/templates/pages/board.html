@@ -1,4 +1,4 @@
-{{define "title"}}{{if .Household}}{{.Household}} · {{end}}Domus{{end}}
+{{define "title"}}{{if .Household}}{{.Household}} · {{end}}Ingle{{end}}
 {{define "bodyclass"}}is-board{{end}}
 {{define "content"}}
 <main class="board" id="board-page" data-locked="{{if .Data.Lock.Locked}}1{{else}}0{{end}}">
@@ -10,7 +10,7 @@
   {{end}}
   <header class="board__header">
     <div class="board__title">
-      <h1>{{if .Household}}{{.Household}}{{else}}Domus{{end}}</h1>
+      <h1>{{if .Household}}{{.Household}}{{else}}Ingle{{end}}</h1>
       {{if not .Data.Lock.Locked}}
       <nav class="views__dots" aria-label="View">
         <button type="button" data-view-to="chores" aria-pressed="true"><i aria-hidden="true"></i><span>Chores</span></button>
@@ -118,7 +118,7 @@
           es = new EventSource("/board/events?client=" + client);
       es.addEventListener("board", function () {
         refresh();
-        document.dispatchEvent(new Event("domus:board"));
+        document.dispatchEvent(new Event("ingle:board"));
       });
       // Locking or unlocking reloads the page: a display shows the locked
       // screen, a phone shows or hides the banner.
@@ -132,6 +132,8 @@
     // A goal just reached celebrates once on each display. Seen keys are
     // kept in this browser; without storage we skip it rather than repeat
     // it on every refresh.
+    // Kept from when Ingle was called Domus, so displays remember what
+    // they have already celebrated.
     var CELEBRATED = "domus.celebrated";
     function celebrate() {
       var goals = document.querySelectorAll("#board [data-celebrate]");
@@ -207,7 +209,7 @@
         if (from === "calendar") window.scrollTo(0, 0);
       }
     }
-    window.DomusViews = { show: show };
+    window.IngleViews = { show: show };
     if (!cal) return;
 
     document.querySelectorAll("[data-view-to]").forEach(function (b) {
@@ -224,7 +226,7 @@
 
     // Live: the calendar re-fetches what it's showing when the board
     // changes, and every 15 minutes for new events.
-    document.addEventListener("domus:board", reload);
+    document.addEventListener("ingle:board", reload);
     setInterval(function () { if (current() === "calendar") reload(); }, 15 * 60 * 1000);
     document.addEventListener("visibilitychange", function () { if (!document.hidden && current() === "calendar") reload(); });
 
@@ -365,7 +367,7 @@
         isDisplay = {{.Viewer.IsDisplay}},
         adminOnDisplay = {{.Viewer.OnDisplayAdmin}},
         idleTimer, swallowUntil = 0, lastPing = 0,
-        saver = DomusSaver(el, {
+        saver = IngleSaver(el, {
           info: function (panel) {
             if (window.htmx) htmx.ajax("GET", "/screensaver", { target: panel, swap: "innerHTML" });
           },
@@ -399,7 +401,7 @@
       }
       clearTimeout(idleTimer);
       if (sheet.open) sheet.close();
-      if (window.DomusViews) DomusViews.show("chores");
+      if (window.IngleViews) IngleViews.show("chores");
       saver.start();
     }
 
@@ -427,7 +429,7 @@
     }, { capture: true });
 
     document.querySelector("[data-screensaver]").addEventListener("click", function () { start(); });
-    document.addEventListener("domus:board", saver.refresh);
+    document.addEventListener("ingle:board", saver.refresh);
 
     if (/[?&]screensaver=1/.test(location.search)) {
       history.replaceState(null, "", "/");

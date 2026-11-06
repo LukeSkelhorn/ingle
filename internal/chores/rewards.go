@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
 // Rewards are claimed from the board and wait for an adult. A waiting claim

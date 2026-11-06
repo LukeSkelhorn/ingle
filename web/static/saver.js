@@ -1,7 +1,7 @@
-// Domus screensaver: a shuffled photo slideshow with a drifting info panel,
+// Ingle screensaver: a shuffled photo slideshow with a drifting info panel,
 // shared by the board's screensaver and the locked display.
 //
-//   var saver = DomusSaver(el, { info: function (panel) { ... } });
+//   var saver = IngleSaver(el, { info: function (panel) { ... } });
 //   saver.start(); saver.stop(); saver.showing();
 //
 // el holds .saver__photos and .saver__info. info(panel) is called on start
@@ -18,7 +18,7 @@
     return a;
   }
 
-  window.DomusSaver = function (saver, opts) {
+  window.IngleSaver = function (saver, opts) {
     var layer = saver.querySelector(".saver__photos"),
         info = saver.querySelector(".saver__info"),
         showing = false, slideTimer, infoTimer,

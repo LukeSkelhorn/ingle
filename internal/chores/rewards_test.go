@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
 func (f *fixture) reward(title string, points, pence int64) dbq.Reward {

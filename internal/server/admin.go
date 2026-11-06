@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lukeskelhorn/domus/internal/auth"
-	"github.com/lukeskelhorn/domus/internal/settings"
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/auth"
+	"github.com/lukeskelhorn/ingle/internal/settings"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
 type adminHome struct {
@@ -70,7 +70,7 @@ func (s *Server) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 // or idle lock, the household code).
 func activityActor(verb string) string {
 	if strings.HasPrefix(verb, "board.") && verb != "board.unlocked_code" {
-		return "Domus"
+		return "Ingle"
 	}
 	return "Someone"
 }

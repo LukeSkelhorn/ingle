@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
 // boardHousehold sets up Mum (display + phone), Alfie and Isla, an assigned
@@ -346,7 +346,7 @@ func TestAdminCompletions(t *testing.T) {
 	expect(t, r, http.StatusOK, "Waiting for a grown-up")
 
 	expect(t, wall.get("/admin/completions"), http.StatusSeeOther)
-	expect(t, phone.get("/admin"), http.StatusOK, `href="/admin/completions"`, "Domus v9.8.7")
+	expect(t, phone.get("/admin"), http.StatusOK, `href="/admin/completions"`, "Ingle v9.8.7")
 	r = phone.get("/admin/completions")
 	expect(t, r, http.StatusOK, "Waiting for a grown-up", "Tidy bedroom", "Last 7 days", "Feed the cat", "Reverse")
 

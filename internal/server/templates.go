@@ -11,12 +11,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lukeskelhorn/domus/internal/auth"
-	"github.com/lukeskelhorn/domus/internal/avatar"
-	"github.com/lukeskelhorn/domus/internal/locale"
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
-	"github.com/lukeskelhorn/domus/internal/valid"
-	"github.com/lukeskelhorn/domus/web"
+	"github.com/lukeskelhorn/ingle/internal/auth"
+	"github.com/lukeskelhorn/ingle/internal/avatar"
+	"github.com/lukeskelhorn/ingle/internal/locale"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/valid"
+	"github.com/lukeskelhorn/ingle/web"
 )
 
 // pages holds one template set per page: layout + partials + that page, so
@@ -70,7 +70,7 @@ type view struct {
 	Flash     string
 	Errors    valid.Errors
 	Data      any
-	Version   string // the Domus build, shown in admin
+	Version   string // the Ingle build, shown in admin
 }
 
 // viewer describes who is looking at the page.

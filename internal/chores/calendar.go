@@ -7,7 +7,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
 // CalStatus is where a chore on the calendar stands.

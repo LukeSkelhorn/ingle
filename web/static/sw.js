@@ -1,9 +1,9 @@
-// Domus service worker: makes the board installable and caches static
+// Ingle service worker: makes the board installable and caches static
 // assets. Pages and data always come from the server (network-first) so
 // the wall display never shows stale chores.
 // The server fills in the cache name from a hash of the static files, so
 // every build that changes them starts a fresh cache and drops the old one.
-const CACHE = "domus-static-{{VERSION}}";
+const CACHE = "ingle-static-{{VERSION}}";
 
 self.addEventListener("install", () => self.skipWaiting());
 

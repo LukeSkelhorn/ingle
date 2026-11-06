@@ -1,5 +1,9 @@
-// Package config loads Domus runtime configuration from the environment,
+// Package config loads Ingle runtime configuration from the environment,
 // falling back to UK-centric defaults.
+//
+// Settings are INGLE_* variables. Ingle used to be called Domus, so the
+// old DOMUS_* names are still read when the INGLE_* one isn't set, and an
+// existing domus.db is still used.
 package config
 
 import (
@@ -16,10 +20,24 @@ import (
 	_ "time/tzdata"
 )
 
-// Defaults used when the corresponding DOMUS_* variable is unset.
+// Variable prefixes: settings are INGLE_*, and the DOMUS_* names from
+// before the rename are read as a fallback.
+const (
+	Prefix       = "INGLE_"
+	LegacyPrefix = "DOMUS_"
+)
+
+// Database file names. A data directory from before the rename has a
+// domus.db, which is used as long as there's no ingle.db beside it.
+const (
+	DBName       = "ingle.db"
+	LegacyDBName = "domus.db"
+)
+
+// Defaults used when the corresponding INGLE_* variable is unset.
 const (
 	DefaultAddr       = ":8080"
-	DefaultDBPath     = "./data/domus.db"
+	DefaultDBPath     = "./data/" + DBName
 	DefaultTimezone   = "Europe/London"
 	DefaultDateFormat = "02/01/2006" // DD/MM/YYYY
 	DefaultWeekStart  = "monday"
@@ -49,6 +67,16 @@ type Config struct {
 	BackupDir  string
 	BackupKeep int
 	BackupAt   string
+	// Legacy lists the old DOMUS_* variables that were used because the
+	// INGLE_* one wasn't set, so the server can suggest renaming them.
+	Legacy []string
+}
+
+// fileExists reports whether path is an existing file. A variable so tests
+// can stand in for the filesystem.
+var fileExists = func(path string) bool {
+	fi, err := os.Stat(path)
+	return err == nil && fi.Mode().IsRegular()
 }
 
 // Load reads configuration from the environment.
@@ -57,52 +85,73 @@ func Load() (Config, error) {
 }
 
 func load(getenv func(string) string) (Config, error) {
-	get := func(key, def string) string {
-		if v := strings.TrimSpace(getenv(key)); v != "" {
+	var legacy []string
+	// get reads INGLE_<name>, then DOMUS_<name>, then falls back to def.
+	get := func(name, def string) string {
+		if v := strings.TrimSpace(getenv(Prefix + name)); v != "" {
+			return v
+		}
+		if v := strings.TrimSpace(getenv(LegacyPrefix + name)); v != "" {
+			legacy = append(legacy, LegacyPrefix+name)
 			return v
 		}
 		return def
 	}
 
-	tz := get("DOMUS_TZ", DefaultTimezone)
+	tz := get("TZ", DefaultTimezone)
 	loc, err := time.LoadLocation(tz)
 	if err != nil {
-		return Config{}, fmt.Errorf("DOMUS_TZ %q: %w", tz, err)
+		return Config{}, fmt.Errorf(Prefix+"TZ %q: %w", tz, err)
 	}
 
-	ws, err := parseWeekday(get("DOMUS_WEEK_START", DefaultWeekStart))
+	ws, err := parseWeekday(get("WEEK_START", DefaultWeekStart))
 	if err != nil {
 		return Config{}, err
 	}
 
-	proxies, err := parsePrefixes(get("DOMUS_TRUSTED_PROXIES", ""))
+	proxies, err := parsePrefixes(get("TRUSTED_PROXIES", ""))
 	if err != nil {
 		return Config{}, err
 	}
 
-	keep, err := strconv.Atoi(get("DOMUS_BACKUP_KEEP", strconv.Itoa(DefaultBackupKeep)))
+	keepS := get("BACKUP_KEEP", strconv.Itoa(DefaultBackupKeep))
+	keep, err := strconv.Atoi(keepS)
 	if err != nil || keep < 0 || keep > 365 {
-		return Config{}, fmt.Errorf("DOMUS_BACKUP_KEEP %q: want a number from 0 to 365", getenv("DOMUS_BACKUP_KEEP"))
+		return Config{}, fmt.Errorf(Prefix+"BACKUP_KEEP %q: want a number from 0 to 365", keepS)
 	}
-	at := get("DOMUS_BACKUP_AT", DefaultBackupAt)
+	at := get("BACKUP_AT", DefaultBackupAt)
 	if _, err := time.Parse("15:04", at); err != nil || len(at) != 5 {
-		return Config{}, fmt.Errorf("DOMUS_BACKUP_AT %q: want HH:MM", at)
+		return Config{}, fmt.Errorf(Prefix+"BACKUP_AT %q: want HH:MM", at)
 	}
 
-	dbPath := get("DOMUS_DB_PATH", DefaultDBPath)
+	dbPath := legacyDB(get("DB_PATH", DefaultDBPath))
 	return Config{
-		Addr:           get("DOMUS_ADDR", DefaultAddr),
+		Addr:           get("ADDR", DefaultAddr),
 		DBPath:         dbPath,
 		Location:       loc,
-		DateFormat:     get("DOMUS_DATE_FORMAT", DefaultDateFormat),
+		DateFormat:     get("DATE_FORMAT", DefaultDateFormat),
 		WeekStart:      ws,
-		Currency:       strings.ToUpper(get("DOMUS_CURRENCY", DefaultCurrency)),
-		PhotosDir:      get("DOMUS_PHOTOS_DIR", ""),
+		Currency:       strings.ToUpper(get("CURRENCY", DefaultCurrency)),
+		PhotosDir:      get("PHOTOS_DIR", ""),
 		TrustedProxies: proxies,
-		BackupDir:      get("DOMUS_BACKUP_DIR", filepath.Join(filepath.Dir(dbPath), "backups")),
+		BackupDir:      get("BACKUP_DIR", filepath.Join(filepath.Dir(dbPath), "backups")),
 		BackupKeep:     keep,
 		BackupAt:       at,
+		Legacy:         legacy,
 	}, nil
+}
+
+// legacyDB keeps an install from before the rename on its database: if
+// path is an ingle.db that doesn't exist yet but a domus.db does beside
+// it, that's the one to open. Otherwise path is used as given.
+func legacyDB(path string) string {
+	if filepath.Base(path) != DBName || fileExists(path) {
+		return path
+	}
+	if old := filepath.Join(filepath.Dir(path), LegacyDBName); fileExists(old) {
+		return old
+	}
+	return path
 }
 
 // parsePrefixes reads a comma- or space-separated list of CIDRs; a bare IP
@@ -113,14 +162,14 @@ func parsePrefixes(s string) ([]netip.Prefix, error) {
 		if !strings.Contains(f, "/") {
 			a, err := netip.ParseAddr(f)
 			if err != nil {
-				return nil, fmt.Errorf("DOMUS_TRUSTED_PROXIES %q: %w", f, err)
+				return nil, fmt.Errorf(Prefix+"TRUSTED_PROXIES %q: %w", f, err)
 			}
 			out = append(out, netip.PrefixFrom(a.Unmap(), a.Unmap().BitLen()))
 			continue
 		}
 		p, err := netip.ParsePrefix(f)
 		if err != nil {
-			return nil, fmt.Errorf("DOMUS_TRUSTED_PROXIES %q: %w", f, err)
+			return nil, fmt.Errorf(Prefix+"TRUSTED_PROXIES %q: %w", f, err)
 		}
 		out = append(out, p.Masked())
 	}
@@ -133,5 +182,5 @@ func parseWeekday(s string) (time.Weekday, error) {
 			return d, nil
 		}
 	}
-	return 0, fmt.Errorf("DOMUS_WEEK_START %q: not a weekday name", s)
+	return 0, fmt.Errorf(Prefix+"WEEK_START %q: not a weekday name", s)
 }

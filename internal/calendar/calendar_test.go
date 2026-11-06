@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lukeskelhorn/domus/internal/store"
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
-	"github.com/lukeskelhorn/domus/internal/valid"
+	"github.com/lukeskelhorn/ingle/internal/store"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/valid"
 )
 
 var london, _ = time.LoadLocation("Europe/London")
@@ -143,7 +143,7 @@ type fixture struct {
 func newFixture(t *testing.T, client *http.Client) *fixture {
 	t.Helper()
 	ctx := t.Context()
-	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "domus.db"))
+	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "ingle.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,7 +194,7 @@ END:VEVENT
 	var status atomic.Int32
 	status.Store(http.StatusOK)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("User-Agent") != "Domus" {
+		if r.Header.Get("User-Agent") != "Ingle" {
 			t.Errorf("User-Agent = %q", r.Header.Get("User-Agent"))
 		}
 		switch r.URL.Path {

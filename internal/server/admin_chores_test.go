@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lukeskelhorn/domus/internal/chores"
+	"github.com/lukeskelhorn/ingle/internal/chores"
 )
 
 // order returns the titles in body, in the order they appear.

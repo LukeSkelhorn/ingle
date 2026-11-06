@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Domus are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/). Before v1.0.0, a minor version (v0.2.0) may include breaking changes; they're called out under **Upgrade notes**.
+All notable changes to Ingle (called Domus before v0.2.0) are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/). Before v1.0.0, a minor version (v0.2.0) may include breaking changes; they're called out under **Upgrade notes**.
 
 Each release's section is also its GitHub release notes (`task release:notes`).
 
@@ -11,7 +11,7 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 - **Person sheet:** tap someone's avatar or name on the board to see their balance, what they've earned this week, and the rewards, with the ones they can afford highlighted and how much more they need for the rest. It updates live and never shows on a locked display. ([DOM-9](https://linear.app/skeltech/issue/DOM-9), [#12](https://github.com/lukeskelhorn/domus/pull/12))
 - **Claim rewards:** on their sheet, a child taps **Claim** on a reward they can afford. The points are held straight away, so their balance shows what's left plus "(30 pts held)", and their column shows "🎁 1 waiting". An adult approves or declines it from the sheet (with admin unlocked) or in **Admin › Completions** under "Rewards waiting". Approving spends the points, and declining or the child cancelling frees them again. If an adult is already signed in or unlocked, a claim is approved straight away. The activity feed names the reward ("Alfie claimed Screen time"). ([DOM-10](https://linear.app/skeltech/issue/DOM-10), [#14](https://github.com/lukeskelhorn/domus/pull/14))
 - **Save for a reward:** each person can pick one reward to save for, with **Save for this** on their sheet or **Saving for** in **Admin › People**. Their column then shows it under their balance with its emoji and a progress bar, e.g. "🧱 Lego set · 60 of 100 pts". For a reward that costs points and money, the bar follows whichever is further off. When they can afford it, a small celebration plays once on each display and **Claim** appears on the goal. The goal clears once the claim is approved, or quietly if the reward is archived. Rewards can now have an emoji, picked in **Admin › Rewards**. ([DOM-11](https://linear.app/skeltech/issue/DOM-11), [#15](https://github.com/lukeskelhorn/domus/pull/15))
-- **Chore emoji:** chores can have an emoji, shown large on the card before the title: in columns, in Up for grabs, on done chores and in the board's sheets. Pick one from a grid in **Admin › Chores** or type any emoji. As you type the title, Domus suggests one ("Feed the dog" → 🐶) to accept with a tap. Rewards get the same picker, so their emoji can be typed and suggested too. ([DOM-12](https://linear.app/skeltech/issue/DOM-12), [DOM-13](https://linear.app/skeltech/issue/DOM-13), [#16](https://github.com/lukeskelhorn/domus/pull/16))
+- **Chore emoji:** chores can have an emoji, shown large on the card before the title: in columns, in Up for grabs, on done chores and in the board's sheets. Pick one from a grid in **Admin › Chores** or type any emoji. As you type the title, Ingle suggests one ("Feed the dog" → 🐶) to accept with a tap. Rewards get the same picker, so their emoji can be typed and suggested too. ([DOM-12](https://linear.app/skeltech/issue/DOM-12), [DOM-13](https://linear.app/skeltech/issue/DOM-13), [#16](https://github.com/lukeskelhorn/domus/pull/16))
 - **Picture cards:** a setting for each child in **Admin › People**. Their column shows big emoji tiles, two across, with a small title and a tick in the corner, for children who can't read yet. A chore without an emoji uses one suggested from its title, or ⭐. Other columns don't change. ([DOM-12](https://linear.app/skeltech/issue/DOM-12), [#16](https://github.com/lukeskelhorn/domus/pull/16))
 - **Calendar view:** swipe left across the board, or tap **Calendar** under the household name, to see the family's calendar events and chores together. The week view has a column per day: all-day events at the top, then events and chores in time order. Chores are coloured by person, show their emoji, and shared ones are marked **Up for grabs**. Past days show done chores with a ✓ and who did them, and missed ones faded. **Month** shows a grid with up to 3 things a day, and tapping a day lists the rest. Go back up to 4 weeks or ahead up to 3 months; chores beyond the next two weeks are worked out from their schedule. It's read-only: tapping a chore shows its details, and chores are only ticked off from the chores view. On a phone the week is a list of days. It updates live and never shows on a locked display. On a display it returns to the chores after 2 minutes untouched, which can be changed in **Admin › Settings**. ([DOM-14](https://linear.app/skeltech/issue/DOM-14), [#17](https://github.com/lukeskelhorn/domus/pull/17))
 - **Admin chores list:** chips above the list show **Everyone**, each person, or **Up for grabs**, and a menu sorts by name, points (high to low) or money (high to low). The heading counts what matches, e.g. "Chores · 6 for Alfie". The choice is kept in the address, so going back from a chore, adding one or archiving one returns to the same list. A person with no chores gets an **Add a chore for Alfie** button that picks them for you. On phones the chips scroll sideways. ([DOM-31](https://linear.app/skeltech/issue/DOM-31), [#18](https://github.com/lukeskelhorn/domus/pull/18))
@@ -21,6 +21,7 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ### Changed
 
+- **Domus is now Ingle.** The app, its pages, the home-screen icon's name, the binary (`ingle`), the Docker image (`ghcr.io/lukeskelhorn/ingle`) and the settings (`INGLE_*`) all use the new name, and the repository moves to [github.com/lukeskelhorn/ingle](https://github.com/lukeskelhorn/ingle). Existing installs carry straight over: see **Upgrade notes**.
 - **Board on tablets and wall displays:** the board now fits the screen. The household name, clock and **Up for grabs** stay put, and each person's chores scroll inside their own column, so scrolling Alfie's list doesn't move Isla's. A soft fade at the bottom of a column shows there's more below. A long Up for grabs is capped at about a third of the screen and scrolls too. Each column keeps its place when the board updates, and goes back to the top when the day rolls over. Phones, a phone turned sideways and short windows still scroll the whole page. ([DOM-35](https://linear.app/skeltech/issue/DOM-35), [#22](https://github.com/lukeskelhorn/domus/pull/22))
 - **Calendar feeds** now keep events from about 10 weeks back to 14 weeks ahead in memory, instead of the next week, so the board calendar has them to show. ([#17](https://github.com/lukeskelhorn/domus/pull/17))
 
@@ -28,6 +29,16 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 - **Calendar after ticking a chore:** on the display where a chore was just ticked, the calendar kept showing it as not done until something else changed, because a display doesn't get its own live updates. The calendar now re-fetches each time it's opened. ([DOM-32](https://linear.app/skeltech/issue/DOM-32), [#19](https://github.com/lukeskelhorn/domus/pull/19))
 - **Stale styles after an update:** a display could keep using the previous version's CSS and JavaScript, for example showing the board's name plates as plain white buttons until it was refreshed. The service worker cached static files under a name that had to be changed by hand. Asset links now carry a hash of the files, and the cache is named after it, so each update replaces them. ([#14](https://github.com/lukeskelhorn/domus/pull/14))
+
+### Upgrade notes
+
+- **The rename to Ingle.** Nothing is lost, and no device needs signing in again:
+  - Your `DOMUS_*` settings still work when the `INGLE_*` one isn't set. The log lists any you're still using, so you can rename them when it suits you.
+  - An existing `domus.db` keeps being used as long as there's no `ingle.db` beside it.
+  - New backups are `ingle-….tar.gz`. Older `domus-….tar.gz` ones still count towards the number kept, and restore the same way.
+  - Releases also go out as `ghcr.io/lukeskelhorn/domus` until v1.0, so an install that still pulls the old image keeps getting updates.
+  - **Docker Compose:** the project and its containers are now called `ingle`, but the volumes keep their old names, so your data and certificates carry over. Stop the old stack before pulling the new files: `docker compose down`, then `git pull` and `docker compose up -d`. See [Upgrading from Domus](deploy/README.md#upgrading-from-domus).
+  - Home-screen apps on iPads keep the name Domus until they're removed and added again.
 
 ## [v0.1.1] - 2026-11-05
 
@@ -60,6 +71,6 @@ The first release: a family chores board for a wall tablet, ready to run on a ho
 
 - First release: nothing to upgrade from. New installs start at the setup page.
 
-[Unreleased]: https://github.com/lukeskelhorn/domus/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/lukeskelhorn/ingle/compare/v0.1.1...HEAD
 [v0.1.1]: https://github.com/lukeskelhorn/domus/compare/v0.1.0...v0.1.1
 [v0.1.0]: https://github.com/lukeskelhorn/domus/releases/tag/v0.1.0

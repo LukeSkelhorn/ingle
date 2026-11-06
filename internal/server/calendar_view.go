@@ -9,10 +9,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/lukeskelhorn/domus/internal/calendar"
-	"github.com/lukeskelhorn/domus/internal/chores"
-	"github.com/lukeskelhorn/domus/internal/locale"
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/calendar"
+	"github.com/lukeskelhorn/ingle/internal/chores"
+	"github.com/lukeskelhorn/ingle/internal/locale"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
 // The board calendar's reach: weeks back from this week, and weeks (or

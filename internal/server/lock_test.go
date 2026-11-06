@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
 // lockStream opens the event stream on d and returns its "lock" event data.
@@ -212,7 +212,7 @@ func TestScheduleLocksDisplays(t *testing.T) {
 	h.advance(20 * time.Minute)
 	tick()
 	expect(t, wall.get("/"), http.StatusOK, "unlocking?<")
-	expect(t, phone.get("/admin"), http.StatusOK, "Domus</strong> locked the displays on schedule")
+	expect(t, phone.get("/admin"), http.StatusOK, "Ingle</strong> locked the displays on schedule")
 	h.advance(6 * time.Hour)
 	tick()
 	expect(t, wall.get("/"), http.StatusOK, `id="board"`)

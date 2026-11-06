@@ -8,11 +8,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lukeskelhorn/domus/internal/auth"
-	"github.com/lukeskelhorn/domus/internal/avatar"
-	"github.com/lukeskelhorn/domus/internal/household"
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
-	"github.com/lukeskelhorn/domus/internal/valid"
+	"github.com/lukeskelhorn/ingle/internal/auth"
+	"github.com/lukeskelhorn/ingle/internal/avatar"
+	"github.com/lukeskelhorn/ingle/internal/household"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/valid"
 )
 
 type setupForm struct {
@@ -43,7 +43,7 @@ func (s *Server) handleSetupForm(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	s.render(w, r, http.StatusOK, "setup", s.view(r, "Set up Domus", newSetupForm()))
+	s.render(w, r, http.StatusOK, "setup", s.view(r, "Set up Ingle", newSetupForm()))
 }
 
 func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
@@ -78,7 +78,7 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 		f.errs.Add("display_name", "Name this display, e.g. Kitchen.")
 	}
 	rerender := func(errs valid.Errors) {
-		v := s.view(r, "Set up Domus", data)
+		v := s.view(r, "Set up Ingle", data)
 		v.Errors = errs
 		s.render(w, r, http.StatusUnprocessableEntity, "setup", v)
 	}
@@ -298,7 +298,7 @@ func (s *Server) handleAdminUnlock(w http.ResponseWriter, r *http.Request) {
 
 // clientAddr is the client's address, used only to rate-limit sign-in and
 // unlocking. It is the TCP peer, unless that peer is a trusted reverse
-// proxy (DOMUS_TRUSTED_PROXIES): then it is the rightmost X-Forwarded-For
+// proxy (INGLE_TRUSTED_PROXIES): then it is the rightmost X-Forwarded-For
 // hop that isn't a trusted proxy. The header is ignored from anyone else
 // because it can be forged.
 func (s *Server) clientAddr(r *http.Request) string {

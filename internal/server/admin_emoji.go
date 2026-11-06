@@ -3,7 +3,7 @@ package server
 import (
 	"strings"
 
-	"github.com/lukeskelhorn/domus/internal/emoji"
+	"github.com/lukeskelhorn/ingle/internal/emoji"
 )
 
 // emojiField is the emoji picker on the chore and reward forms: a grid, a
