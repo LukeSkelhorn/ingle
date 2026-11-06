@@ -193,3 +193,77 @@ func (s *Service) MarkDone(ctx context.Context, householdID, occurrenceID, perso
 		return s.reviewTx(ctx, q, householdID, c.ID, adultID, StatusApproved)
 	})
 }
+
+// ErrNotMissed is returned when dismissing a chore that isn't a missed Only
+// on the day chore (it was done, dismissed already, or isn't late yet), or
+// restoring one that isn't dismissed.
+var ErrNotMissed = errors.New("chore isn't missed")
+
+// Dismiss takes missed Only on the day chores off Admin › Completions, as
+// adult adultID. They stay missed: no points, and the calendar still shows
+// them as missed. It returns the ids it dismissed, skipping any that aren't
+// missed (done or dismissed since the page was loaded); ErrNotMissed if
+// none were.
+func (s *Service) Dismiss(ctx context.Context, householdID, adultID int64, occurrenceIDs []int64) ([]int64, error) {
+	var done []int64
+	err := s.st.WithTx(ctx, func(q *dbq.Queries) error {
+		if err := requireAdult(ctx, q, householdID, adultID); err != nil {
+			return err
+		}
+		for _, id := range occurrenceIDs {
+			occ, err := getOccurrence(ctx, q, householdID, id)
+			if err != nil {
+				if errors.Is(err, ErrNotFound) {
+					continue
+				}
+				return err
+			}
+			chore, err := q.GetChore(ctx, dbq.GetChoreParams{HouseholdID: householdID, ID: occ.ChoreID})
+			if err != nil {
+				return fmt.Errorf("get chore: %w", err)
+			}
+			if !s.tooLate(ctx, householdID, chore, occ) {
+				continue
+			}
+			n, err := q.DismissOccurrence(ctx, dbq.DismissOccurrenceParams{HouseholdID: householdID, ID: id})
+			if err != nil {
+				return fmt.Errorf("dismiss occurrence: %w", err)
+			}
+			if n == 1 {
+				done = append(done, id)
+			}
+		}
+		if len(done) == 0 {
+			return ErrNotMissed
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return done, nil
+}
+
+// Restore undoes Dismiss for the given occurrences, as adult adultID,
+// putting them back on the Missed list. It returns how many it restored;
+// ErrNotMissed if none were dismissed.
+func (s *Service) Restore(ctx context.Context, householdID, adultID int64, occurrenceIDs []int64) (int, error) {
+	n := 0
+	err := s.st.WithTx(ctx, func(q *dbq.Queries) error {
+		if err := requireAdult(ctx, q, householdID, adultID); err != nil {
+			return err
+		}
+		for _, id := range occurrenceIDs {
+			r, err := q.RestoreOccurrence(ctx, dbq.RestoreOccurrenceParams{HouseholdID: householdID, ID: id})
+			if err != nil {
+				return fmt.Errorf("restore occurrence: %w", err)
+			}
+			n += int(r)
+		}
+		if n == 0 {
+			return ErrNotMissed
+		}
+		return nil
+	})
+	return n, err
+}

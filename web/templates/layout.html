@@ -40,6 +40,13 @@
   </script>
   {{end}}
   <script>
+    // Forms marked data-confirm="question?" ask first.
+    document.addEventListener("submit", function (e) {
+      var q = e.target.dataset && e.target.dataset.confirm;
+      if (q && !confirm(q)) e.preventDefault();
+    });
+  </script>
+  <script>
     // Fields marked data-show-when="name=a,b" are shown only while the form
     // control called name has one of those values.
     (function () {

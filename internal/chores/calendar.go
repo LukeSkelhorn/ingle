@@ -91,7 +91,9 @@ func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time
 	}
 	for _, r := range rows {
 		seen[key{r.ChoreID, r.DueOn}] = true
-		if r.Status == "skipped" {
+		// A dismissed Only on the day chore (Admin › Completions) still
+		// shows as missed; other skipped occurrences are hidden.
+		if r.Status == "skipped" && r.OnTheDay != 1 {
 			continue
 		}
 		c := CalChore{

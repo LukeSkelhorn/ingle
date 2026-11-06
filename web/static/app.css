@@ -378,6 +378,13 @@ input, select, textarea { -webkit-user-select: text; user-select: text; }
 .btn--ghost { border-color: transparent; background: transparent; }
 .btn--block { width: 100%; min-height: 52px; }
 .flash { background: var(--ok-bg); color: var(--ok-fg); padding: 10px 14px; border-radius: 10px; margin: 0 0 16px; }
+.flash--undo { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-block: 4px; }
+.flash--undo .btn { color: inherit; text-decoration: underline; }
+.btn--icon { min-width: 44px; padding: 8px; font-size: 1.3rem; line-height: 1; color: var(--muted); }
+.section__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.section__head h2 { margin: 0; }
+.section__head form { margin: 0; }
+.section__head .btn { color: var(--muted); }
 .tag { font-size: 0.75rem; background: var(--bg); border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; }
 
 /* Segmented radio control */

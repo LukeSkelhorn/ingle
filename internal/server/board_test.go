@@ -873,3 +873,53 @@ func TestBoardOnTheDay(t *testing.T) {
 		}
 	}
 }
+
+func TestMissedDismiss(t *testing.T) {
+	h, wall, phone := boardHousehold(t)
+	alfie := h.person("Alfie")
+	for _, title := range []string{"Bins out", "Milk out"} {
+		expectRedirect(t, phone.post("/admin/chores", url.Values{
+			"title": {title}, "mode": {"assigned"}, "assignee_id": {itoa(alfie.ID)}, "repeat": {"once"},
+			"starts_on": {"2026-07-01"}, "points": {"3"}, "due_time": {"08:00"}, "on_the_day": {"1"},
+		}), "/admin/chores")
+	}
+	bins, milk := h.occurrence("Bins out"), h.occurrence("Milk out")
+	h.advance(24 * time.Hour)
+
+	r := phone.get("/admin/completions")
+	expect(t, r, http.StatusOK, "Dismiss all 2 missed chores?",
+		`action="/admin/completions/missed/`+itoa(bins.ID)+`/dismiss"`, `aria-label="Dismiss Bins out"`)
+
+	// Signed-out display: refused.
+	expect(t, wall.post("/admin/completions/missed/"+itoa(bins.ID)+"/dismiss", nil), http.StatusSeeOther)
+
+	// One, then undo.
+	r = phone.post("/admin/completions/missed/"+itoa(bins.ID)+"/dismiss", nil)
+	expect(t, r, http.StatusOK, "Dismissed.", `action="/admin/completions/missed/restore"`, `name="id" value="`+itoa(bins.ID)+`"`)
+	missedList := func(body string) string {
+		_, rest, _ := strings.Cut(body, "<h2>Missed</h2>")
+		list, _, _ := strings.Cut(rest, "</section>")
+		return list
+	}
+	if l := missedList(r.body); !strings.Contains(l, "Milk out") || strings.Contains(l, "Bins out") {
+		t.Errorf("after dismissing bins, Missed = %q", l)
+	}
+	if strings.Contains(r.body, "Dismiss all") {
+		t.Error("Dismiss all shown for one chore")
+	}
+	expect(t, phone.post("/admin/completions/missed/"+itoa(bins.ID)+"/dismiss", nil), http.StatusConflict, "not on the missed list any more")
+	expect(t, phone.post("/admin/completions/missed/restore", url.Values{"id": {itoa(bins.ID)}}), http.StatusOK, "Back on the missed list.", "Bins out")
+
+	// All, then undo.
+	r = phone.post("/admin/completions/missed/dismiss", url.Values{"id": {itoa(bins.ID), itoa(milk.ID)}})
+	expect(t, r, http.StatusOK, "Dismissed 2 missed chores.")
+	if strings.Contains(r.body, "<h2>Missed</h2>") {
+		t.Error("Missed still shown after dismiss all")
+	}
+	expect(t, phone.post("/admin/completions/missed/dismiss", nil), http.StatusBadRequest, "Nothing to dismiss.")
+	expect(t, phone.post("/admin/completions/missed/restore", url.Values{"id": {"x"}}), http.StatusBadRequest, "Nothing to undo.")
+	expect(t, phone.post("/admin/completions/missed/restore", url.Values{"id": {itoa(bins.ID), itoa(milk.ID)}}), http.StatusOK, "Bins out", "Milk out")
+	if b := must(h.st.Q.BalanceForPerson(t.Context(), dbq.BalanceForPersonParams{HouseholdID: h.hh, PersonID: alfie.ID})); b.Points != 0 {
+		t.Errorf("points = %d, want 0", b.Points)
+	}
+}
