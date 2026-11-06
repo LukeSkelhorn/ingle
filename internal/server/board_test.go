@@ -814,3 +814,62 @@ func TestBoardScrollHooks(t *testing.T) {
 		`aria-label="Alfie" data-person="`+itoa(alfie.ID)+`"`)
 	expect(t, wall.get("/"), http.StatusOK, "htmx:beforeSwap", "has-more")
 }
+
+func TestBoardOnTheDay(t *testing.T) {
+	h, wall, phone := boardHousehold(t)
+	alfie, isla := h.person("Alfie"), h.person("Isla")
+	expectRedirect(t, phone.post("/admin/chores", url.Values{
+		"title": {"Bins out"}, "mode": {"assigned"}, "assignee_id": {itoa(alfie.ID)}, "repeat": {"once"},
+		"starts_on": {"2026-07-01"}, "points": {"3"}, "due_time": {"08:00"}, "on_the_day": {"1"},
+	}), "/admin/chores")
+	expectRedirect(t, phone.post("/admin/chores", url.Values{
+		"title": {"Milk out"}, "mode": {"pool"}, "repeat": {"once"},
+		"starts_on": {"2026-07-01"}, "points": {"1"}, "on_the_day": {"1"},
+	}), "/admin/chores")
+	bins, milk := h.occurrence("Bins out"), h.occurrence("Milk out")
+
+	r := phone.get("/admin/chores")
+	expect(t, r, http.StatusOK, "Only on the day")
+	expect(t, phone.get("/admin/chores/"+itoa(h.chore("Bins out").ID)), http.StatusOK,
+		`name="on_the_day" value="1" checked`)
+
+	// 00:30 BST: on the board until 08:00, refreshing then.
+	r = wall.get("/board")
+	expect(t, r, http.StatusOK, "Until 08:00", "Today only", `data-next-in="27001"`)
+	if strings.Contains(section(r.body, "Alfie"), "by 08:00</span><span class=\"chip\">3") {
+		t.Error("shows both by and until")
+	}
+
+	h.advance(8 * time.Hour) // 08:30
+	r = wall.get("/board")
+	if strings.Contains(r.body, "Bins out") {
+		t.Error("bins still on the board at 08:30")
+	}
+	r = wall.post("/board/occurrences/"+itoa(bins.ID)+"/complete", nil)
+	expect(t, r, http.StatusConflict)
+	if tt := toastOf(t, r); !tt.Error || tt.Message != "Too late for that one." {
+		t.Errorf("late toast = %+v", tt)
+	}
+
+	// Next day it's under Missed.
+	h.advance(24 * time.Hour)
+	if strings.Contains(wall.get("/board").body, "Milk out") {
+		t.Error("milk carried over")
+	}
+	r = phone.get("/admin/completions")
+	expect(t, r, http.StatusOK, "Missed", "Bins out", "Milk out",
+		`action="/admin/completions/missed/`+itoa(bins.ID)+`/done"`, `name="person" value="`+itoa(alfie.ID)+`"`, "Who did it?")
+	expect(t, wall.post("/admin/completions/missed/"+itoa(bins.ID)+"/done", url.Values{"person": {itoa(alfie.ID)}}), http.StatusSeeOther)
+	expect(t, phone.post("/admin/completions/missed/"+itoa(milk.ID)+"/done", nil), http.StatusBadRequest, "Choose who did it.")
+	expect(t, phone.post("/admin/completions/missed/"+itoa(bins.ID)+"/done", url.Values{"person": {itoa(alfie.ID)}}), http.StatusOK, "Marked done. Points added.")
+	r = phone.post("/admin/completions/missed/"+itoa(milk.ID)+"/done", url.Values{"person": {itoa(isla.ID)}})
+	expect(t, r, http.StatusOK, "Marked done.")
+	if strings.Contains(r.body, "<h2>Missed</h2>") {
+		t.Error("Missed still shown after marking both")
+	}
+	for p, want := range map[int64]int64{alfie.ID: 3, isla.ID: 1} {
+		if b := must(h.st.Q.BalanceForPerson(t.Context(), dbq.BalanceForPersonParams{HouseholdID: h.hh, PersonID: p})); b.Points != want {
+			t.Errorf("person %d points = %d, want %d", p, b.Points, want)
+		}
+	}
+}

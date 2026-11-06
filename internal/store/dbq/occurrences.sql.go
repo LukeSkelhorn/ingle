@@ -142,7 +142,7 @@ const listBoard = `-- name: ListBoard :many
 SELECT
     o.id, o.chore_id, o.due_on, o.available_from, o.assignee_id, o.claimed_by, o.claimed_at, o.status,
     c.title, c.emoji, c.description, c.mode, c.due_time, c.points, c.pence, c.requires_approval,
-    c.rrule, c.starts_on, c.day_mode
+    c.rrule, c.starts_on, c.day_mode, c.on_the_day
 FROM chore_occurrences o
 JOIN chores c ON c.id = o.chore_id
 WHERE o.household_id = ?1
@@ -178,6 +178,7 @@ type ListBoardRow struct {
 	Rrule            *string `json:"rrule"`
 	StartsOn         string  `json:"starts_on"`
 	DayMode          string  `json:"day_mode"`
+	OnTheDay         int64   `json:"on_the_day"`
 }
 
 // Occurrences on the board at some point in [from_date, to_date]: due in the
@@ -211,6 +212,7 @@ func (q *Queries) ListBoard(ctx context.Context, arg ListBoardParams) ([]ListBoa
 			&i.Rrule,
 			&i.StartsOn,
 			&i.DayMode,
+			&i.OnTheDay,
 		); err != nil {
 			return nil, err
 		}

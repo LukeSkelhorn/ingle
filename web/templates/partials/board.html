@@ -1,8 +1,9 @@
 {{/* The live part of the main board. It re-fetches itself on "refresh"
-     (fired by the page when a server-sent event arrives) and every five
-     minutes, which also catches the board day rolling over. */}}
+     (fired by the page when a server-sent event arrives, or when an Only on
+     the day chore runs out: data-next-in) and every five minutes, which
+     also catches the board day rolling over. */}}
 {{define "board"}}
-<div id="board" class="board__body" data-day="{{.Day}}" hx-get="/board" hx-trigger="refresh, every 5m" hx-swap="outerHTML">
+<div id="board" class="board__body" data-day="{{.Day}}"{{with .NextIn}} data-next-in="{{.}}"{{end}} hx-get="/board" hx-trigger="refresh, every 5m" hx-swap="outerHTML">
   {{if not .Columns}}
   <div class="board__empty">
     <p>No one's here yet.</p>
@@ -110,10 +111,11 @@
 {{define "chore_meta"}}
 <span class="chore__meta">
   {{- if .Overdue}}<span class="tag tag--late">Overdue · {{shortDate .DueOn}}</span>{{end}}
-  {{- if .LastChance}}<span class="tag tag--last">Last chance</span>{{else if .Flex}}<span class="tag tag--flex">{{.Flex}}</span>{{end}}
+  {{- if .LastChance}}<span class="tag tag--last">Last chance{{with .Until}} · until {{.}}{{end}}</span>{{else if .Flex}}<span class="tag tag--flex">{{.Flex}}</span>
+  {{- else if .OnTheDay}}<span class="tag tag--last">{{with .Until}}Until {{.}}{{else}}Today only{{end}}</span>{{end}}
   {{- if .Claimed}}<span class="tag">Claimed</span>{{end}}
   {{- with .With}}<span class="chore__with" role="img" aria-label="Shared with {{names .}}">{{range .}}{{template "avatar" (avatar . "xs")}}{{end}}</span>{{end}}
-  {{- with .DueTime}}<span>by {{.}}</span>{{end}}
+  {{- if not .Until}}{{with .DueTime}}<span>by {{.}}</span>{{end}}{{end}}
   {{- with worth .Points .Pence}}<span class="chip">{{.}}</span>{{end -}}
 </span>
 {{end}}

@@ -29,6 +29,7 @@ type Input struct {
 	Points           int64
 	Pence            int64
 	RequiresApproval bool
+	OnTheDay         bool // it can't be done late: off the board once its time has passed
 }
 
 // Chores returns active chores, by title.
@@ -62,6 +63,9 @@ func (s *Service) CreateChore(ctx context.Context, householdID, actorID int64, i
 			return fmt.Errorf("create chore: %w", err)
 		}
 		if c, err = setDayMode(ctx, q, c, p.DayMode); err != nil {
+			return err
+		}
+		if c, err = setOnTheDay(ctx, q, c, in.OnTheDay); err != nil {
 			return err
 		}
 		if err := setPeople(ctx, q, c, p.PeopleIDs); err != nil {
@@ -103,6 +107,9 @@ func (s *Service) UpdateChore(ctx context.Context, householdID, actorID, id int6
 			return fmt.Errorf("update chore: %w", err)
 		}
 		if c, err = setDayMode(ctx, q, c, p.DayMode); err != nil {
+			return err
+		}
+		if c, err = setOnTheDay(ctx, q, c, in.OnTheDay); err != nil {
 			return err
 		}
 		if err := setPeople(ctx, q, c, p.PeopleIDs); err != nil {
@@ -149,6 +156,22 @@ func setDayMode(ctx context.Context, q *dbq.Queries, c dbq.Chore, mode string) (
 	c, err := q.SetChoreDayMode(ctx, dbq.SetChoreDayModeParams{DayMode: mode, HouseholdID: c.HouseholdID, ID: c.ID})
 	if err != nil {
 		return c, fmt.Errorf("set day mode: %w", err)
+	}
+	return c, nil
+}
+
+// setOnTheDay stores whether c is Only on the day, when it differs.
+func setOnTheDay(ctx context.Context, q *dbq.Queries, c dbq.Chore, on bool) (dbq.Chore, error) {
+	v := int64(0)
+	if on {
+		v = 1
+	}
+	if c.OnTheDay == v {
+		return c, nil
+	}
+	c, err := q.SetChoreOnTheDay(ctx, dbq.SetChoreOnTheDayParams{OnTheDay: v, HouseholdID: c.HouseholdID, ID: c.ID})
+	if err != nil {
+		return c, fmt.Errorf("set on the day: %w", err)
 	}
 	return c, nil
 }

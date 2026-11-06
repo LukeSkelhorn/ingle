@@ -234,6 +234,7 @@ type choreForm struct {
 	Points           int64
 	Money            string
 	RequiresApproval bool
+	OnTheDay         bool
 	// Back is the chores list to return to, with its filter.
 	Back string
 
@@ -296,6 +297,7 @@ func (s *Server) choreFormFor(r *http.Request, c dbq.Chore) (choreForm, error) {
 		f.DueTime = *c.DueTime
 	}
 	f.RequiresApproval = c.RequiresApproval == 1
+	f.OnTheDay = c.OnTheDay == 1
 	return f, nil
 }
 
@@ -381,6 +383,7 @@ func (s *Server) readChoreForm(w http.ResponseWriter, r *http.Request, f *choreF
 	f.Points = fm.int("points", "Enter a whole number of points.")
 	f.Money = fm.str("money")
 	f.RequiresApproval = fm.checked("requires_approval")
+	f.OnTheDay = fm.checked("on_the_day")
 	f.Days = nil
 	for _, v := range r.Form["days"] {
 		if n, err := strconv.Atoi(v); err == nil && n >= 0 && n <= 6 {
@@ -411,7 +414,7 @@ func (s *Server) readChoreForm(w http.ResponseWriter, r *http.Request, f *choreF
 		Repeat:   chores.Recurrence{Kind: f.Repeat, Days: f.Days, MonthDay: f.MonthDay},
 		DayMode:  f.DayMode,
 		StartsOn: f.StartsOn, DueTime: fm.optStr("due_time"),
-		Points: f.Points, Pence: pence, RequiresApproval: f.RequiresApproval,
+		Points: f.Points, Pence: pence, RequiresApproval: f.RequiresApproval, OnTheDay: f.OnTheDay,
 	}
 	if f.Mode == chores.ModeShared {
 		in.PeopleIDs = f.PeopleIDs

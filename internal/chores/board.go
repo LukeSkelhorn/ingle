@@ -29,6 +29,9 @@ type Board struct {
 	Pool    []Card
 	Columns []Column
 	People  []dbq.Person // active people, for the "who's doing this?" picker
+	// NextChange is the next time an Only on the day chore on the board
+	// runs out (zero if none), so displays can refresh then.
+	NextChange time.Time
 }
 
 // Column is one person's chores and balance (what they can spend: waiting
@@ -74,6 +77,10 @@ type Card struct {
 	For    int64
 	With   []dbq.Person
 	SortOn string // the day it sorts with: today, or an overdue due date
+	// Only on the day chores, not yet done: they come off the board at their
+	// due time (Until, "HH:MM") or, untimed, when the day rolls over.
+	OnTheDay bool
+	Until    string
 }
 
 // FallbackEmoji leads a picture card for a chore with no emoji and nothing
@@ -146,7 +153,7 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 			latest[r.ChoreID] = start
 		}
 	}
-	loc := s.loc(ctx, householdID)
+	loc, dayStart, now := s.loc(ctx, householdID), s.dayStart(ctx, householdID), s.now()
 	shared, err := s.sharedPeople(ctx, householdID)
 	if err != nil {
 		return Board{}, err
@@ -194,6 +201,16 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 		if (r.DueOn < today || flex) && done && comp.CompletedAt < boardDay.Unix() {
 			continue // caught up on an earlier day, or done earlier in its window
 		}
+		at, onTheDay := onTheDayCutoff(r.OnTheDay, r.DueOn, r.DueTime, loc, dayStart)
+		onTheDay = onTheDay && !done
+		if onTheDay {
+			if !now.Before(at) {
+				continue // too late: missed, not overdue
+			}
+			if b.NextChange.IsZero() || at.Before(b.NextChange) {
+				b.NextChange = at
+			}
+		}
 		card := Card{
 			OccurrenceID: r.ID,
 			Title:        r.Title,
@@ -207,6 +224,10 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 			Overdue:      r.DueOn < today && !done,
 			Done:         done,
 			SortOn:       min(r.DueOn, today),
+			OnTheDay:     onTheDay,
+		}
+		if onTheDay && r.DueTime != nil {
+			card.Until = *r.DueTime
 		}
 		if flex && !done && r.DueOn >= today {
 			days := windowDays(r.Rrule, r.StartsOn, today, r.DueOn, loc)
@@ -217,7 +238,7 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 			card.Pending = comp.Status == StatusPending
 			card.CompletionID = comp.ID
 			card.CompletedAt = comp.CompletedAt
-			card.JustDone = s.now().Sub(time.Unix(comp.CompletedAt, 0)) < justDoneFor
+			card.JustDone = now.Sub(time.Unix(comp.CompletedAt, 0)) < justDoneFor
 		}
 
 		owner := r.AssigneeID

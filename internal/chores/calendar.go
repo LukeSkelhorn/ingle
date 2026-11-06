@@ -55,7 +55,7 @@ type CalChore struct {
 // projected from each chore's schedule, and nothing is projected before
 // boardDay.
 func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time.Time, from, to string) (map[string][]CalChore, error) {
-	loc := s.loc(ctx, householdID)
+	loc, dayStart, now := s.loc(ctx, householdID), s.dayStart(ctx, householdID), s.now()
 	today := boardDay.Format(DateLayout)
 	q := s.st.Q
 
@@ -106,6 +106,12 @@ func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time
 			c.People = shared[r.ChoreID]
 		}
 		comp, done := byOcc[r.ID]
+		// An Only on the day chore past its time is missed, even today.
+		at, onTheDay := onTheDayCutoff(r.OnTheDay, r.DueOn, r.DueTime, loc, dayStart)
+		tooLate := onTheDay && !done && !now.Before(at)
+		if tooLate && c.Status == CalToday {
+			c.Status = CalMissed
+		}
 		if done {
 			c.Status, c.DoneByID, c.DoneAt, c.Pending = CalDone, &comp.PersonID, comp.CompletedAt, comp.Status == StatusPending
 			c.People = nil
@@ -135,6 +141,9 @@ func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time
 				continue
 			}
 			c.Date, c.Status = d, statusOn(d, today)
+			if tooLate && d == r.DueOn && c.Status == CalToday {
+				c.Status = CalMissed
+			}
 			add(c)
 		}
 	}

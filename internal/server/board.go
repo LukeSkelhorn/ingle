@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 	"unicode/utf16"
 	"unicode/utf8"
 
@@ -21,6 +22,10 @@ type boardView struct {
 	// shows the admin link on an empty board and makes done chores tappable
 	// for review.
 	Adult bool
+	// NextIn is how many seconds until an Only on the day chore runs out
+	// and the board should refresh (0 for none). Relative, so a display
+	// whose clock is off still refreshes on time.
+	NextIn int64
 }
 
 // boardPage is the full board page: clock plus the board.
@@ -41,7 +46,11 @@ func (s *Server) loadBoard(r *http.Request) (boardView, error) {
 	if err != nil {
 		return boardView{}, err
 	}
-	return boardView{Board: b, Adult: identityFrom(r.Context()).Session != nil}, nil
+	v := boardView{Board: b, Adult: identityFrom(r.Context()).Session != nil}
+	if !b.NextChange.IsZero() {
+		v.NextIn = max(int64(b.NextChange.Sub(s.now())/time.Second)+1, 1)
+	}
+	return v, nil
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
@@ -313,6 +322,8 @@ func boardErrorText(err error) (string, bool) {
 		return "Someone's already on that one.", true
 	case errors.Is(err, chores.ErrNotOpen):
 		return "That's already done.", true
+	case errors.Is(err, chores.ErrTooLate):
+		return "Too late for that one.", true
 	case errors.Is(err, chores.ErrNotYours):
 		return "That's someone else's chore.", true
 	case errors.Is(err, chores.ErrNotClaimable):

@@ -117,6 +117,11 @@
         {{template "err" index .Errors "due_time"}}
       </label>
     </div>
+    <label class="check">
+      <input type="checkbox" name="on_the_day" value="1"{{if .Data.OnTheDay}} checked{{end}}>
+      <span>Only on the day
+        <small class="muted">It can't be done late, like putting the bins out. Once it's too late it comes off the board.</small></span>
+    </label>
 
     <div class="row">
       <label class="field">

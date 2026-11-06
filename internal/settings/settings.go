@@ -211,6 +211,16 @@ func (s *Service) Location(ctx context.Context, householdID int64) *time.Locatio
 	return set.Location
 }
 
+// DayStart is when the household's board day rolls over, as time since
+// local midnight (0 if settings can't be loaded).
+func (s *Service) DayStart(ctx context.Context, householdID int64) time.Duration {
+	set, err := s.Get(ctx, householdID)
+	if err != nil {
+		return 0
+	}
+	return set.dayStart
+}
+
 // Update validates and saves in, logging a settings.updated activity row as
 // actorID. Validation problems are returned as valid.Errors.
 func (s *Service) Update(ctx context.Context, householdID, actorID int64, in Input) error {

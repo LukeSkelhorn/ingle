@@ -358,6 +358,12 @@ input, select, textarea { -webkit-user-select: text; user-select: text; }
 .field__err { margin: 0; color: var(--err); font-size: 0.9rem; }
 .check { display: flex; gap: 10px; align-items: flex-start; }
 .check input { width: 22px; height: 22px; margin-top: 2px; flex: none; }
+.check small { display: block; margin-top: 2px; }
+.list__actions select {
+  min-height: 44px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--bg); color: inherit; font: inherit;
+}
+.list__actions select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 .row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .row > .field + .field { margin-top: 0; }
 [hidden] { display: none !important; }

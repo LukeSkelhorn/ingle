@@ -328,6 +328,31 @@
     updateAll();
   })();
 </script>
+<script>
+  // Only on the day chores come off the board at their time, so refresh
+  // then even if nothing else happens (data-next-in is seconds from when
+  // the board was rendered).
+  (function () {
+    // Only a new #board re-arms: other swaps (the clock, every 30s) would
+    // otherwise keep restarting the countdown.
+    var timer = 0, armedFor = null;
+    function arm() {
+      var b = document.getElementById("board");
+      if (b === armedFor) return;
+      armedFor = b;
+      clearTimeout(timer);
+      timer = 0;
+      var secs = b ? parseInt(b.dataset.nextIn, 10) : 0;
+      if (!(secs > 0)) return;
+      timer = setTimeout(function () {
+        var now = document.getElementById("board");
+        if (now) htmx.trigger(now, "refresh");
+      }, Math.min(secs, 6 * 3600) * 1000);
+    }
+    document.addEventListener("htmx:afterSwap", arm);
+    arm();
+  })();
+</script>
 <script src="{{asset "saver.js"}}"></script>
 <script>
   // Screensaver. On a household display it starts after

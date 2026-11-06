@@ -48,6 +48,7 @@ type Chore struct {
 	UpdatedAt        int64   `json:"updated_at"`
 	Emoji            string  `json:"emoji"`
 	DayMode          string  `json:"day_mode"`
+	OnTheDay         int64   `json:"on_the_day"`
 }
 
 type ChoreOccurrence struct {

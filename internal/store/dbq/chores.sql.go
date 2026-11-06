@@ -50,7 +50,7 @@ INSERT INTO chores (
     household_id, title, emoji, description, mode, assignee_id, rrule, starts_on,
     due_time, points, pence, requires_approval, created_at, updated_at
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-RETURNING id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at, emoji, day_mode
+RETURNING id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at, emoji, day_mode, on_the_day
 `
 
 type CreateChoreParams struct {
@@ -106,6 +106,7 @@ func (q *Queries) CreateChore(ctx context.Context, arg CreateChoreParams) (Chore
 		&i.UpdatedAt,
 		&i.Emoji,
 		&i.DayMode,
+		&i.OnTheDay,
 	)
 	return i, err
 }
@@ -125,7 +126,7 @@ func (q *Queries) DeleteChorePeople(ctx context.Context, arg DeleteChorePeoplePa
 }
 
 const getChore = `-- name: GetChore :one
-SELECT id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at, emoji, day_mode FROM chores WHERE household_id = ? AND id = ?
+SELECT id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at, emoji, day_mode, on_the_day FROM chores WHERE household_id = ? AND id = ?
 `
 
 type GetChoreParams struct {
@@ -154,6 +155,7 @@ func (q *Queries) GetChore(ctx context.Context, arg GetChoreParams) (Chore, erro
 		&i.UpdatedAt,
 		&i.Emoji,
 		&i.DayMode,
+		&i.OnTheDay,
 	)
 	return i, err
 }
@@ -198,7 +200,7 @@ func (q *Queries) ListChorePeople(ctx context.Context, householdID int64) ([]Lis
 }
 
 const listChores = `-- name: ListChores :many
-SELECT id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at, emoji, day_mode FROM chores
+SELECT id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at, emoji, day_mode, on_the_day FROM chores
 WHERE household_id = ? AND archived_at IS NULL
 ORDER BY title
 `
@@ -230,6 +232,7 @@ func (q *Queries) ListChores(ctx context.Context, householdID int64) ([]Chore, e
 			&i.UpdatedAt,
 			&i.Emoji,
 			&i.DayMode,
+			&i.OnTheDay,
 		); err != nil {
 			return nil, err
 		}
@@ -355,7 +358,7 @@ func (q *Queries) RemovePersonFromSharedChores(ctx context.Context, arg RemovePe
 
 const setChoreDayMode = `-- name: SetChoreDayMode :one
 UPDATE chores SET day_mode = ? WHERE household_id = ? AND id = ?
-RETURNING id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at, emoji, day_mode
+RETURNING id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at, emoji, day_mode, on_the_day
 `
 
 type SetChoreDayModeParams struct {
@@ -385,6 +388,44 @@ func (q *Queries) SetChoreDayMode(ctx context.Context, arg SetChoreDayModeParams
 		&i.UpdatedAt,
 		&i.Emoji,
 		&i.DayMode,
+		&i.OnTheDay,
+	)
+	return i, err
+}
+
+const setChoreOnTheDay = `-- name: SetChoreOnTheDay :one
+UPDATE chores SET on_the_day = ? WHERE household_id = ? AND id = ?
+RETURNING id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at, emoji, day_mode, on_the_day
+`
+
+type SetChoreOnTheDayParams struct {
+	OnTheDay    int64 `json:"on_the_day"`
+	HouseholdID int64 `json:"household_id"`
+	ID          int64 `json:"id"`
+}
+
+func (q *Queries) SetChoreOnTheDay(ctx context.Context, arg SetChoreOnTheDayParams) (Chore, error) {
+	row := q.db.QueryRowContext(ctx, setChoreOnTheDay, arg.OnTheDay, arg.HouseholdID, arg.ID)
+	var i Chore
+	err := row.Scan(
+		&i.ID,
+		&i.HouseholdID,
+		&i.Title,
+		&i.Description,
+		&i.Mode,
+		&i.AssigneeID,
+		&i.Rrule,
+		&i.StartsOn,
+		&i.DueTime,
+		&i.Points,
+		&i.Pence,
+		&i.RequiresApproval,
+		&i.ArchivedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Emoji,
+		&i.DayMode,
+		&i.OnTheDay,
 	)
 	return i, err
 }
@@ -394,7 +435,7 @@ UPDATE chores SET
     title = ?, emoji = ?, description = ?, mode = ?, assignee_id = ?, rrule = ?, starts_on = ?,
     due_time = ?, points = ?, pence = ?, requires_approval = ?, updated_at = ?
 WHERE household_id = ? AND id = ?
-RETURNING id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at, emoji, day_mode
+RETURNING id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at, emoji, day_mode, on_the_day
 `
 
 type UpdateChoreParams struct {
@@ -450,6 +491,7 @@ func (q *Queries) UpdateChore(ctx context.Context, arg UpdateChoreParams) (Chore
 		&i.UpdatedAt,
 		&i.Emoji,
 		&i.DayMode,
+		&i.OnTheDay,
 	)
 	return i, err
 }

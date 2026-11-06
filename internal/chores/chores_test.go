@@ -75,6 +75,8 @@ type choreOpts struct {
 	pence    int64
 	approval bool
 	anyDay   bool // a flexible-day chore
+	dueTime  *string
+	onTheDay bool // Only on the day
 }
 
 func (f *fixture) chore(title string, o choreOpts) dbq.Chore {
@@ -92,7 +94,7 @@ func (f *fixture) chore(title string, o choreOpts) dbq.Chore {
 	}
 	c, err := f.st.Q.CreateChore(f.t.Context(), dbq.CreateChoreParams{
 		HouseholdID: f.hh, Title: title, Mode: mode, AssigneeID: o.assignee, Rrule: o.rrule,
-		StartsOn: o.startsOn, Points: o.points, Pence: o.pence, RequiresApproval: approval,
+		StartsOn: o.startsOn, DueTime: o.dueTime, Points: o.points, Pence: o.pence, RequiresApproval: approval,
 		CreatedAt: 1, UpdatedAt: 1,
 	})
 	if err != nil {
@@ -101,6 +103,11 @@ func (f *fixture) chore(title string, o choreOpts) dbq.Chore {
 	if o.anyDay {
 		if c, err = f.st.Q.SetChoreDayMode(f.t.Context(), dbq.SetChoreDayModeParams{DayMode: DayAny, HouseholdID: f.hh, ID: c.ID}); err != nil {
 			f.t.Fatalf("SetChoreDayMode: %v", err)
+		}
+	}
+	if o.onTheDay {
+		if c, err = f.st.Q.SetChoreOnTheDay(f.t.Context(), dbq.SetChoreOnTheDayParams{OnTheDay: 1, HouseholdID: f.hh, ID: c.ID}); err != nil {
+			f.t.Fatalf("SetChoreOnTheDay: %v", err)
 		}
 	}
 	return c

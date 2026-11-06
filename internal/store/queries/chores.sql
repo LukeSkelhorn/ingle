@@ -24,6 +24,10 @@ RETURNING *;
 UPDATE chores SET day_mode = ? WHERE household_id = ? AND id = ?
 RETURNING *;
 
+-- name: SetChoreOnTheDay :one
+UPDATE chores SET on_the_day = ? WHERE household_id = ? AND id = ?
+RETURNING *;
+
 -- name: ArchiveChore :exec
 UPDATE chores SET archived_at = ?, updated_at = ? WHERE household_id = ? AND id = ?;
 

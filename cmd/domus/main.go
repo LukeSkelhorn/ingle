@@ -147,6 +147,7 @@ func run(log *slog.Logger) error {
 	cals := calendar.New(st, set.Location, nil, log)
 	authSvc := auth.New(st, set)
 	choreSvc := chores.New(st, set.Location)
+	choreSvc.SetDayStart(set.DayStart)
 
 	go maintenanceLoop(ctx, log, set, choreSvc, authSvc, household.ID)
 	go screensaverLoop(ctx, log, library, cals)

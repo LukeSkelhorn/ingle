@@ -100,6 +100,7 @@ func newHarness(t *testing.T) *harness {
 	h.auth = auth.New(st, set)
 	h.auth.SetClock(h.clock)
 	choreSvc := chores.New(st, set.Location)
+	choreSvc.SetDayStart(set.DayStart)
 	choreSvc.SetClock(h.clock)
 	hhSvc := household.New(st)
 	hhSvc.SetClock(h.clock)
