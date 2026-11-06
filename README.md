@@ -148,13 +148,13 @@ task migrate:status
 
 ### Releasing
 
-Releases are cut locally (no CI) with [semver](https://semver.org) tags. Each one gets a GitHub release with binaries for Linux and macOS (amd64 and arm64), a multi-arch image at `ghcr.io/lukeskelhorn/ingle`, and a matching release in Linear's **Domus** pipeline.
+Releases are cut locally (no CI) with [semver](https://semver.org) tags. Each one gets a GitHub release with binaries for Linux and macOS (amd64 and arm64), a multi-arch image at `ghcr.io/lukeskelhorn/ingle`, and a matching release in Linear's **Ingle** pipeline.
 
 1. In a PR, move everything under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md) to a new `## [vX.Y.Z] - YYYY-MM-DD` section (Added, Changed, Fixed, Upgrade notes), update the links at the bottom, and merge it.
 2. On an up-to-date `main`, try it first: `VERSION=vX.Y.Z task release:dry` (checks, both Docker architectures, all four archives, and the notes).
 3. Once per machine: `gh auth login`, and `docker login ghcr.io -u <github user>` with a token that has `write:packages`.
 4. `VERSION=vX.Y.Z task release`. It refuses to run off `main`, with uncommitted changes, out of step with `origin`, for an existing tag, or without a changelog section. Then it builds and pushes the image, tags, and publishes the GitHub release with that section as the notes. A version with a suffix (`v1.0.0-rc.1`) is marked as a pre-release.
-5. In Linear, attach the release's issues to it in the Domus pipeline and mark it **Released** (that moves them to Done), then update the docs site.
+5. In Linear, attach the release's issues to it in the Ingle pipeline and mark it **Released** (that moves them to Done), then update the docs site.
 
 The first image push creates the GHCR package as **private**. Make it public once, under the package's settings on GitHub, so servers can pull it without logging in.
 
