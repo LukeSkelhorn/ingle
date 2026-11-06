@@ -324,6 +324,8 @@ func boardErrorText(err error) (string, bool) {
 		return "That's already done.", true
 	case errors.Is(err, chores.ErrTooLate):
 		return "Too late for that one.", true
+	case errors.Is(err, chores.ErrNotMissed):
+		return "That one's not on the missed list any more.", true
 	case errors.Is(err, chores.ErrNotYours):
 		return "That's someone else's chore.", true
 	case errors.Is(err, chores.ErrNotClaimable):

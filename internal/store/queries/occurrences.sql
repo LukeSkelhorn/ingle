@@ -61,3 +61,16 @@ WHERE chore_occurrences.household_id = sqlc.arg(household_id)
   AND chore_occurrences.chore_id = sqlc.arg(chore_id)
   AND chore_occurrences.status = 'open' AND chore_occurrences.claimed_by IS NULL
   AND NOT EXISTS (SELECT 1 FROM completions c WHERE c.occurrence_id = chore_occurrences.id);
+
+-- name: DismissOccurrence :execrows
+-- Takes a missed Only on the day occurrence off Admin > Completions. It
+-- stays missed (never done); claimed_by is kept so a restore puts it back
+-- as it was.
+UPDATE chore_occurrences SET status = 'skipped'
+WHERE household_id = ? AND id = ? AND status IN ('open', 'claimed');
+
+-- name: RestoreOccurrence :execrows
+-- Undoes DismissOccurrence.
+UPDATE chore_occurrences
+SET status = CASE WHEN claimed_by IS NULL THEN 'open' ELSE 'claimed' END
+WHERE household_id = ? AND id = ? AND status = 'skipped';

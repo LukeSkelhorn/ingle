@@ -3,6 +3,7 @@ package chores
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 )
@@ -341,5 +342,96 @@ func TestOnTheDayAdminInput(t *testing.T) {
 	in.OnTheDay = false
 	if c, err = f.svc.UpdateChore(ctx, f.hh, f.adult.ID, c.ID, in, f.svc.now()); err != nil || c.OnTheDay != 0 {
 		t.Fatalf("off = %d, %v", c.OnTheDay, err)
+	}
+}
+
+func TestDismissMissed(t *testing.T) {
+	f := newFixture(t)
+	ctx := t.Context()
+	f.chore("Make bed", choreOpts{assignee: &f.kid.ID, rrule: ptr("FREQ=DAILY"), dueTime: ptr("07:45"), onTheDay: true, points: 3})
+	f.chore("Milk out", choreOpts{rrule: ptr("FREQ=DAILY"), onTheDay: true, points: 2})
+	f.materialise("2026-11-02", 3)
+	day := func(s string) time.Time { d, _ := time.ParseInLocation(DateLayout, s, london); return d }
+	ids := func(ms []MissedDetail) []int64 {
+		var out []int64
+		for _, m := range ms {
+			out = append(out, m.OccurrenceID)
+		}
+		return out
+	}
+
+	f.at("2026-11-03", "06:00")
+	b := f.boardAt("2026-11-03")
+	todayBed, _ := cardTitled(b.column("Alfie"), "Make bed")
+	// Not late yet: can't be dismissed.
+	if _, err := f.svc.Dismiss(ctx, f.hh, f.adult.ID, []int64{todayBed.OccurrenceID}); !errors.Is(err, ErrNotMissed) {
+		t.Errorf("Dismiss before the cutoff = %v", err)
+	}
+
+	f.at("2026-11-03", "09:00")
+	missed, err := f.svc.Missed(ctx, f.hh, day("2026-11-03"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(missed) != 3 { // Monday's bed and milk, Tuesday's bed
+		t.Fatalf("missed = %+v", missed)
+	}
+	if _, err := f.svc.Dismiss(ctx, f.hh, f.kid.ID, ids(missed[:1])); !errors.Is(err, ErrNotAdult) {
+		t.Errorf("Dismiss by a child = %v", err)
+	}
+
+	// One.
+	one := missed[0].OccurrenceID
+	done, err := f.svc.Dismiss(ctx, f.hh, f.adult.ID, []int64{one})
+	if err != nil || len(done) != 1 || done[0] != one {
+		t.Fatalf("Dismiss = %v, %v", done, err)
+	}
+	if _, err := f.svc.Dismiss(ctx, f.hh, f.adult.ID, []int64{one}); !errors.Is(err, ErrNotMissed) {
+		t.Errorf("Dismiss twice = %v", err)
+	}
+	after, _ := f.svc.Missed(ctx, f.hh, day("2026-11-03"))
+	if len(after) != 2 {
+		t.Errorf("after dismissing one, missed = %+v", after)
+	}
+	if got := calTitles(f.calendar("2026-11-03", "2026-11-03", "2026-11-03")["2026-11-03"]); got != "Make bed:missed, Milk out:today" {
+		t.Errorf("calendar after dismiss = %s; want still missed", got)
+	}
+	if f.balance(f.kid).Points != 0 {
+		t.Errorf("points = %d, want 0", f.balance(f.kid).Points)
+	}
+	if n, err := f.svc.Restore(ctx, f.hh, f.adult.ID, []int64{one}); err != nil || n != 1 {
+		t.Fatalf("Restore = %d, %v", n, err)
+	}
+	if _, err := f.svc.Restore(ctx, f.hh, f.adult.ID, []int64{one}); !errors.Is(err, ErrNotMissed) {
+		t.Errorf("Restore twice = %v", err)
+	}
+
+	// All, with one marked done in the meantime: that one is skipped.
+	all, _ := f.svc.Missed(ctx, f.hh, day("2026-11-03"))
+	if len(all) != 3 {
+		t.Fatalf("after restore, missed = %+v", all)
+	}
+	var bed MissedDetail
+	for _, m := range all {
+		if m.Person != nil {
+			bed = m
+			break
+		}
+	}
+	if err := f.svc.MarkDone(ctx, f.hh, bed.OccurrenceID, f.kid.ID, f.adult.ID); err != nil {
+		t.Fatal(err)
+	}
+	done, err = f.svc.Dismiss(ctx, f.hh, f.adult.ID, ids(all))
+	if err != nil || len(done) != 2 || slices.Contains(done, bed.OccurrenceID) {
+		t.Fatalf("Dismiss all = %v, %v", done, err)
+	}
+	if left, _ := f.svc.Missed(ctx, f.hh, day("2026-11-03")); len(left) != 0 {
+		t.Errorf("after dismiss all, missed = %+v", left)
+	}
+	if n, err := f.svc.Restore(ctx, f.hh, f.adult.ID, done); err != nil || n != 2 {
+		t.Errorf("Restore all = %d, %v", n, err)
+	}
+	if back, _ := f.svc.Missed(ctx, f.hh, day("2026-11-03")); len(back) != 2 {
+		t.Errorf("after undo all, missed = %+v", back)
 	}
 }

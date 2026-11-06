@@ -84,6 +84,27 @@ func (q *Queries) DeleteFutureOpenOccurrences(ctx context.Context, arg DeleteFut
 	return result.RowsAffected()
 }
 
+const dismissOccurrence = `-- name: DismissOccurrence :execrows
+UPDATE chore_occurrences SET status = 'skipped'
+WHERE household_id = ? AND id = ? AND status IN ('open', 'claimed')
+`
+
+type DismissOccurrenceParams struct {
+	HouseholdID int64 `json:"household_id"`
+	ID          int64 `json:"id"`
+}
+
+// Takes a missed Only on the day occurrence off Admin > Completions. It
+// stays missed (never done); claimed_by is kept so a restore puts it back
+// as it was.
+func (q *Queries) DismissOccurrence(ctx context.Context, arg DismissOccurrenceParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, dismissOccurrence, arg.HouseholdID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const getOccurrence = `-- name: GetOccurrence :one
 SELECT id, household_id, chore_id, due_on, assignee_id, claimed_by, claimed_at, status, available_from FROM chore_occurrences WHERE household_id = ? AND id = ?
 `
@@ -262,6 +283,26 @@ type ReopenOccurrenceParams struct {
 func (q *Queries) ReopenOccurrence(ctx context.Context, arg ReopenOccurrenceParams) error {
 	_, err := q.db.ExecContext(ctx, reopenOccurrence, arg.HouseholdID, arg.ID)
 	return err
+}
+
+const restoreOccurrence = `-- name: RestoreOccurrence :execrows
+UPDATE chore_occurrences
+SET status = CASE WHEN claimed_by IS NULL THEN 'open' ELSE 'claimed' END
+WHERE household_id = ? AND id = ? AND status = 'skipped'
+`
+
+type RestoreOccurrenceParams struct {
+	HouseholdID int64 `json:"household_id"`
+	ID          int64 `json:"id"`
+}
+
+// Undoes DismissOccurrence.
+func (q *Queries) RestoreOccurrence(ctx context.Context, arg RestoreOccurrenceParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, restoreOccurrence, arg.HouseholdID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const setOccurrenceStatus = `-- name: SetOccurrenceStatus :exec

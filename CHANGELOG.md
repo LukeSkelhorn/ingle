@@ -6,6 +6,14 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ## [Unreleased]
 
+## [v0.2.1] - 2026-11-06
+
+A small update to the Missed list.
+
+### Added
+
+- **Dismiss missed chores:** in **Admin › Completions**, each chore under **Missed** has a **×** to take it off the list, and **Dismiss all** clears the lot after asking first. They stay missed, so no points are given and the calendar still shows them as missed. **Undo** brings them straight back. ([DOM-42](https://linear.app/skeltech/issue/DOM-42))
+
 ## [v0.2.0] - 2026-11-06
 
 ### Added
@@ -73,7 +81,8 @@ The first release: a family chores board for a wall tablet, ready to run on a ho
 
 - First release: nothing to upgrade from. New installs start at the setup page.
 
-[Unreleased]: https://github.com/lukeskelhorn/ingle/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/lukeskelhorn/ingle/compare/v0.2.1...HEAD
+[v0.2.1]: https://github.com/lukeskelhorn/ingle/compare/v0.2.0...v0.2.1
 [v0.2.0]: https://github.com/lukeskelhorn/ingle/compare/v0.1.1...v0.2.0
 [v0.1.1]: https://github.com/lukeskelhorn/ingle/compare/v0.1.0...v0.1.1
 [v0.1.0]: https://github.com/lukeskelhorn/ingle/releases/tag/v0.1.0

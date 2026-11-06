@@ -178,6 +178,9 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /admin/completions/{id}/approve", admin(s.adminReview(s.Chores.Approve, "Approved.")))
 	mux.Handle("POST /admin/completions/{id}/reject", admin(s.adminReview(s.Chores.Reject, "Not counted; the chore is back on the board.")))
 	mux.Handle("POST /admin/completions/missed/{id}/done", admin(s.handleMarkDone))
+	mux.Handle("POST /admin/completions/missed/{id}/dismiss", admin(s.handleDismissMissed))
+	mux.Handle("POST /admin/completions/missed/dismiss", admin(s.handleDismissMissed))
+	mux.Handle("POST /admin/completions/missed/restore", admin(s.handleRestoreMissed))
 	mux.Handle("POST /admin/completions/{id}/reverse", admin(s.adminReview(s.Chores.Reverse, "Reversed; points taken back and the chore is back on the board.")))
 
 	mux.Handle("POST /admin/rewards/claims/{id}/approve", admin(s.adminReview(s.Chores.ApproveRedemption, "Reward approved.")))

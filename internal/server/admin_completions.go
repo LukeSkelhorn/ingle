@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -16,6 +17,8 @@ type completionsPage struct {
 	Claims  []chores.RedemptionDetail
 	Missed  []chores.MissedDetail
 	Recent  []chores.CompletionDetail
+	// Undo lists the missed chores just dismissed, for the flash's Undo.
+	Undo []int64
 }
 
 func (s *Server) handleCompletions(w http.ResponseWriter, r *http.Request) {
@@ -23,6 +26,12 @@ func (s *Server) handleCompletions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) renderCompletions(w http.ResponseWriter, r *http.Request, status int, flash string) {
+	s.renderCompletionsUndo(w, r, status, flash, nil)
+}
+
+// renderCompletionsUndo renders Admin › Completions with a flash that can
+// undo dismissing the missed chores in undo.
+func (s *Server) renderCompletionsUndo(w http.ResponseWriter, r *http.Request, status int, flash string, undo []int64) {
 	all, err := s.Chores.Completions(r.Context(), s.HouseholdID)
 	if err != nil {
 		s.serverError(w, r, err)
@@ -38,7 +47,7 @@ func (s *Server) renderCompletions(w http.ResponseWriter, r *http.Request, statu
 		s.serverError(w, r, err)
 		return
 	}
-	p := completionsPage{Claims: claims, Missed: missed}
+	p := completionsPage{Claims: claims, Missed: missed, Undo: undo}
 	for _, c := range all {
 		if c.Pending() {
 			p.Pending = append(p.Pending, c)
@@ -107,4 +116,85 @@ func (s *Server) handleMarkDone(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.renderCompletions(w, r, http.StatusOK, "Marked done. Points added.")
+}
+
+// handleDismissMissed takes missed Only on the day chores off the list: the
+// one in the path, or (with no id) every id posted, which is what the page
+// listed when Dismiss all was pressed.
+func (s *Server) handleDismissMissed(w http.ResponseWriter, r *http.Request) {
+	var ids []int64
+	if r.PathValue("id") != "" {
+		id, ok := pathID(r)
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		ids = []int64{id}
+	} else {
+		var ok bool
+		if ids, ok = formIDs(r); !ok {
+			s.renderCompletions(w, r, http.StatusBadRequest, "Nothing to dismiss.")
+			return
+		}
+	}
+	adult := boardAdult(r)
+	if adult == nil {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	done, err := s.Chores.Dismiss(r.Context(), s.HouseholdID, adult.ID, ids)
+	if err != nil {
+		s.missedError(w, r, err)
+		return
+	}
+	msg := "Dismissed."
+	if len(done) > 1 {
+		msg = fmt.Sprintf("Dismissed %d missed chores.", len(done))
+	}
+	s.renderCompletionsUndo(w, r, http.StatusOK, msg, done)
+}
+
+// handleRestoreMissed undoes a dismiss, putting the posted ids back on the
+// Missed list.
+func (s *Server) handleRestoreMissed(w http.ResponseWriter, r *http.Request) {
+	ids, ok := formIDs(r)
+	if !ok {
+		s.renderCompletions(w, r, http.StatusBadRequest, "Nothing to undo.")
+		return
+	}
+	adult := boardAdult(r)
+	if adult == nil {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	if _, err := s.Chores.Restore(r.Context(), s.HouseholdID, adult.ID, ids); err != nil {
+		s.missedError(w, r, err)
+		return
+	}
+	s.renderCompletions(w, r, http.StatusOK, "Back on the missed list.")
+}
+
+func (s *Server) missedError(w http.ResponseWriter, r *http.Request, err error) {
+	text, known := boardErrorText(err)
+	if !known {
+		s.serverError(w, r, err)
+		return
+	}
+	s.renderCompletions(w, r, http.StatusConflict, text)
+}
+
+// formIDs is the positive "id" values posted, at most 100; false if none.
+func formIDs(r *http.Request) ([]int64, bool) {
+	if err := r.ParseForm(); err != nil {
+		return nil, false
+	}
+	var ids []int64
+	for _, v := range r.PostForm["id"] {
+		id, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || id <= 0 {
+			return nil, false
+		}
+		ids = append(ids, id)
+	}
+	return ids, len(ids) > 0 && len(ids) <= 100
 }
