@@ -1,0 +1,17 @@
+# HTTPS in front of Ingle, with Caddy installed on the same machine.
+# Copy to /etc/caddy/Caddyfile and put your own address on the first line.
+#
+# The certificate comes from Let's Encrypt through Cloudflare DNS, so
+# nothing needs to be open to the internet. That needs a Caddy build with
+# the caddy-dns/cloudflare plugin, and CLOUDFLARE_API_TOKEN in Caddy's
+# environment: see the guide.
+ingle.home.example.com {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+	encode zstd gzip
+	# Sets X-Forwarded-For and X-Forwarded-Proto, which Ingle believes from
+	# 127.0.0.1 (INGLE_TRUSTED_PROXIES). The live board updates
+	# (/board/events) are streamed, not buffered.
+	reverse_proxy 127.0.0.1:8080
+}

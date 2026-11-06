@@ -1,0 +1,12 @@
+# Optional: check Ingle every 5 minutes.
+#   sudo systemctl enable --now ingle-healthcheck.timer
+
+[Unit]
+Description=Check Ingle every 5 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target
