@@ -2,15 +2,17 @@
 {{define "content"}}
 {{template "admin_nav" .}}
 <main class="admin__main">
-  <p><a href="/admin/chores">‹ Chores</a></p>
+  <p><a href="{{.Data.Back}}">‹ Chores</a></p>
   <h1>{{if .Data.ID}}{{.Data.Title}}{{else}}Add a chore{{end}}</h1>
   {{template "flash" .}}
   <form class="card stack chore-form" method="post" action="{{if .Data.ID}}/admin/chores/{{.Data.ID}}{{else}}/admin/chores{{end}}">
+    <input type="hidden" name="back" value="{{.Data.Back}}">
     <label class="field">
       <span>What needs doing?</span>
       <input name="title" value="{{.Data.Title}}" required maxlength="100" autocomplete="off" placeholder="Feed the cat">
       {{template "err" index .Errors "title"}}
     </label>
+    {{template "emoji_field" (dict "F" .Data.Emoji "Err" (index .Errors "emoji"))}}
     <label class="field">
       <span>Details (optional)</span>
       <textarea name="description" maxlength="1000" rows="2">{{.Data.Description}}</textarea>
@@ -21,6 +23,7 @@
       <legend>Who does it?</legend>
       <div class="segmented">
         <label><input type="radio" name="mode" value="assigned"{{if eq .Data.Mode "assigned"}} checked{{end}}> <span>Someone specific</span></label>
+        <label><input type="radio" name="mode" value="shared"{{if eq .Data.Mode "shared"}} checked{{end}}> <span>Any of these people</span></label>
         <label><input type="radio" name="mode" value="pool"{{if eq .Data.Mode "pool"}} checked{{end}}> <span>Anyone can claim it</span></label>
       </div>
       {{template "err" index .Errors "mode"}}
@@ -36,6 +39,19 @@
         {{end}}
       </div>
       {{template "err" index .Errors "assignee_id"}}
+    </fieldset>
+    <fieldset class="field" data-show-when="mode=shared">
+      <legend>Any of</legend>
+      <p class="muted field__hint">It shows in each of their columns, and whoever does it first gets the points.</p>
+      <div class="people-pick">
+        {{range .Data.People}}
+        <label class="people-pick__item">
+          <input type="checkbox" name="people_ids" value="{{.ID}}"{{if $.Data.HasPerson .ID}} checked{{end}}>
+          {{template "avatar" (avatar . "md")}}<span>{{.Name}}</span>
+        </label>
+        {{end}}
+      </div>
+      {{template "err" index .Errors "people_ids"}}
     </fieldset>
 
     <label class="field">
@@ -60,6 +76,25 @@
       </div>
       {{template "err" index .Errors "days"}}
     </fieldset>
+    <fieldset class="field" data-show-when="repeat=weekly,fortnightly,weekdays">
+      <legend>Which days?</legend>
+      <div class="choice">
+        <label class="choice__item">
+          <input type="radio" name="day_mode" value="each"{{if ne .Data.DayMode "any"}} checked{{end}}>
+          <span><strong>Every day ticked</strong>
+            <small class="muted" data-show-when="repeat=weekly,fortnightly">Due on each ticked day.</small>
+            <small class="muted" data-show-when="repeat=weekdays">Due every weekday.</small></span>
+        </label>
+        <label class="choice__item">
+          <input type="radio" name="day_mode" value="any"{{if eq .Data.DayMode "any"}} checked{{end}}>
+          <span><strong>Any one of these days</strong>
+            <small class="muted" data-show-when="repeat=weekly">Due once a week, on whichever ticked day suits.</small>
+            <small class="muted" data-show-when="repeat=fortnightly">Due once a fortnight, on whichever ticked day suits.</small>
+            <small class="muted" data-show-when="repeat=weekdays">Due once, on any weekday.</small></span>
+        </label>
+      </div>
+      {{template "err" index .Errors "day_mode"}}
+    </fieldset>
     <label class="field field--short" data-show-when="repeat=monthly">
       <span>Day of the month</span>
       <select name="month_day">
@@ -82,6 +117,11 @@
         {{template "err" index .Errors "due_time"}}
       </label>
     </div>
+    <label class="check">
+      <input type="checkbox" name="on_the_day" value="1"{{if .Data.OnTheDay}} checked{{end}}>
+      <span>Only on the day
+        <small class="muted">It can't be done late, like putting the bins out. Once it's too late it comes off the board.</small></span>
+    </label>
 
     <div class="row">
       <label class="field">
@@ -109,7 +149,7 @@
   <section class="card stack">
     <h2>Archive</h2>
     <p class="muted">Removes this chore from upcoming days. Anything already done stays in the history.</p>
-    <form method="post" action="/admin/chores/{{.Data.ID}}/archive"><button class="btn btn--danger" type="submit">Archive chore</button></form>
+    <form method="post" action="/admin/chores/{{.Data.ID}}/archive"><input type="hidden" name="back" value="{{.Data.Back}}"><button class="btn btn--danger" type="submit">Archive chore</button></form>
   </section>
   {{end}}
 </main>

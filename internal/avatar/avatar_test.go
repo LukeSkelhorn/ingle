@@ -81,7 +81,7 @@ func TestOpenRejectsBadNames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, n := range []string{"../domus.db", "x.jpg", "", "0123456789abcdef0123456789abcdef.png", ".upload-1"} {
+	for _, n := range []string{"../ingle.db", "x.jpg", "", "0123456789abcdef0123456789abcdef.png", ".upload-1"} {
 		if _, err := s.Open(n); !errors.Is(err, os.ErrNotExist) {
 			t.Errorf("Open(%q) = %v", n, err)
 		}

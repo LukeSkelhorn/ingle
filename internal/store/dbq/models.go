@@ -46,17 +46,27 @@ type Chore struct {
 	ArchivedAt       *int64  `json:"archived_at"`
 	CreatedAt        int64   `json:"created_at"`
 	UpdatedAt        int64   `json:"updated_at"`
+	Emoji            string  `json:"emoji"`
+	DayMode          string  `json:"day_mode"`
+	OnTheDay         int64   `json:"on_the_day"`
 }
 
 type ChoreOccurrence struct {
-	ID          int64  `json:"id"`
-	HouseholdID int64  `json:"household_id"`
-	ChoreID     int64  `json:"chore_id"`
-	DueOn       string `json:"due_on"`
-	AssigneeID  *int64 `json:"assignee_id"`
-	ClaimedBy   *int64 `json:"claimed_by"`
-	ClaimedAt   *int64 `json:"claimed_at"`
-	Status      string `json:"status"`
+	ID            int64   `json:"id"`
+	HouseholdID   int64   `json:"household_id"`
+	ChoreID       int64   `json:"chore_id"`
+	DueOn         string  `json:"due_on"`
+	AssigneeID    *int64  `json:"assignee_id"`
+	ClaimedBy     *int64  `json:"claimed_by"`
+	ClaimedAt     *int64  `json:"claimed_at"`
+	Status        string  `json:"status"`
+	AvailableFrom *string `json:"available_from"`
+}
+
+type ChorePerson struct {
+	HouseholdID int64 `json:"household_id"`
+	ChoreID     int64 `json:"chore_id"`
+	PersonID    int64 `json:"person_id"`
 }
 
 type Completion struct {
@@ -111,6 +121,7 @@ type HouseholdSetting struct {
 	LockUntil              string  `json:"lock_until"`
 	LockIdleHours          int64   `json:"lock_idle_hours"`
 	UnlockCodeLength       *int64  `json:"unlock_code_length"`
+	CalendarIdleMinutes    int64   `json:"calendar_idle_minutes"`
 }
 
 type LedgerEntry struct {
@@ -141,6 +152,9 @@ type Person struct {
 	Email        *string `json:"email"`
 	PasswordHash *string `json:"password_hash"`
 	PinLength    *int64  `json:"pin_length"`
+	GoalRewardID *int64  `json:"goal_reward_id"`
+	GoalSetAt    *int64  `json:"goal_set_at"`
+	PictureCards int64   `json:"picture_cards"`
 }
 
 type Photo struct {
@@ -175,6 +189,7 @@ type Reward struct {
 	CostPence   int64  `json:"cost_pence"`
 	ArchivedAt  *int64 `json:"archived_at"`
 	CreatedAt   int64  `json:"created_at"`
+	Emoji       string `json:"emoji"`
 }
 
 type Session struct {

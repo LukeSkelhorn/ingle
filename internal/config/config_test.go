@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -39,10 +40,10 @@ func TestLoadDefaults(t *testing.T) {
 
 func TestLoadBackupAndProxies(t *testing.T) {
 	env := map[string]string{
-		"DOMUS_DB_PATH":         "/data/domus.db",
-		"DOMUS_TRUSTED_PROXIES": "172.30.0.0/24, 10.0.0.5",
-		"DOMUS_BACKUP_KEEP":     "0",
-		"DOMUS_BACKUP_AT":       "23:30",
+		"INGLE_DB_PATH":         "/data/ingle.db",
+		"INGLE_TRUSTED_PROXIES": "172.30.0.0/24, 10.0.0.5",
+		"INGLE_BACKUP_KEEP":     "0",
+		"INGLE_BACKUP_AT":       "23:30",
 	}
 	cfg, err := load(func(k string) string { return env[k] })
 	if err != nil {
@@ -58,11 +59,11 @@ func TestLoadBackupAndProxies(t *testing.T) {
 
 func TestLoadOverrides(t *testing.T) {
 	env := map[string]string{
-		"DOMUS_ADDR":       "127.0.0.1:9000",
-		"DOMUS_TZ":         "Europe/Dublin",
-		"DOMUS_WEEK_START": "Sunday",
-		"DOMUS_CURRENCY":   "eur",
-		"DOMUS_PHOTOS_DIR": "/photos",
+		"INGLE_ADDR":       "127.0.0.1:9000",
+		"INGLE_TZ":         "Europe/Dublin",
+		"INGLE_WEEK_START": "Sunday",
+		"INGLE_CURRENCY":   "eur",
+		"INGLE_PHOTOS_DIR": "/photos",
 	}
 	cfg, err := load(func(k string) string { return env[k] })
 	if err != nil {
@@ -76,14 +77,73 @@ func TestLoadOverrides(t *testing.T) {
 
 func TestLoadInvalid(t *testing.T) {
 	for _, tc := range []map[string]string{
-		{"DOMUS_TZ": "Not/AZone"},
-		{"DOMUS_WEEK_START": "funday"},
-		{"DOMUS_TRUSTED_PROXIES": "caddy"},
-		{"DOMUS_BACKUP_KEEP": "-1"},
-		{"DOMUS_BACKUP_AT": "3am"},
+		{"INGLE_TZ": "Not/AZone"},
+		{"INGLE_WEEK_START": "funday"},
+		{"INGLE_TRUSTED_PROXIES": "caddy"},
+		{"INGLE_BACKUP_KEEP": "-1"},
+		{"INGLE_BACKUP_AT": "3am"},
 	} {
 		if _, err := load(func(k string) string { return tc[k] }); err == nil {
 			t.Errorf("load(%v) succeeded, want error", tc)
 		}
+	}
+}
+
+// Ingle used to be called Domus: its DOMUS_* settings still work, and an
+// INGLE_* one wins when both are set.
+func TestLoadLegacyNames(t *testing.T) {
+	env := map[string]string{
+		"DOMUS_TZ":       "Europe/Dublin",
+		"DOMUS_CURRENCY": "eur",
+		"INGLE_CURRENCY": "usd",
+	}
+	cfg, err := load(func(k string) string { return env[k] })
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.Location.String() != "Europe/Dublin" {
+		t.Errorf("Location = %q, want Europe/Dublin from DOMUS_TZ", cfg.Location)
+	}
+	if cfg.Currency != "USD" {
+		t.Errorf("Currency = %q, want USD: INGLE_CURRENCY beats DOMUS_CURRENCY", cfg.Currency)
+	}
+	if fmt.Sprint(cfg.Legacy) != "[DOMUS_TZ]" {
+		t.Errorf("Legacy = %v, want [DOMUS_TZ]", cfg.Legacy)
+	}
+}
+
+// A data folder from before the rename keeps using its domus.db.
+func TestLoadLegacyDatabase(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		env    map[string]string
+		exists []string
+		want   string
+	}{
+		{"new install", nil, nil, "data/ingle.db"},
+		{"old install", nil, []string{"data/domus.db"}, "data/domus.db"},
+		{"both: ingle.db wins", nil, []string{"data/domus.db", "data/ingle.db"}, "data/ingle.db"},
+		{"docker, old volume", map[string]string{"INGLE_DB_PATH": "/data/ingle.db"}, []string{"/data/domus.db"}, "/data/domus.db"},
+		{"a path of your own is left alone", map[string]string{"INGLE_DB_PATH": "/srv/house.db"}, []string{"/srv/domus.db"}, "/srv/house.db"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			old := fileExists
+			t.Cleanup(func() { fileExists = old })
+			fileExists = func(p string) bool {
+				for _, e := range tc.exists {
+					if filepath.Clean(p) == filepath.Clean(e) {
+						return true
+					}
+				}
+				return false
+			}
+			cfg, err := load(func(k string) string { return tc.env[k] })
+			if err != nil {
+				t.Fatalf("load: %v", err)
+			}
+			if filepath.Clean(cfg.DBPath) != filepath.Clean(tc.want) {
+				t.Errorf("DBPath = %q, want %q", cfg.DBPath, tc.want)
+			}
+		})
 	}
 }

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
 // ReverseWindow is how long an adult can take back an approved completion.
@@ -33,6 +33,7 @@ type CompletionDetail struct {
 	Person       dbq.Person // ID, Name, Colour and Avatar only
 	ReviewerName string
 	Title        string
+	Emoji        string // the chore's, "" for none
 	DueOn        string
 	// CanReverse is set for approved completions inside ReverseWindow.
 	CanReverse bool
@@ -81,6 +82,7 @@ func (s *Service) detail(now time.Time, r dbq.GetCompletionDetailRow) Completion
 		Pence:        r.Pence,
 		Person:       dbq.Person{ID: r.PersonID, Name: r.PersonName, Colour: r.PersonColour, Avatar: r.PersonAvatar},
 		Title:        r.Title,
+		Emoji:        r.Emoji,
 		DueOn:        r.DueOn,
 	}
 	if r.ReviewerName != nil {

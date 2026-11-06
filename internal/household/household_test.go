@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lukeskelhorn/domus/internal/auth"
-	"github.com/lukeskelhorn/domus/internal/store"
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
-	"github.com/lukeskelhorn/domus/internal/valid"
+	"github.com/lukeskelhorn/ingle/internal/auth"
+	"github.com/lukeskelhorn/ingle/internal/store"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/valid"
 )
 
 type fixture struct {
@@ -23,7 +23,7 @@ type fixture struct {
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	ctx := t.Context()
-	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "domus.db"))
+	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "ingle.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestSetup(t *testing.T) {
 
 func TestSetupValidation(t *testing.T) {
 	ctx := t.Context()
-	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "domus.db"))
+	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "ingle.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,5 +237,124 @@ func TestRewards(t *testing.T) {
 	}
 	if _, err := f.svc.UpdateReward(ctx, f.hh, f.mum.ID, 9999, RewardInput{Title: "x", CostPoints: 1}); !errors.Is(err, ErrNotFound) {
 		t.Errorf("update missing reward: %v", err)
+	}
+}
+
+func TestRewardEmojiAndGoals(t *testing.T) {
+	f := newFixture(t)
+	ctx := t.Context()
+	if _, err := f.svc.CreateReward(ctx, f.hh, f.mum.ID, RewardInput{Title: "Lego", Emoji: "x", CostPoints: 1}); err == nil {
+		t.Error("emoji outside the picker accepted")
+	}
+	r, err := f.svc.CreateReward(ctx, f.hh, f.mum.ID, RewardInput{Title: "Lego", Emoji: "🧱", CostPoints: 100})
+	if err != nil || r.Emoji != "🧱" {
+		t.Fatalf("CreateReward = %+v, %v", r, err)
+	}
+	if r, err = f.svc.UpdateReward(ctx, f.hh, f.mum.ID, r.ID, RewardInput{Title: "Lego", CostPoints: 100}); err != nil || r.Emoji != "" {
+		t.Fatalf("UpdateReward = %+v, %v", r, err)
+	}
+
+	// Archiving a reward clears anyone saving for it; restoring doesn't
+	// bring the goal back.
+	kid := f.add("Alfie", KindChild)
+	at := int64(1)
+	if _, err := f.st.Q.SetGoal(ctx, dbq.SetGoalParams{RewardID: &r.ID, SetAt: &at, HouseholdID: f.hh, ID: kid.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.svc.ArchiveReward(ctx, f.hh, f.mum.ID, r.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.svc.RestoreReward(ctx, f.hh, f.mum.ID, r.ID); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := f.svc.Person(ctx, f.hh, kid.ID); p.GoalRewardID != nil || p.GoalSetAt != nil {
+		t.Errorf("goal after archive = %v, %v", p.GoalRewardID, p.GoalSetAt)
+	}
+}
+
+func TestTypedRewardEmojiAndPictureCards(t *testing.T) {
+	f := newFixture(t)
+	ctx := t.Context()
+	r, err := f.svc.CreateReward(ctx, f.hh, f.mum.ID, RewardInput{Title: "Dino park", Emoji: "🦕", CostPoints: 10})
+	if err != nil || r.Emoji != "🦕" {
+		t.Fatalf("typed emoji = %+v, %v", r, err)
+	}
+	if _, err := f.svc.CreateReward(ctx, f.hh, f.mum.ID, RewardInput{Title: "Two", Emoji: "🦕🦖", CostPoints: 10}); err == nil {
+		t.Error("two emoji accepted")
+	}
+
+	kid, err := f.svc.CreatePerson(ctx, f.hh, f.mum.ID, PersonInput{Name: "Alfie", Kind: KindChild, Colour: "#46A758", PictureCards: true})
+	if err != nil || kid.PictureCards != 1 {
+		t.Fatalf("child with picture cards = %d, %v", kid.PictureCards, err)
+	}
+	kid, err = f.svc.UpdatePerson(ctx, f.hh, f.mum.ID, kid.ID, PersonInput{Name: "Alfie", Kind: KindChild, Colour: "#46A758"})
+	if err != nil || kid.PictureCards != 0 {
+		t.Fatalf("turned off = %d, %v", kid.PictureCards, err)
+	}
+	// Only children have them.
+	dad, err := f.svc.CreatePerson(ctx, f.hh, f.mum.ID, PersonInput{Name: "Dad", Kind: KindAdult, Colour: "#46A758", PictureCards: true})
+	if err != nil || dad.PictureCards != 0 {
+		t.Fatalf("adult with picture cards = %d, %v", dad.PictureCards, err)
+	}
+}
+
+func TestArchiveLeavesSharedChores(t *testing.T) {
+	f := newFixture(t)
+	ctx := t.Context()
+	alfie, isla, freddie := f.add("Alfie", KindChild), f.add("Isla", KindChild), f.add("Freddie", KindChild)
+
+	shared := func(title string, people ...int64) dbq.Chore {
+		t.Helper()
+		c, err := f.st.Q.CreateChore(ctx, dbq.CreateChoreParams{
+			HouseholdID: f.hh, Title: title, Mode: "shared", StartsOn: "2026-11-02", CreatedAt: 1, UpdatedAt: 1,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, p := range people {
+			if err := f.st.Q.AddChorePerson(ctx, dbq.AddChorePersonParams{HouseholdID: f.hh, ChoreID: c.ID, PersonID: p}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, err := f.st.Q.InsertOccurrence(ctx, dbq.InsertOccurrenceParams{HouseholdID: f.hh, ChoreID: c.ID, DueOn: "2026-11-02"}); err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	three := shared("Feed the cat", alfie.ID, isla.ID, freddie.ID)
+	two := shared("Tidy the den", alfie.ID, isla.ID)
+
+	// Shared chores don't block archiving Alfie; he's taken out of both.
+	if err := f.svc.ArchivePerson(ctx, f.hh, f.mum.ID, alfie.ID); err != nil {
+		t.Fatalf("archive Alfie: %v", err)
+	}
+	if got, _ := f.st.Q.ListPeopleForChore(ctx, dbq.ListPeopleForChoreParams{HouseholdID: f.hh, ChoreID: three.ID}); len(got) != 2 {
+		t.Errorf("three-person chore now has %v", got)
+	}
+	c, _ := f.st.Q.GetChore(ctx, dbq.GetChoreParams{HouseholdID: f.hh, ID: three.ID})
+	if c.Mode != "shared" {
+		t.Errorf("three-person chore mode = %q", c.Mode)
+	}
+
+	// The two-person one is Isla's now, today's occurrence included.
+	c, _ = f.st.Q.GetChore(ctx, dbq.GetChoreParams{HouseholdID: f.hh, ID: two.ID})
+	if c.Mode != "assigned" || c.AssigneeID == nil || *c.AssigneeID != isla.ID {
+		t.Errorf("two-person chore = %+v, want assigned to Isla", c)
+	}
+	if got, _ := f.st.Q.ListPeopleForChore(ctx, dbq.ListPeopleForChoreParams{HouseholdID: f.hh, ChoreID: two.ID}); len(got) != 0 {
+		t.Errorf("assigned chore still has people %v", got)
+	}
+	rows, err := f.st.Q.ListBoard(ctx, dbq.ListBoardParams{HouseholdID: f.hh, FromDate: "2026-11-02", ToDate: "2026-11-02"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range rows {
+		if r.ChoreID == two.ID && (r.AssigneeID == nil || *r.AssigneeID != isla.ID) {
+			t.Errorf("occurrence assignee = %v, want Isla", r.AssigneeID)
+		}
+	}
+	// Now it's assigned, it blocks archiving Isla like any other.
+	if err := f.svc.ArchivePerson(ctx, f.hh, f.mum.ID, isla.ID); !errors.Is(err, ErrHasAssignedChores) {
+		t.Errorf("archive Isla = %v, want ErrHasAssignedChores", err)
 	}
 }

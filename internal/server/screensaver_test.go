@@ -188,7 +188,7 @@ func TestPhotosAdmin(t *testing.T) {
 		t.Error("folder photo has no ETag")
 	}
 	expect(t, phone.get("/admin/photos"), http.StatusOK, "Also showing 1 photo from the photos folder")
-	expect(t, wall.get("/photos/f/..%2f..%2fdomus.db"), http.StatusNotFound)
+	expect(t, wall.get("/photos/f/..%2f..%2fingle.db"), http.StatusNotFound)
 	expect(t, wall.get("/photos/x/"+strings.TrimPrefix(slides[0], "/photos/u/")), http.StatusNotFound)
 
 	id := regexp.MustCompile(`/admin/photos/(\d+)/delete`).FindStringSubmatch(phone.get("/admin/photos").body)

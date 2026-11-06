@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lukeskelhorn/domus/internal/auth"
-	"github.com/lukeskelhorn/domus/internal/settings"
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/auth"
+	"github.com/lukeskelhorn/ingle/internal/settings"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
 type adminHome struct {
@@ -44,6 +44,11 @@ func (s *Server) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
+	claims, err := s.Store.Q.ListPendingRedemptions(ctx, s.HouseholdID)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
 	act, err := s.Store.Q.ListRecentActivityWithActor(ctx, dbq.ListRecentActivityWithActorParams{HouseholdID: s.HouseholdID, Limit: 20})
 	if err != nil {
 		s.serverError(w, r, err)
@@ -55,7 +60,7 @@ func (s *Server) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v := s.view(r, "Admin", adminHome{
-		People: len(people), Chores: len(chs), Rewards: len(rewards), Pending: len(pending), Lock: lv, Activity: act,
+		People: len(people), Chores: len(chs), Rewards: len(rewards), Pending: len(pending) + len(claims), Lock: lv, Activity: act,
 	})
 	v.Nav = "home"
 	s.render(w, r, http.StatusOK, "admin_home", v)
@@ -65,7 +70,7 @@ func (s *Server) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 // or idle lock, the household code).
 func activityActor(verb string) string {
 	if strings.HasPrefix(verb, "board.") && verb != "board.unlocked_code" {
-		return "Domus"
+		return "Ingle"
 	}
 	return "Someone"
 }
@@ -108,7 +113,10 @@ var activityText = map[string]string{
 	"reward.updated":          "edited a reward",
 	"reward.archived":         "archived a reward",
 	"reward.restored":         "restored a reward",
-	"reward.redeemed":         "redeemed a reward",
+	"reward.requested":        "asked for",
+	"reward.redeemed":         "claimed",
+	"reward.declined":         "declined a claim for",
+	"reward.cancelled":        "cancelled a claim for",
 	"photo.added":             "added a photo",
 	"photo.removed":           "removed a photo",
 	"calendar.added":          "added a calendar",
@@ -131,6 +139,7 @@ type settingsForm struct {
 	DayStartsAt            string
 	AdminIdleMinutes       int64
 	ScreensaverIdleMinutes int64
+	CalendarIdleMinutes    int64
 	LockDays               int64
 	LockFrom               string
 	LockUntil              string
@@ -163,6 +172,7 @@ func (s *Server) settingsForm(set settings.Settings) settingsForm {
 		DayStartsAt:            set.DayStartsAt,
 		AdminIdleMinutes:       set.AdminIdleMinutes,
 		ScreensaverIdleMinutes: set.ScreensaverIdleMinutes,
+		CalendarIdleMinutes:    set.CalendarIdleMinutes,
 		LockDays:               set.LockDays,
 		LockFrom:               set.LockFrom,
 		LockUntil:              set.LockUntil,
@@ -201,6 +211,7 @@ func (s *Server) handleSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 		DayStartsAt:            f.str("day_starts_at"),
 		AdminIdleMinutes:       f.int("admin_idle_minutes", "Choose between 1 and 60 minutes."),
 		ScreensaverIdleMinutes: f.int("screensaver_idle_minutes", "Choose between 0 (never) and 120 minutes."),
+		CalendarIdleMinutes:    f.int("calendar_idle_minutes", "Choose between 0 (never) and 60 minutes."),
 		LockDays:               weekdayMask(r.PostForm["lock_day"]),
 		LockFrom:               f.str("lock_from"),
 		LockUntil:              f.str("lock_until"),
@@ -217,6 +228,7 @@ func (s *Server) handleSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 		HouseholdName: data.HouseholdName, Timezone: data.Timezone,
 		DayStartsAt: data.DayStartsAt, AdminIdleMinutes: data.AdminIdleMinutes,
 		ScreensaverIdleMinutes: data.ScreensaverIdleMinutes,
+		CalendarIdleMinutes:    data.CalendarIdleMinutes,
 		LockDays:               data.LockDays, LockFrom: data.LockFrom, LockUntil: data.LockUntil, LockIdleHours: data.LockIdleHours,
 	})
 	if errs, ok := validationErrors(err); ok {

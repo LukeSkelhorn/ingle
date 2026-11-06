@@ -1,33 +1,37 @@
-# Domus for a home lab: Domus plus Caddy for HTTPS.
+# Ingle for a home lab: Ingle plus Caddy for HTTPS.
 # Setup and day-to-day use: see README.md in this folder.
-name: domus
+#
+# Ingle used to be called Domus. A .env from then still works: each INGLE_*
+# setting falls back to its old DOMUS_* name, and the volumes keep their old
+# names so your data, backups and certificates carry straight over.
+name: ingle
 
 services:
-  domus:
-    image: ghcr.io/lukeskelhorn/domus:${DOMUS_TAG:-latest}
+  ingle:
+    image: ghcr.io/lukeskelhorn/ingle:${INGLE_TAG:-${DOMUS_TAG:-latest}}
     # Or build from this checkout instead of pulling:
     # build: ..
     restart: unless-stopped
     environment:
-      DOMUS_TZ: ${DOMUS_TZ:-Europe/London}
-      TZ: ${DOMUS_TZ:-Europe/London}
-      DOMUS_DATE_FORMAT: ${DOMUS_DATE_FORMAT:-02/01/2006}
-      DOMUS_WEEK_START: ${DOMUS_WEEK_START:-monday}
-      DOMUS_CURRENCY: ${DOMUS_CURRENCY:-GBP}
-      DOMUS_BACKUP_KEEP: ${DOMUS_BACKUP_KEEP:-14}
-      DOMUS_BACKUP_AT: ${DOMUS_BACKUP_AT:-03:00}
+      INGLE_TZ: ${INGLE_TZ:-${DOMUS_TZ:-Europe/London}}
+      TZ: ${INGLE_TZ:-${DOMUS_TZ:-Europe/London}}
+      INGLE_DATE_FORMAT: ${INGLE_DATE_FORMAT:-${DOMUS_DATE_FORMAT:-02/01/2006}}
+      INGLE_WEEK_START: ${INGLE_WEEK_START:-${DOMUS_WEEK_START:-monday}}
+      INGLE_CURRENCY: ${INGLE_CURRENCY:-${DOMUS_CURRENCY:-GBP}}
+      INGLE_BACKUP_KEEP: ${INGLE_BACKUP_KEEP:-${DOMUS_BACKUP_KEEP:-14}}
+      INGLE_BACKUP_AT: ${INGLE_BACKUP_AT:-${DOMUS_BACKUP_AT:-03:00}}
       # Only set when PHOTOS_PATH is mounted below.
-      DOMUS_PHOTOS_DIR: ${DOMUS_PHOTOS_DIR:-}
+      INGLE_PHOTOS_DIR: ${INGLE_PHOTOS_DIR:-${DOMUS_PHOTOS_DIR:-}}
       # Caddy's address: believe its X-Forwarded-For, so sign-in and unlock
       # attempts are rate-limited per device, not for the whole house.
-      DOMUS_TRUSTED_PROXIES: ${DOMUS_PROXY_IP:-172.30.40.2}
+      INGLE_TRUSTED_PROXIES: ${INGLE_PROXY_IP:-${DOMUS_PROXY_IP:-172.30.40.2}}
     volumes:
-      - domus-data:/data
+      - ingle-data:/data
       - ${BACKUP_PATH:-./backups}:/backups
       # A read-only photos folder (e.g. a NAS share) for the screensaver.
-      # Uncomment, set PHOTOS_PATH and DOMUS_PHOTOS_DIR=/photos in .env.
+      # Uncomment, set PHOTOS_PATH and INGLE_PHOTOS_DIR=/photos in .env.
       # - ${PHOTOS_PATH}:/photos:ro
-    networks: [domus]
+    networks: [ingle]
     # No published port: everything goes through Caddy. For plain HTTP on
     # the LAN without Caddy, see README.md.
 
@@ -35,10 +39,12 @@ services:
     build: ./caddy
     restart: unless-stopped
     depends_on:
-      domus:
+      ingle:
         condition: service_healthy
     environment:
-      DOMUS_HOSTNAME: ${DOMUS_HOSTNAME:?set DOMUS_HOSTNAME in .env}
+      # Set INGLE_HOSTNAME in .env. (No "required" check here: older
+      # Docker Compose versions would also demand the old DOMUS_HOSTNAME.)
+      INGLE_HOSTNAME: ${INGLE_HOSTNAME:-${DOMUS_HOSTNAME:-}}
       CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:?set CLOUDFLARE_API_TOKEN in .env}
     ports:
       - "80:80"
@@ -49,17 +55,22 @@ services:
       - caddy-data:/data
       - caddy-config:/config
     networks:
-      domus:
-        # Fixed, so Domus can trust exactly this address.
-        ipv4_address: ${DOMUS_PROXY_IP:-172.30.40.2}
+      ingle:
+        # Fixed, so Ingle can trust exactly this address.
+        ipv4_address: ${INGLE_PROXY_IP:-${DOMUS_PROXY_IP:-172.30.40.2}}
 
 networks:
-  domus:
+  ingle:
     ipam:
       config:
-        - subnet: ${DOMUS_SUBNET:-172.30.40.0/24}
+        - subnet: ${INGLE_SUBNET:-${DOMUS_SUBNET:-172.30.40.0/24}}
 
+# Named as they were when Ingle was called Domus, so an upgrade keeps the
+# same data. A new install gets these names too; they're never shown.
 volumes:
-  domus-data:
+  ingle-data:
+    name: domus_domus-data
   caddy-data:
+    name: domus_caddy-data
   caddy-config:
+    name: domus_caddy-config

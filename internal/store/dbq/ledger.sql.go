@@ -89,6 +89,36 @@ func (q *Queries) DeleteLedgerForCompletion(ctx context.Context, arg DeleteLedge
 	return err
 }
 
+const earnedSinceForPerson = `-- name: EarnedSinceForPerson :one
+SELECT
+    CAST(COALESCE(SUM(points), 0) AS INTEGER) AS points,
+    CAST(COALESCE(SUM(pence), 0) AS INTEGER) AS pence
+FROM ledger_entries
+WHERE household_id = ?1 AND person_id = ?2
+  AND kind IN ('completion', 'adjustment')
+  AND created_at >= ?3
+`
+
+type EarnedSinceForPersonParams struct {
+	HouseholdID int64 `json:"household_id"`
+	PersonID    int64 `json:"person_id"`
+	SinceUnix   int64 `json:"since_unix"`
+}
+
+type EarnedSinceForPersonRow struct {
+	Points int64 `json:"points"`
+	Pence  int64 `json:"pence"`
+}
+
+// What a person has earned since since_unix: completions, less any
+// adjustments (reversals). Spending (redemptions, payouts) isn't counted.
+func (q *Queries) EarnedSinceForPerson(ctx context.Context, arg EarnedSinceForPersonParams) (EarnedSinceForPersonRow, error) {
+	row := q.db.QueryRowContext(ctx, earnedSinceForPerson, arg.HouseholdID, arg.PersonID, arg.SinceUnix)
+	var i EarnedSinceForPersonRow
+	err := row.Scan(&i.Points, &i.Pence)
+	return i, err
+}
+
 const insertLedgerEntry = `-- name: InsertLedgerEntry :one
 INSERT INTO ledger_entries (
     household_id, person_id, points, pence, kind, completion_id, redemption_id, note, created_by, created_at

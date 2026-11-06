@@ -1,4 +1,4 @@
-// Command domus runs the Domus family chores board server.
+// Command ingle runs the Ingle family chores board server.
 package main
 
 import (
@@ -15,19 +15,19 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/lukeskelhorn/domus/internal/auth"
-	"github.com/lukeskelhorn/domus/internal/avatar"
-	"github.com/lukeskelhorn/domus/internal/backup"
-	"github.com/lukeskelhorn/domus/internal/calendar"
-	"github.com/lukeskelhorn/domus/internal/chores"
-	"github.com/lukeskelhorn/domus/internal/config"
-	householdpkg "github.com/lukeskelhorn/domus/internal/household"
-	"github.com/lukeskelhorn/domus/internal/locale"
-	"github.com/lukeskelhorn/domus/internal/lock"
-	"github.com/lukeskelhorn/domus/internal/photos"
-	"github.com/lukeskelhorn/domus/internal/server"
-	"github.com/lukeskelhorn/domus/internal/settings"
-	"github.com/lukeskelhorn/domus/internal/store"
+	"github.com/lukeskelhorn/ingle/internal/auth"
+	"github.com/lukeskelhorn/ingle/internal/avatar"
+	"github.com/lukeskelhorn/ingle/internal/backup"
+	"github.com/lukeskelhorn/ingle/internal/calendar"
+	"github.com/lukeskelhorn/ingle/internal/chores"
+	"github.com/lukeskelhorn/ingle/internal/config"
+	householdpkg "github.com/lukeskelhorn/ingle/internal/household"
+	"github.com/lukeskelhorn/ingle/internal/locale"
+	"github.com/lukeskelhorn/ingle/internal/lock"
+	"github.com/lukeskelhorn/ingle/internal/photos"
+	"github.com/lukeskelhorn/ingle/internal/server"
+	"github.com/lukeskelhorn/ingle/internal/settings"
+	"github.com/lukeskelhorn/ingle/internal/store"
 )
 
 // version is set at build time: -ldflags "-X main.version=v1.2.3".
@@ -49,18 +49,18 @@ func main() {
 	case "backup":
 		err = backupNow()
 	case "version", "--version", "-v":
-		fmt.Println("domus", version)
+		fmt.Println("ingle", version)
 	default:
-		fmt.Fprintf(os.Stderr, "usage: domus [healthcheck|backup|version]\n")
+		fmt.Fprintf(os.Stderr, "usage: ingle [healthcheck|backup|version]\n")
 		os.Exit(2)
 	}
 	if err != nil {
-		log.Error("domus "+cmd+" failed", slog.Any("err", err))
+		log.Error("ingle "+cmd+" failed", slog.Any("err", err))
 		os.Exit(1)
 	}
 }
 
-// healthcheck asks the running server on DOMUS_ADDR for /healthz.
+// healthcheck asks the running server on INGLE_ADDR for /healthz.
 func healthcheck() error {
 	cfg, err := config.Load()
 	if err != nil {
@@ -68,7 +68,7 @@ func healthcheck() error {
 	}
 	_, port, err := net.SplitHostPort(cfg.Addr)
 	if err != nil {
-		return fmt.Errorf("DOMUS_ADDR %q: %w", cfg.Addr, err)
+		return fmt.Errorf("INGLE_ADDR %q: %w", cfg.Addr, err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -88,7 +88,7 @@ func healthcheck() error {
 }
 
 // backupNow writes one backup and prints its path, e.g. before an upgrade:
-// docker compose exec domus /domus backup.
+// docker compose exec ingle /ingle backup.
 func backupNow() error {
 	cfg, err := config.Load()
 	if err != nil {
@@ -117,6 +117,10 @@ func run(log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	if len(cfg.Legacy) > 0 {
+		log.Warn("Ingle used to be called Domus: these settings still work, but rename them to INGLE_*",
+			slog.Any("settings", cfg.Legacy))
+	}
 
 	db, err := store.Open(ctx, cfg.DBPath)
 	if err != nil {
@@ -130,7 +134,7 @@ func run(log *slog.Logger) error {
 		return err
 	}
 	set := settings.New(st)
-	// DOMUS_TZ seeds the timezone for a new household; after that it is
+	// INGLE_TZ seeds the timezone for a new household; after that it is
 	// changed under Admin › Settings.
 	if err := set.Ensure(ctx, household.ID, cfg.Location); err != nil {
 		return err
@@ -147,6 +151,7 @@ func run(log *slog.Logger) error {
 	cals := calendar.New(st, set.Location, nil, log)
 	authSvc := auth.New(st, set)
 	choreSvc := chores.New(st, set.Location)
+	choreSvc.SetDayStart(set.DayStart)
 
 	go maintenanceLoop(ctx, log, set, choreSvc, authSvc, household.ID)
 	go screensaverLoop(ctx, log, library, cals)
@@ -193,7 +198,7 @@ func run(log *slog.Logger) error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		log.Info("domus listening", slog.String("version", version), slog.String("addr", cfg.Addr), slog.String("db", cfg.DBPath), slog.String("tz", cfg.Location.String()),
+		log.Info("ingle listening", slog.String("version", version), slog.String("addr", cfg.Addr), slog.String("db", cfg.DBPath), slog.String("tz", cfg.Location.String()),
 			slog.String("photos_dir", cfg.PhotosDir), slog.String("backup_dir", cfg.BackupDir), slog.Int("backup_keep", cfg.BackupKeep),
 			slog.Int("trusted_proxies", len(cfg.TrustedProxies)))
 		errCh <- httpSrv.ListenAndServe()

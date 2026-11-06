@@ -28,7 +28,7 @@
     {{if .Data.Activity}}
     <ul class="feed">
       {{range .Data.Activity}}
-      <li><span><strong>{{if .ActorName}}{{deref .ActorName}}{{else}}{{activityActor .Verb}}{{end}}</strong> {{activity .Verb}}</span>
+      <li><span><strong>{{if .ActorName}}{{deref .ActorName}}{{else}}{{activityActor .Verb}}{{end}}</strong> {{activity .Verb}}{{with .SubjectTitle}} {{.}}{{end}}</span>
           <time class="muted">{{when .CreatedAt}}</time></li>
       {{end}}
     </ul>
@@ -36,6 +36,6 @@
     <p class="muted">Nothing yet.</p>
     {{end}}
   </section>
-  <p class="admin__version muted">Domus {{.Version}} · <a href="https://github.com/lukeskelhorn/domus/releases">Releases</a></p>
+  <p class="admin__version muted">Ingle {{.Version}} · <a href="https://github.com/lukeskelhorn/ingle/releases">Releases</a></p>
 </main>
 {{end}}

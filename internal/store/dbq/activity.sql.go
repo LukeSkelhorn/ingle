@@ -82,9 +82,11 @@ func (q *Queries) ListRecentActivity(ctx context.Context, arg ListRecentActivity
 }
 
 const listRecentActivityWithActor = `-- name: ListRecentActivityWithActor :many
-SELECT activity.id, activity.household_id, activity.actor_id, activity.verb, activity.subject_type, activity.subject_id, activity.data, activity.created_at, people.name AS actor_name
+SELECT activity.id, activity.household_id, activity.actor_id, activity.verb, activity.subject_type, activity.subject_id, activity.data, activity.created_at, people.name AS actor_name, rewards.title AS subject_title
 FROM activity
 LEFT JOIN people ON people.id = activity.actor_id
+LEFT JOIN redemptions ON activity.subject_type = 'redemption' AND redemptions.id = activity.subject_id
+LEFT JOIN rewards ON rewards.id = redemptions.reward_id
 WHERE activity.household_id = ?
 ORDER BY activity.created_at DESC, activity.id DESC
 LIMIT ?
@@ -96,17 +98,19 @@ type ListRecentActivityWithActorParams struct {
 }
 
 type ListRecentActivityWithActorRow struct {
-	ID          int64   `json:"id"`
-	HouseholdID int64   `json:"household_id"`
-	ActorID     *int64  `json:"actor_id"`
-	Verb        string  `json:"verb"`
-	SubjectType string  `json:"subject_type"`
-	SubjectID   int64   `json:"subject_id"`
-	Data        *string `json:"data"`
-	CreatedAt   int64   `json:"created_at"`
-	ActorName   *string `json:"actor_name"`
+	ID           int64   `json:"id"`
+	HouseholdID  int64   `json:"household_id"`
+	ActorID      *int64  `json:"actor_id"`
+	Verb         string  `json:"verb"`
+	SubjectType  string  `json:"subject_type"`
+	SubjectID    int64   `json:"subject_id"`
+	Data         *string `json:"data"`
+	CreatedAt    int64   `json:"created_at"`
+	ActorName    *string `json:"actor_name"`
+	SubjectTitle *string `json:"subject_title"`
 }
 
+// subject_title names the reward for reward claims ("claimed Lego set").
 func (q *Queries) ListRecentActivityWithActor(ctx context.Context, arg ListRecentActivityWithActorParams) ([]ListRecentActivityWithActorRow, error) {
 	rows, err := q.db.QueryContext(ctx, listRecentActivityWithActor, arg.HouseholdID, arg.Limit)
 	if err != nil {
@@ -126,6 +130,7 @@ func (q *Queries) ListRecentActivityWithActor(ctx context.Context, arg ListRecen
 			&i.Data,
 			&i.CreatedAt,
 			&i.ActorName,
+			&i.SubjectTitle,
 		); err != nil {
 			return nil, err
 		}

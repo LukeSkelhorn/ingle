@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
 // lockStream opens the event stream on d and returns its "lock" event data.
@@ -83,7 +83,7 @@ func TestLockedDisplayShowsNothingPersonal(t *testing.T) {
 			t.Errorf("locked page shows %q", secret)
 		}
 	}
-	for _, p := range []string{"/board", "/screensaver", "/avatars/x.jpg", "/board/occurrences/1/pick"} {
+	for _, p := range []string{"/board", "/screensaver", "/avatars/x.jpg", "/board/occurrences/1/pick", "/board/people/1", "/board/redemptions/1/review"} {
 		if r := wall.get(p); r.status != http.StatusLocked {
 			t.Errorf("GET %s = %d, want 423", p, r.status)
 		}
@@ -93,8 +93,10 @@ func TestLockedDisplayShowsNothingPersonal(t *testing.T) {
 	if r := wall.do(req); r.status != http.StatusLocked || r.header.Get("HX-Redirect") != "/" {
 		t.Errorf("htmx /board while locked = %d %q", r.status, r.header.Get("HX-Redirect"))
 	}
-	if r := wall.post("/board/occurrences/1/complete", nil); r.status != http.StatusLocked {
-		t.Errorf("complete while locked = %d", r.status)
+	for _, p := range []string{"/board/occurrences/1/complete", "/board/people/1/goal", "/board/people/1/goal/clear"} {
+		if r := wall.post(p, nil); r.status != http.StatusLocked {
+			t.Errorf("POST %s while locked = %d", p, r.status)
+		}
 	}
 	expect(t, wall.get("/clock?big=1"), http.StatusOK, "saver__time")
 	expect(t, wall.get("/screensaver/photos"), http.StatusOK)
@@ -210,7 +212,7 @@ func TestScheduleLocksDisplays(t *testing.T) {
 	h.advance(20 * time.Minute)
 	tick()
 	expect(t, wall.get("/"), http.StatusOK, "unlocking?<")
-	expect(t, phone.get("/admin"), http.StatusOK, "Domus</strong> locked the displays on schedule")
+	expect(t, phone.get("/admin"), http.StatusOK, "Ingle</strong> locked the displays on schedule")
 	h.advance(6 * time.Hour)
 	tick()
 	expect(t, wall.get("/"), http.StatusOK, `id="board"`)

@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lukeskelhorn/domus/internal/settings"
-	"github.com/lukeskelhorn/domus/internal/store"
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/settings"
+	"github.com/lukeskelhorn/ingle/internal/store"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
 var london, _ = time.LoadLocation("Europe/London")
@@ -43,7 +43,7 @@ func (f *fixture) at(t time.Time) {
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	ctx := t.Context()
-	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "domus.db"))
+	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "ingle.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

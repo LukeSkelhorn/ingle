@@ -11,12 +11,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lukeskelhorn/domus/internal/auth"
-	"github.com/lukeskelhorn/domus/internal/avatar"
-	"github.com/lukeskelhorn/domus/internal/locale"
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
-	"github.com/lukeskelhorn/domus/internal/valid"
-	"github.com/lukeskelhorn/domus/web"
+	"github.com/lukeskelhorn/ingle/internal/auth"
+	"github.com/lukeskelhorn/ingle/internal/avatar"
+	"github.com/lukeskelhorn/ingle/internal/locale"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/valid"
+	"github.com/lukeskelhorn/ingle/web"
 )
 
 // pages holds one template set per page: layout + partials + that page, so
@@ -70,7 +70,7 @@ type view struct {
 	Flash     string
 	Errors    valid.Errors
 	Data      any
-	Version   string // the Domus build, shown in admin
+	Version   string // the Ingle build, shown in admin
 }
 
 // viewer describes who is looking at the page.
@@ -84,6 +84,10 @@ type viewer struct {
 	// ScreensaverSeconds is how long a display waits, untouched, before
 	// showing the screensaver; 0 means never (always 0 off a display).
 	ScreensaverSeconds int
+	// CalendarSeconds is how long a display shows the board calendar,
+	// untouched, before going back to the chores; 0 means never (always 0
+	// off a display).
+	CalendarSeconds int
 }
 
 // OnDisplayAdmin reports whether an adult is unlocked on a household display
@@ -156,18 +160,24 @@ func (s *Server) funcs() template.FuncMap {
 			return loc.FormatDate(t) + " " + loc.FormatTime(t)
 		},
 		"weekdayShort": func(d time.Weekday) string { return d.String()[:3] },
-		"shortDate":    shortDate,
-		"worth":        s.worth,
-		"pts":          pts,
+		// names and orNames list people: "Isla and Mum", "Luke or Sam".
+		"names":     func(ps []dbq.Person) string { return joinNames(ps, "and") },
+		"orNames":   func(ps []dbq.Person) string { return joinNames(ps, "or") },
+		"shortDate": shortDate,
+		"worth":     s.worth,
+		"pts":       pts,
 		"percent": func(done, total int) int {
 			if total == 0 {
 				return 0
 			}
 			return done * 100 / total
 		},
-		"dict":          dict,
-		"list":          func(v ...string) []string { return v },
-		"activity":      describeActivity,
+		"dict":     dict,
+		"list":     func(v ...string) []string { return v },
+		"activity": describeActivity,
+		// asset is a static file's URL with the build's asset hash, so a new
+		// build's CSS and JS are never served from an old cache.
+		"asset":         func(name string) string { return "/static/" + name + "?v=" + web.StaticVersion() },
 		"activityActor": activityActor,
 	}
 }
@@ -217,4 +227,16 @@ func dict(kv ...any) (map[string]any, error) {
 		m[k] = kv[i+1]
 	}
 	return m, nil
+}
+
+// joinNames lists people's names as "A, B and C" (or "A, B or C").
+func joinNames(ps []dbq.Person, last string) string {
+	names := make([]string, len(ps))
+	for i, p := range ps {
+		names[i] = p.Name
+	}
+	if len(names) < 2 {
+		return strings.Join(names, "")
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " " + last + " " + names[len(names)-1]
 }

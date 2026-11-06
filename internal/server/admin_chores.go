@@ -1,21 +1,142 @@
 package server
 
 import (
+	"cmp"
 	"errors"
+	"fmt"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
-	"github.com/lukeskelhorn/domus/internal/chores"
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
-	"github.com/lukeskelhorn/domus/internal/valid"
+	"github.com/lukeskelhorn/ingle/internal/chores"
+	"github.com/lukeskelhorn/ingle/internal/emoji"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/valid"
 )
 
 type choreRow struct {
 	Chore    dbq.Chore
 	Assignee *dbq.Person
+	People   []dbq.Person // a shared chore's chosen people
 	Schedule string
+}
+
+// Admin chores list sorts.
+const (
+	sortPoints = "points"
+	sortMoney  = "money"
+	// personPool is the person filter for chores anyone can claim.
+	personPool = "pool"
+)
+
+// choresQuery is the chores list's filter and sort, kept in the URL so
+// going into a chore and back returns to the same list.
+type choresQuery struct {
+	Person string // "", personPool or a person's ID
+	Sort   string // "", sortPoints or sortMoney
+}
+
+// parseChoresQuery reads the filter and sort from q, ignoring a person who
+// isn't active in the household and any sort it doesn't know.
+func parseChoresQuery(q url.Values, people []dbq.Person) choresQuery {
+	var out choresQuery
+	switch p := q.Get("person"); p {
+	case personPool:
+		out.Person = p
+	default:
+		if id, err := strconv.ParseInt(p, 10, 64); err == nil {
+			for _, pp := range people {
+				if pp.ID == id {
+					out.Person = p
+				}
+			}
+		}
+	}
+	if v := q.Get("sort"); v == sortPoints || v == sortMoney {
+		out.Sort = v
+	}
+	return out
+}
+
+// Encode is the query string, without the empty parts.
+func (q choresQuery) Encode() string {
+	v := url.Values{}
+	if q.Person != "" {
+		v.Set("person", q.Person)
+	}
+	if q.Sort != "" {
+		v.Set("sort", q.Sort)
+	}
+	return v.Encode()
+}
+
+// Path is the list's URL for q.
+func (q choresQuery) Path() string {
+	if e := q.Encode(); e != "" {
+		return "/admin/chores?" + e
+	}
+	return "/admin/chores"
+}
+
+// choreBack is where to return after adding or archiving a chore: the
+// form's back value if it's the chores list with a valid filter, else the
+// plain list. Anything else (another page, another site) is ignored.
+func choreBack(back string, people []dbq.Person) string {
+	u, err := url.Parse(back)
+	if err != nil || u.Scheme != "" || u.Host != "" || u.User != nil || u.Path != "/admin/chores" {
+		return "/admin/chores"
+	}
+	return parseChoresQuery(u.Query(), people).Path()
+}
+
+// choresPage is the admin chores list.
+type choresPage struct {
+	Rows   []choreRow
+	People []dbq.Person
+	Q      choresQuery
+	Person *dbq.Person // the person filtered on
+	Pool   bool        // filtered to up for grabs
+	Total  int         // chores before filtering
+}
+
+// Heading is "Chores", "Chores · 6 for Alfie" or "Chores · 3 up for grabs".
+func (p choresPage) Heading() string {
+	switch {
+	case p.Person != nil:
+		return fmt.Sprintf("Chores · %d for %s", len(p.Rows), p.Person.Name)
+	case p.Pool:
+		return fmt.Sprintf("Chores · %d up for grabs", len(p.Rows))
+	}
+	return "Chores"
+}
+
+// ChipURL is the list filtered to person ("" for everyone), keeping the sort.
+func (p choresPage) ChipURL(person string) string {
+	return choresQuery{Person: person, Sort: p.Q.Sort}.Path()
+}
+
+// Back is this list, for the chore pages to come back to.
+func (p choresPage) Back() string { return p.Q.Path() }
+
+// NewURL is "Add a chore", for the filtered person if there is one.
+func (p choresPage) NewURL() string {
+	v := url.Values{"back": {p.Back()}}
+	if p.Person != nil {
+		v.Set("assignee", strconv.FormatInt(p.Person.ID, 10))
+	}
+	return "/admin/chores/new?" + v.Encode()
+}
+
+// EditURL is a chore's page, coming back to this list.
+func (p choresPage) EditURL(id int64) string {
+	u := "/admin/chores/" + strconv.FormatInt(id, 10)
+	if b := p.Back(); b != "/admin/chores" {
+		u += "?" + url.Values{"back": {b}}.Encode()
+	}
+	return u
 }
 
 func (s *Server) handleChores(w http.ResponseWriter, r *http.Request) {
@@ -34,28 +155,78 @@ func (s *Server) handleChores(w http.ResponseWriter, r *http.Request) {
 	for i := range people {
 		byID[people[i].ID] = &people[i]
 	}
-	rows := make([]choreRow, 0, len(list))
+	page := choresPage{People: people, Q: parseChoresQuery(r.URL.Query(), people), Total: len(list)}
+	page.Pool = page.Q.Person == personPool
+	if id, err := strconv.ParseInt(page.Q.Person, 10, 64); err == nil {
+		page.Person = byID[id]
+	}
+	shared, err := s.Chores.SharedPeople(ctx, s.HouseholdID)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	page.Rows = make([]choreRow, 0, len(list))
 	for _, c := range list {
-		row := choreRow{Chore: c, Schedule: describeSchedule(chores.ParseRecurrence(c.Rrule), c.StartsOn)}
+		row := choreRow{Chore: c, Schedule: describeSchedule(chores.ParseRecurrence(c.Rrule), c.DayMode, c.StartsOn)}
 		if c.AssigneeID != nil {
 			row.Assignee = byID[*c.AssigneeID]
 		}
-		rows = append(rows, row)
+		for _, id := range shared[c.ID] {
+			if p := byID[id]; p != nil {
+				row.People = append(row.People, *p)
+			}
+		}
+		// A person's chores include the shared ones they're chosen for; Up
+		// for grabs is only the chores anyone can claim.
+		mine := func(id int64) bool {
+			return (c.AssigneeID != nil && *c.AssigneeID == id) || slices.Contains(shared[c.ID], id)
+		}
+		switch {
+		case page.Pool && c.Mode != chores.ModePool,
+			page.Person != nil && !mine(page.Person.ID):
+			continue
+		}
+		page.Rows = append(page.Rows, row)
 	}
-	v := s.view(r, "Chores", rows)
+	sortChoreRows(page.Rows, page.Q.Sort)
+	v := s.view(r, "Chores", page)
 	v.Nav = "chores"
 	s.render(w, r, http.StatusOK, "admin_chores", v)
+}
+
+// sortChoreRows orders rows by sort: by points or money, high to low (the
+// other amount, then the title, breaking ties), or leaves the title order.
+func sortChoreRows(rows []choreRow, sort string) {
+	if sort != sortPoints && sort != sortMoney {
+		return
+	}
+	slices.SortStableFunc(rows, func(a, b choreRow) int {
+		first, second := func(r choreRow) int64 { return r.Chore.Points }, func(r choreRow) int64 { return r.Chore.Pence }
+		if sort == sortMoney {
+			first, second = second, first
+		}
+		if d := cmp.Compare(first(b), first(a)); d != 0 {
+			return d
+		}
+		if d := cmp.Compare(second(b), second(a)); d != 0 {
+			return d
+		}
+		return cmp.Compare(a.Chore.Title, b.Chore.Title)
+	})
 }
 
 // choreForm is the chore edit page.
 type choreForm struct {
 	ID               int64
 	Title            string
+	Emoji            emojiField
 	Description      string
 	Mode             string
 	AssigneeID       int64
+	PeopleIDs        []int64 // a shared chore's chosen people
 	Repeat           string
 	Days             []time.Weekday
+	DayMode          string // chores.DayEach or chores.DayAny
 	MonthDay         int
 	Custom           string // read-only RRULE for RepeatCustom
 	StartsOn         string
@@ -63,11 +234,17 @@ type choreForm struct {
 	Points           int64
 	Money            string
 	RequiresApproval bool
+	OnTheDay         bool
+	// Back is the chores list to return to, with its filter.
+	Back string
 
 	People    []dbq.Person
 	WeekOrder []time.Weekday
 	MonthDays []int
 }
+
+// HasPerson is used by the shared chore's people checkboxes.
+func (f choreForm) HasPerson(id int64) bool { return slices.Contains(f.PeopleIDs, id) }
 
 // HasDay is used by the template's day checkboxes.
 func (f choreForm) HasDay(d time.Weekday) bool { return slices.Contains(f.Days, d) }
@@ -87,9 +264,10 @@ func (s *Server) newChoreForm(r *http.Request) (choreForm, error) {
 		monthDays[i] = i + 1
 	}
 	return choreForm{
-		Mode: chores.ModeAssigned, Repeat: chores.RepeatWeekly,
+		Back: choreBack(r.URL.Query().Get("back"), people), // a POST reads it in readChoreForm
+		Mode: chores.ModeAssigned, Repeat: chores.RepeatWeekly, DayMode: chores.DayEach,
 		Days: []time.Weekday{today.Weekday()}, MonthDay: today.Day(),
-		StartsOn: today.Format(chores.DateLayout), Money: "0.00",
+		StartsOn: today.Format(chores.DateLayout), Money: "0.00", Emoji: newEmojiField(emoji.Chore, ""),
 		People: people, WeekOrder: chores.WeekOrder, MonthDays: monthDays,
 	}, nil
 }
@@ -101,10 +279,16 @@ func (s *Server) choreFormFor(r *http.Request, c dbq.Chore) (choreForm, error) {
 	}
 	rec := chores.ParseRecurrence(c.Rrule)
 	f.ID, f.Title, f.Description, f.Mode = c.ID, c.Title, c.Description, c.Mode
+	f.Emoji.Value = c.Emoji
 	if c.AssigneeID != nil {
 		f.AssigneeID = *c.AssigneeID
 	}
-	f.Repeat, f.Days, f.Custom = rec.Kind, rec.Days, rec.Raw
+	if c.Mode == chores.ModeShared {
+		if f.PeopleIDs, err = s.Chores.ChorePeople(r.Context(), s.HouseholdID, c.ID); err != nil {
+			return f, err
+		}
+	}
+	f.Repeat, f.Days, f.Custom, f.DayMode = rec.Kind, rec.Days, rec.Raw, c.DayMode
 	if rec.Kind == chores.RepeatMonthly {
 		f.MonthDay = rec.MonthDay
 	}
@@ -113,6 +297,7 @@ func (s *Server) choreFormFor(r *http.Request, c dbq.Chore) (choreForm, error) {
 		f.DueTime = *c.DueTime
 	}
 	f.RequiresApproval = c.RequiresApproval == 1
+	f.OnTheDay = c.OnTheDay == 1
 	return f, nil
 }
 
@@ -133,6 +318,14 @@ func (s *Server) handleChoreNew(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.serverError(w, r, err)
 		return
+	}
+	// "Add a chore for Alfie" from a filtered list.
+	if id, err := strconv.ParseInt(r.URL.Query().Get("assignee"), 10, 64); err == nil {
+		for _, p := range f.People {
+			if p.ID == id {
+				f.Mode, f.AssigneeID = chores.ModeAssigned, id
+			}
+		}
 	}
 	s.renderChore(w, r, http.StatusOK, f, nil, "")
 }
@@ -177,14 +370,20 @@ func (s *Server) readChoreForm(w http.ResponseWriter, r *http.Request, f *choreF
 	}
 	fm := newForm(r)
 	f.Title = fm.str("title")
+	f.Emoji.read(fm)
 	f.Description = fm.str("description")
 	f.Mode = fm.str("mode")
 	f.Repeat = fm.str("repeat")
+	f.DayMode = fm.str("day_mode")
+	if f.DayMode == "" {
+		f.DayMode = chores.DayEach
+	}
 	f.StartsOn = fm.str("starts_on")
 	f.DueTime = fm.str("due_time")
 	f.Points = fm.int("points", "Enter a whole number of points.")
 	f.Money = fm.str("money")
 	f.RequiresApproval = fm.checked("requires_approval")
+	f.OnTheDay = fm.checked("on_the_day")
 	f.Days = nil
 	for _, v := range r.Form["days"] {
 		if n, err := strconv.Atoi(v); err == nil && n >= 0 && n <= 6 {
@@ -193,6 +392,13 @@ func (s *Server) readChoreForm(w http.ResponseWriter, r *http.Request, f *choreF
 	}
 	if n, err := strconv.Atoi(fm.str("month_day")); err == nil {
 		f.MonthDay = n
+	}
+	f.Back = choreBack(fm.str("back"), f.People)
+	f.PeopleIDs = nil
+	for _, v := range r.Form["people_ids"] {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
+			f.PeopleIDs = append(f.PeopleIDs, n)
+		}
 	}
 	f.AssigneeID = 0
 	if id := fm.optID("assignee_id"); id != nil {
@@ -204,10 +410,14 @@ func (s *Server) readChoreForm(w http.ResponseWriter, r *http.Request, f *choreF
 		fm.errs.Add("money", "Enter an amount like 0.50.")
 	}
 	in := chores.Input{
-		Title: f.Title, Description: f.Description, Mode: f.Mode,
+		Title: f.Title, Emoji: f.Emoji.Value, Description: f.Description, Mode: f.Mode,
 		Repeat:   chores.Recurrence{Kind: f.Repeat, Days: f.Days, MonthDay: f.MonthDay},
+		DayMode:  f.DayMode,
 		StartsOn: f.StartsOn, DueTime: fm.optStr("due_time"),
-		Points: f.Points, Pence: pence, RequiresApproval: f.RequiresApproval,
+		Points: f.Points, Pence: pence, RequiresApproval: f.RequiresApproval, OnTheDay: f.OnTheDay,
+	}
+	if f.Mode == chores.ModeShared {
+		in.PeopleIDs = f.PeopleIDs
 	}
 	if f.Mode == chores.ModeAssigned && f.AssigneeID != 0 {
 		id := f.AssigneeID
@@ -239,6 +449,10 @@ func (s *Server) handleChoreCreate(w http.ResponseWriter, r *http.Request) {
 		s.renderChore(w, r, http.StatusUnprocessableEntity, f, fm.errs, "")
 		return
 	}
+	if e, ok := f.Emoji.offerSuggestion(f.Title); ok {
+		s.renderChore(w, r, http.StatusOK, f, nil, suggestionFlash(e, "chore"))
+		return
+	}
 	_, err = s.Chores.CreateChore(r.Context(), s.HouseholdID, actor(r).Person.ID, in, s.boardDay(r))
 	if errs, ok := validationErrors(err); ok {
 		s.renderChore(w, r, http.StatusUnprocessableEntity, f, errs, "")
@@ -248,7 +462,7 @@ func (s *Server) handleChoreCreate(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	redirect(w, r, "/admin/chores")
+	redirect(w, r, f.Back)
 }
 
 func (s *Server) handleChoreUpdate(w http.ResponseWriter, r *http.Request) {
@@ -270,6 +484,10 @@ func (s *Server) handleChoreUpdate(w http.ResponseWriter, r *http.Request) {
 		s.renderChore(w, r, http.StatusUnprocessableEntity, f, fm.errs, "")
 		return
 	}
+	if e, ok := f.Emoji.offerSuggestion(f.Title); ok {
+		s.renderChore(w, r, http.StatusOK, f, nil, suggestionFlash(e, "chore"))
+		return
+	}
 	c, err := s.Chores.UpdateChore(r.Context(), s.HouseholdID, actor(r).Person.ID, cur.ID, in, s.boardDay(r))
 	if errs, ok := validationErrors(err); ok {
 		s.renderChore(w, r, http.StatusUnprocessableEntity, f, errs, "")
@@ -279,11 +497,13 @@ func (s *Server) handleChoreUpdate(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
+	back := f.Back
 	f, err = s.choreFormFor(r, c)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
+	f.Back = back
 	s.renderChore(w, r, http.StatusOK, f, nil, "Saved. Upcoming days have been updated.")
 }
 
@@ -292,11 +512,20 @@ func (s *Server) handleChoreArchive(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if err := parseForm(w, r); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
 	if err := s.Chores.ArchiveChore(r.Context(), s.HouseholdID, actor(r).Person.ID, c.ID, s.boardDay(r)); err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	redirect(w, r, "/admin/chores")
+	people, err := s.Household.People(r.Context(), s.HouseholdID)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	redirect(w, r, choreBack(r.PostFormValue("back"), people))
 }
 
 // boardDay is the household's current board day (after the reset time).
@@ -308,19 +537,21 @@ func (s *Server) boardDay(r *http.Request) time.Time {
 	return set.BoardDay(s.now())
 }
 
-// describeSchedule summarises a schedule for the chores list.
-func describeSchedule(rec chores.Recurrence, startsOn string) string {
+// describeSchedule summarises a schedule for the chores list. A
+// flexible-day chore's days read "Tue or Thu".
+func describeSchedule(rec chores.Recurrence, dayMode, startsOn string) string {
+	anyDay := dayMode == chores.DayAny && chores.AnyDayAllowed(rec.Kind)
 	days := func() string {
-		out := ""
+		var names []string
 		for _, d := range chores.WeekOrder {
 			if slices.Contains(rec.Days, d) {
-				if out != "" {
-					out += ", "
-				}
-				out += d.String()[:3]
+				names = append(names, d.String()[:3])
 			}
 		}
-		return out
+		if anyDay && len(names) > 1 {
+			return strings.Join(names[:len(names)-1], ", ") + " or " + names[len(names)-1]
+		}
+		return strings.Join(names, ", ")
 	}
 	switch rec.Kind {
 	case chores.RepeatOnce:
@@ -331,6 +562,9 @@ func describeSchedule(rec chores.Recurrence, startsOn string) string {
 	case chores.RepeatDaily:
 		return "Every day"
 	case chores.RepeatWeekdays:
+		if anyDay {
+			return "Once on a weekday"
+		}
 		return "Weekdays"
 	case chores.RepeatWeekly:
 		return "Weekly: " + days()

@@ -4,26 +4,32 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
-	"github.com/lukeskelhorn/domus/internal/store"
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
-	"github.com/lukeskelhorn/domus/internal/valid"
+	"github.com/lukeskelhorn/ingle/internal/emoji"
+	"github.com/lukeskelhorn/ingle/internal/store"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/valid"
 )
 
 // Input is the editable part of a chore, as submitted by the admin form.
 type Input struct {
 	Title            string
+	Emoji            string // a single emoji, or "" for none
 	Description      string
-	Mode             string // ModeAssigned or ModePool
-	AssigneeID       *int64 // required for ModeAssigned, ignored for ModePool
+	Mode             string  // ModeAssigned or ModePool
+	AssigneeID       *int64  // required for ModeAssigned, ignored otherwise
+	PeopleIDs        []int64 // ModeShared: who it's for (two or more)
 	Repeat           Recurrence
+	DayMode          string  // DayEach or DayAny; "" means DayEach
 	StartsOn         string  // YYYY-MM-DD
 	DueTime          *string // HH:MM, optional
 	Points           int64
 	Pence            int64
 	RequiresApproval bool
+	OnTheDay         bool // it can't be done late: off the board once its time has passed
 }
 
 // Chores returns active chores, by title.
@@ -48,13 +54,22 @@ func (s *Service) CreateChore(ctx context.Context, householdID, actorID int64, i
 			return err
 		}
 		c, err = q.CreateChore(ctx, dbq.CreateChoreParams{
-			HouseholdID: householdID, Title: p.Title, Description: p.Description,
+			HouseholdID: householdID, Title: p.Title, Emoji: p.Emoji, Description: p.Description,
 			Mode: p.Mode, AssigneeID: p.AssigneeID, Rrule: p.Rrule, StartsOn: p.StartsOn,
 			DueTime: p.DueTime, Points: p.Points, Pence: p.Pence, RequiresApproval: p.RequiresApproval,
 			CreatedAt: now.Unix(), UpdatedAt: now.Unix(),
 		})
 		if err != nil {
 			return fmt.Errorf("create chore: %w", err)
+		}
+		if c, err = setDayMode(ctx, q, c, p.DayMode); err != nil {
+			return err
+		}
+		if c, err = setOnTheDay(ctx, q, c, in.OnTheDay); err != nil {
+			return err
+		}
+		if err := setPeople(ctx, q, c, p.PeopleIDs); err != nil {
+			return err
 		}
 		if err := s.refresh(ctx, q, c, nil, boardDay); err != nil {
 			return err
@@ -83,13 +98,22 @@ func (s *Service) UpdateChore(ctx context.Context, householdID, actorID, id int6
 			return err
 		}
 		c, err = q.UpdateChore(ctx, dbq.UpdateChoreParams{
-			Title: p.Title, Description: p.Description, Mode: p.Mode, AssigneeID: p.AssigneeID,
+			Title: p.Title, Emoji: p.Emoji, Description: p.Description, Mode: p.Mode, AssigneeID: p.AssigneeID,
 			Rrule: p.Rrule, StartsOn: p.StartsOn, DueTime: p.DueTime, Points: p.Points,
 			Pence: p.Pence, RequiresApproval: p.RequiresApproval, UpdatedAt: now.Unix(),
 			HouseholdID: householdID, ID: id,
 		})
 		if err != nil {
 			return fmt.Errorf("update chore: %w", err)
+		}
+		if c, err = setDayMode(ctx, q, c, p.DayMode); err != nil {
+			return err
+		}
+		if c, err = setOnTheDay(ctx, q, c, in.OnTheDay); err != nil {
+			return err
+		}
+		if err := setPeople(ctx, q, c, p.PeopleIDs); err != nil {
+			return err
 		}
 		if err := s.refresh(ctx, q, c, &old, boardDay); err != nil {
 			return err
@@ -124,6 +148,55 @@ func (s *Service) ArchiveChore(ctx context.Context, householdID, actorID, id int
 	})
 }
 
+// setDayMode stores c's day mode when it differs.
+func setDayMode(ctx context.Context, q *dbq.Queries, c dbq.Chore, mode string) (dbq.Chore, error) {
+	if c.DayMode == mode {
+		return c, nil
+	}
+	c, err := q.SetChoreDayMode(ctx, dbq.SetChoreDayModeParams{DayMode: mode, HouseholdID: c.HouseholdID, ID: c.ID})
+	if err != nil {
+		return c, fmt.Errorf("set day mode: %w", err)
+	}
+	return c, nil
+}
+
+// setOnTheDay stores whether c is Only on the day, when it differs.
+func setOnTheDay(ctx context.Context, q *dbq.Queries, c dbq.Chore, on bool) (dbq.Chore, error) {
+	v := int64(0)
+	if on {
+		v = 1
+	}
+	if c.OnTheDay == v {
+		return c, nil
+	}
+	c, err := q.SetChoreOnTheDay(ctx, dbq.SetChoreOnTheDayParams{OnTheDay: v, HouseholdID: c.HouseholdID, ID: c.ID})
+	if err != nil {
+		return c, fmt.Errorf("set on the day: %w", err)
+	}
+	return c, nil
+}
+
+// setPeople replaces who a shared chore is for; other chores have nobody.
+func setPeople(ctx context.Context, q *dbq.Queries, c dbq.Chore, people []int64) error {
+	if err := q.DeleteChorePeople(ctx, dbq.DeleteChorePeopleParams{HouseholdID: c.HouseholdID, ChoreID: c.ID}); err != nil {
+		return fmt.Errorf("clear chore people: %w", err)
+	}
+	if c.Mode != ModeShared {
+		return nil
+	}
+	for _, id := range people {
+		if err := q.AddChorePerson(ctx, dbq.AddChorePersonParams{HouseholdID: c.HouseholdID, ChoreID: c.ID, PersonID: id}); err != nil {
+			return fmt.Errorf("add chore person: %w", err)
+		}
+	}
+	return nil
+}
+
+// ChorePeople returns who a shared chore is for (active people only).
+func (s *Service) ChorePeople(ctx context.Context, householdID, choreID int64) ([]int64, error) {
+	return s.st.Q.ListPeopleForChore(ctx, dbq.ListPeopleForChoreParams{HouseholdID: householdID, ChoreID: choreID})
+}
+
 // refresh replaces c's not-yet-started occurrences and re-materialises the
 // window from boardDay. old is the chore before an edit (nil on create).
 func (s *Service) refresh(ctx context.Context, q *dbq.Queries, c dbq.Chore, old *dbq.Chore, boardDay time.Time) error {
@@ -152,16 +225,19 @@ func clearFrom(c dbq.Chore, old *dbq.Chore, boardDay time.Time) string {
 }
 
 type validated struct {
-	Title, Description, Mode, StartsOn string
-	AssigneeID                         *int64
-	Rrule, DueTime                     *string
-	Points, Pence, RequiresApproval    int64
+	Title, Emoji, Description, Mode, StartsOn string
+	DayMode                                   string
+	AssigneeID                                *int64
+	PeopleIDs                                 []int64
+	Rrule, DueTime                            *string
+	Points, Pence, RequiresApproval           int64
 }
 
 func (s *Service) validate(ctx context.Context, q *dbq.Queries, householdID int64, in Input) (validated, error) {
 	errs := valid.Errors{}
 	out := validated{
 		Title:       strings.TrimSpace(in.Title),
+		Emoji:       strings.TrimSpace(in.Emoji),
 		Description: strings.TrimSpace(in.Description),
 		Mode:        in.Mode,
 		StartsOn:    in.StartsOn,
@@ -174,6 +250,9 @@ func (s *Service) validate(ctx context.Context, q *dbq.Queries, householdID int6
 	}
 	if n := len([]rune(out.Title)); n < 1 || n > 100 {
 		errs.Add("title", "Enter a title (up to 100 characters).")
+	}
+	if out.Emoji != "" && !emoji.Valid(out.Emoji) {
+		errs.Add("emoji", "Use a single emoji.")
 	}
 	if len(out.Description) > 1000 {
 		errs.Add("description", "Keep it under 1,000 characters.")
@@ -188,8 +267,24 @@ func (s *Service) validate(ctx context.Context, q *dbq.Queries, householdID int6
 			out.AssigneeID = &p.ID
 		}
 	case ModePool:
+	case ModeShared:
+		// Distinct, active people. One is just an assigned chore.
+		for _, id := range in.PeopleIDs {
+			if slices.Contains(out.PeopleIDs, id) {
+				continue
+			}
+			if p, err := getPerson(ctx, q, householdID, id); err == nil {
+				out.PeopleIDs = append(out.PeopleIDs, p.ID)
+			}
+		}
+		switch len(out.PeopleIDs) {
+		case 0:
+			errs.Add("people_ids", "Choose at least two people.")
+		case 1:
+			out.Mode, out.AssigneeID, out.PeopleIDs = ModeAssigned, &out.PeopleIDs[0], nil
+		}
 	default:
-		errs.Add("mode", "Choose assigned or shared pool.")
+		errs.Add("mode", "Choose who does it.")
 	}
 	rule, err := in.Repeat.RRule()
 	if err != nil {
@@ -207,6 +302,19 @@ func (s *Service) validate(ctx context.Context, q *dbq.Queries, householdID int6
 		}
 	}
 	out.Rrule = rule
+	switch in.DayMode {
+	case "", DayEach:
+		out.DayMode = DayEach
+	case DayAny:
+		// Only weekly-style schedules have days to choose between; for the
+		// rest the choice is hidden, so it quietly means each.
+		out.DayMode = DayEach
+		if AnyDayAllowed(in.Repeat.Kind) {
+			out.DayMode = DayAny
+		}
+	default:
+		errs.Add("day_mode", "Choose how the days work.")
+	}
 	if _, err := time.Parse(DateLayout, in.StartsOn); err != nil {
 		errs.Add("starts_on", "Choose a start date.")
 	}

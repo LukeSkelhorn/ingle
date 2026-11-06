@@ -1,8 +1,9 @@
 {{/* The live part of the main board. It re-fetches itself on "refresh"
-     (fired by the page when a server-sent event arrives) and every five
-     minutes, which also catches the board day rolling over. */}}
+     (fired by the page when a server-sent event arrives, or when an Only on
+     the day chore runs out: data-next-in) and every five minutes, which
+     also catches the board day rolling over. */}}
 {{define "board"}}
-<div id="board" class="board__body" hx-get="/board" hx-trigger="refresh, every 5m" hx-swap="outerHTML">
+<div id="board" class="board__body" data-day="{{.Day}}"{{with .NextIn}} data-next-in="{{.}}"{{end}} hx-get="/board" hx-trigger="refresh, every 5m" hx-swap="outerHTML">
   {{if not .Columns}}
   <div class="board__empty">
     <p>No one's here yet.</p>
@@ -19,15 +20,21 @@
     {{end}}
   </section>
   <div class="columns">
-    {{range .Columns}}
-    <section class="column" style="--person: {{.Person.Colour}}" aria-label="{{.Person.Name}}">
-      <header class="column__head">
-        {{template "avatar" (avatar .Person "md")}}
-        <div class="column__who">
-          <h2 class="column__name">{{.Person.Name}}</h2>
-          <p class="column__balance">{{pts .Points}}{{if .Pence}} · {{money .Pence}}{{end}}</p>
-        </div>
-      </header>
+    {{range $col := .Columns}}
+    <section class="column" style="--person: {{.Person.Colour}}" aria-label="{{.Person.Name}}" data-person="{{.Person.ID}}">
+      {{/* Tapping the avatar or name opens their sheet: balance and rewards. */}}
+      <h2 class="column__heading">
+        <button class="column__head" type="button"
+                hx-get="/board/people/{{.Person.ID}}" hx-target="#sheet-body" hx-swap="innerHTML">
+          {{template "avatar" (avatar .Person "md")}}
+          <span class="column__who">
+            <span class="column__name">{{.Person.Name}}</span>
+            <span class="column__balance">{{pts .Points}}{{if .Pence}} · {{money .Pence}}{{end}}</span>
+            {{if .Waiting}}<span class="tag tag--wait column__waiting">🎁 {{.Waiting}} waiting</span>{{end}}
+          </span>
+        </button>
+      </h2>
+      {{with .Goal}}{{template "goal" (dict "Goal" . "PersonID" $col.Person.ID)}}{{end}}
       {{if .TotalToday}}
       <div class="progress" role="img" aria-label="{{.DoneToday}} of {{.TotalToday}} done today">
         <div class="progress__bar"><span style="width: {{percent .DoneToday .TotalToday}}%"></span></div>
@@ -35,7 +42,9 @@
       </div>
       {{end}}
       {{if .Cards}}
-      <ul class="chores">{{range .Cards}}{{template "card" (dict "Card" . "Adult" $.Adult)}}{{end}}</ul>
+      <ul class="chores{{if .Person.PictureCards}} chores--pictures{{end}}">
+        {{- range .Cards}}{{template "card" (dict "Card" . "Adult" $.Adult "Pictures" $col.Person.PictureCards)}}{{end -}}
+      </ul>
       {{else}}
       <p class="column__empty">Nothing today.</p>
       {{end}}
@@ -46,23 +55,25 @@
 </div>
 {{end}}
 
-{{/* One chore: dict "Card" chores.Card "Adult" bool. Pool chores open the
+{{/* One chore: dict "Card" chores.Card "Adult" bool "Pictures" (picture
+     cards: a big emoji tile, never without an emoji). Pool chores open the
      picker; assigned and claimed chores are completed with one tap; done
      chores open the review sheet for an adult, and are inert otherwise. */}}
 {{define "card"}}
-{{- $adult := .Adult}}{{with .Card}}
+{{- $adult := .Adult}}{{$e := .Card.Emoji}}{{if .Pictures}}{{$e = .Card.PictureEmoji}}{{end}}{{with .Card}}
 <li class="chore{{if .Done}} chore--done{{if .JustDone}} chore--just{{end}}{{end}}{{if .Overdue}} chore--overdue{{end}}{{if .Claimed}} chore--claimed{{end}}">
   {{if and .Done $adult .CompletionID}}
   <button class="chore__main" type="button"
           hx-get="/board/completions/{{.CompletionID}}/review" hx-target="#sheet-body" hx-swap="innerHTML">
-    {{template "done_body" .}}
+    {{template "done_body" (dict "C" . "E" $e)}}
   </button>
   {{else if .Done}}
-  <div class="chore__main">{{template "done_body" .}}</div>
+  <div class="chore__main">{{template "done_body" (dict "C" . "E" $e)}}</div>
   {{else if and .Pool (not .Claimed)}}
   <button class="chore__main" type="button"
           hx-get="/board/occurrences/{{.OccurrenceID}}/pick" hx-target="#sheet-body" hx-swap="innerHTML">
     <span class="chore__check chore__check--pool" aria-hidden="true">+</span>
+    {{with $e}}<span class="chore__emoji" aria-hidden="true">{{.}}</span>{{end}}
     <span class="chore__text">
       <span class="chore__title">{{.Title}}</span>
       {{template "chore_meta" .}}
@@ -70,8 +81,10 @@
   </button>
   {{else}}
   <button class="chore__main" type="button" hx-disabled-elt="this"
-          hx-post="/board/occurrences/{{.OccurrenceID}}/complete" hx-target="#board" hx-swap="outerHTML">
+          hx-post="/board/occurrences/{{.OccurrenceID}}/complete" hx-target="#board" hx-swap="outerHTML"
+          {{- if .Shared}} hx-vals='{"person": "{{.For}}"}'{{end}}>
     <span class="chore__check" aria-hidden="true"></span>
+    {{with $e}}<span class="chore__emoji" aria-hidden="true">{{.}}</span>{{end}}
     <span class="chore__text">
       <span class="visually-hidden">Mark done: </span><span class="chore__title">{{.Title}}</span>
       {{template "chore_meta" .}}
@@ -86,19 +99,23 @@
 {{end}}
 {{- end}}
 
-{{define "done_body"}}
+{{define "done_body"}}{{$e := .E}}{{with .C}}
 <span class="chore__check chore__check--on" aria-hidden="true">✓</span>
+{{with $e}}<span class="chore__emoji" aria-hidden="true">{{.}}</span>{{end}}
 <span class="chore__text">
   <span class="chore__title">{{.Title}}</span>
   <span class="chore__meta">{{if .Pending}}<span class="tag tag--wait">Waiting for a grown-up</span>{{else}}Done{{end}}</span>
 </span>
-{{end}}
+{{end}}{{end}}
 
 {{define "chore_meta"}}
 <span class="chore__meta">
   {{- if .Overdue}}<span class="tag tag--late">Overdue · {{shortDate .DueOn}}</span>{{end}}
+  {{- if .LastChance}}<span class="tag tag--last">Last chance{{with .Until}} · until {{.}}{{end}}</span>{{else if .Flex}}<span class="tag tag--flex">{{.Flex}}</span>
+  {{- else if .OnTheDay}}<span class="tag tag--last">{{with .Until}}Until {{.}}{{else}}Today only{{end}}</span>{{end}}
   {{- if .Claimed}}<span class="tag">Claimed</span>{{end}}
-  {{- with .DueTime}}<span>by {{.}}</span>{{end}}
+  {{- with .With}}<span class="chore__with" role="img" aria-label="Shared with {{names .}}">{{range .}}{{template "avatar" (avatar . "xs")}}{{end}}</span>{{end}}
+  {{- if not .Until}}{{with .DueTime}}<span>by {{.}}</span>{{end}}{{end}}
   {{- with worth .Points .Pence}}<span class="chip">{{.}}</span>{{end -}}
 </span>
 {{end}}
@@ -107,7 +124,7 @@
 {{define "picker"}}
 <form class="picker" hx-target="#board" hx-swap="outerHTML" onsubmit="return false">
   {{/* Focus the title, not the first avatar, so nobody looks pre-chosen. */}}
-  <h2 class="picker__title" tabindex="-1" autofocus>{{.Card.Title}}</h2>
+  <h2 class="picker__title" tabindex="-1" autofocus>{{with .Card.Emoji}}<span class="picker__emoji" aria-hidden="true">{{.}}</span> {{end}}{{.Card.Title}}</h2>
   <p class="picker__ask">Who's doing this?</p>
   <div class="picker__people">
     {{range .People}}
@@ -133,7 +150,7 @@
 {{define "review"}}
 {{with .C}}
 <div class="picker" hx-target="#board" hx-swap="outerHTML">
-  <h2 class="picker__title" tabindex="-1" autofocus>{{.Title}}</h2>
+  <h2 class="picker__title" tabindex="-1" autofocus>{{with .Emoji}}<span class="picker__emoji" aria-hidden="true">{{.}}</span> {{end}}{{.Title}}</h2>
   <div class="review__who">
     {{template "avatar" (avatar .Person "md")}}
     <p>{{.Person.Name}} · {{when .CompletedAt}}{{with worth .Points .Pence}}<br><span class="chip">{{.}}</span>{{end}}</p>
@@ -158,3 +175,128 @@
 </div>
 {{end}}
 {{end}}
+
+{{/* A person's sheet, opened from their column: what they can spend (and
+     what waiting claims hold), what they've earned this week, their waiting
+     claims, and the rewards in cost order, with Claim on the affordable ones.
+     data-refresh lets the page re-fetch it when the board changes. */}}
+{{define "person"}}
+<div class="person" style="--person: {{.Person.Colour}}" data-refresh="/board/people/{{.Person.ID}}">
+  <div class="person__head">
+    {{template "avatar" (avatar .Person "lg")}}
+    <h2 class="picker__title" tabindex="-1" autofocus>{{.Person.Name}}</h2>
+  </div>
+  <p class="person__balance">{{pts .Points}}{{if .Pence}} <span class="person__money">{{money .Pence}}</span>{{end}}
+    {{- with worth .HeldPoints .HeldPence}} <span class="person__held">({{.}} held)</span>{{end}}</p>
+  <p class="person__week">This week: {{with worth .WeekPoints .WeekPence}}{{.}}{{else}}nothing yet{{end}}</p>
+  {{with .Goal}}
+  <h3 class="person__sub">Saving for</h3>
+  {{template "goal" (dict "Goal" . "PersonID" $.Person.ID)}}
+  <button class="btn btn--ghost person__stop" type="button" hx-disabled-elt="this"
+          hx-post="/board/people/{{$.Person.ID}}/goal/clear" hx-target="#board" hx-swap="outerHTML">Stop saving</button>
+  {{end}}
+  {{if .Waiting}}
+  <h3 class="person__sub">Waiting for a grown-up</h3>
+  <ul class="rewards" hx-target="#board" hx-swap="outerHTML">
+    {{range .Waiting}}
+    <li class="reward reward--waiting">
+      {{if $.Adult}}
+      <button class="reward__open" type="button"
+              hx-get="/board/redemptions/{{.ID}}/review" hx-target="#sheet-body" hx-swap="innerHTML">
+        <span class="reward__text">
+          <span class="reward__title">{{with .Emoji}}<span aria-hidden="true">{{.}}</span> {{end}}{{.Title}}</span>
+          {{with worth .Points .Pence}}<span class="chip">{{.}}</span>{{end}}
+        </span>
+        <span class="reward__status">Check ›</span>
+      </button>
+      {{else}}
+      <span class="reward__text">
+        <span class="reward__title">{{with .Emoji}}<span aria-hidden="true">{{.}}</span> {{end}}{{.Title}}</span>
+        {{with worth .Points .Pence}}<span class="chip">{{.}}</span>{{end}}
+      </span>
+      <button class="btn btn--ghost reward__action" type="button" hx-disabled-elt="this"
+              hx-post="/board/redemptions/{{.ID}}/cancel">Cancel</button>
+      {{end}}
+    </li>
+    {{end}}
+  </ul>
+  {{end}}
+  <h3 class="person__sub">Rewards</h3>
+  {{if .Rewards}}
+  <ul class="rewards" hx-target="#board" hx-swap="outerHTML">
+    {{range .Rewards}}
+    <li class="reward{{if .Affordable}} reward--affordable{{end}}">
+      <span class="reward__text">
+        <span class="reward__title">{{with .Emoji}}<span aria-hidden="true">{{.}}</span> {{end}}{{.Title}}</span>
+        {{with worth .CostPoints .CostPence}}<span class="chip">{{.}}</span>{{end}}
+      </span>
+      {{if .Affordable}}<button class="btn btn--primary reward__action" type="button" hx-disabled-elt="this"
+              hx-post="/board/rewards/{{.ID}}/claim" hx-vals='{"person": "{{$.Person.ID}}"}'>Claim</button>
+      {{else}}<span class="reward__side">
+        <span class="reward__need">
+          {{- if .NeedPoints}}{{pts .NeedPoints}} more{{end}}
+          {{- if and .NeedPoints .NeedPence}} · {{end}}
+          {{- if .NeedPence}}{{money .NeedPence}} more{{end -}}
+        </span>
+        {{if and $.Goal (eq $.Goal.RewardID .ID)}}<span class="tag reward__goal">Your goal</span>
+        {{else}}<button class="btn btn--ghost reward__action" type="button" hx-disabled-elt="this"
+                hx-post="/board/people/{{$.Person.ID}}/goal" hx-vals='{"reward": "{{.ID}}"}'>Save for this</button>{{end}}
+      </span>{{end}}
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="muted">No rewards yet. A grown-up can add some in Admin.</p>
+  {{end}}
+  <div class="picker__actions">
+    <button class="btn btn--ghost btn--block" type="button" data-close>Close</button>
+  </div>
+</div>
+{{end}}
+
+{{/* An adult's sheet for a waiting reward claim: approve spends the held
+     points, decline lets them go. */}}
+{{define "claim_review"}}
+{{with .D}}
+<div class="picker" hx-target="#board" hx-swap="outerHTML">
+  <h2 class="picker__title" tabindex="-1" autofocus>{{with .Emoji}}<span aria-hidden="true">{{.}}</span> {{end}}{{.Title}}</h2>
+  <div class="review__who">
+    {{template "avatar" (avatar .Person "md")}}
+    <p>{{.Person.Name}} · asked {{when .RequestedAt}}{{with worth .Points .Pence}}<br><span class="chip">{{.}}</span>{{end}}</p>
+  </div>
+  <div class="picker__actions">
+    <button class="btn btn--block" type="button" hx-disabled-elt="this"
+            hx-post="/board/redemptions/{{.ID}}/decline">Decline</button>
+    <button class="btn btn--primary btn--block" type="button" hx-disabled-elt="this"
+            hx-post="/board/redemptions/{{.ID}}/approve">Approve</button>
+    <button class="btn btn--ghost btn--block" type="button"
+            hx-get="/board/people/{{.Person.ID}}" hx-target="#sheet-body" hx-swap="innerHTML">Back</button>
+  </div>
+</div>
+{{end}}
+{{end}}
+
+{{/* What a person is saving for: dict "Goal" chores.Goal "PersonID" int64.
+     Once it's reached the page script celebrates it, once per display per
+     goal (data-celebrate is the key). */}}
+{{define "goal"}}{{$pid := .PersonID}}{{with .Goal}}
+<div class="goal{{if .Reached}} goal--reached{{end}}{{if .Waiting}} goal--waiting{{end}}"
+     hx-target="#board" hx-swap="outerHTML"
+     {{- if .Reached}} data-celebrate="{{$pid}}:{{.RewardID}}:{{.SetAt}}"{{end}}>
+  <p class="goal__line">
+    <span class="goal__emoji" aria-hidden="true">{{.Emoji}}</span>
+    <span class="goal__title">{{.Title}}</span>
+    <span class="goal__have">
+      {{- if .CostPoints}}{{.HavePoints}} of {{pts .CostPoints}}{{end}}
+      {{- if and .CostPoints .CostPence}} · {{end}}
+      {{- if .CostPence}}{{money .HavePence}} of {{money .CostPence}}{{end -}}
+    </span>
+  </p>
+  <div class="goal__bar" role="img" aria-label="Saving for {{.Title}}: {{.Percent}}%"><span style="width: {{.Percent}}%"></span></div>
+  {{if .Waiting}}<p class="goal__status"><span class="tag tag--wait">Waiting for a grown-up</span></p>
+  {{else if .Reached}}<p class="goal__status"><span class="goal__ready">You've saved enough!</span>
+    <button class="btn btn--primary goal__claim" type="button" hx-disabled-elt="this"
+            hx-post="/board/rewards/{{.RewardID}}/claim" hx-vals='{"person": "{{$pid}}"}'>Claim</button></p>
+  {{end}}
+</div>
+{{end}}{{end}}

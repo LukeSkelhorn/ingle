@@ -19,17 +19,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lukeskelhorn/domus/internal/auth"
-	"github.com/lukeskelhorn/domus/internal/avatar"
-	"github.com/lukeskelhorn/domus/internal/calendar"
-	"github.com/lukeskelhorn/domus/internal/chores"
-	"github.com/lukeskelhorn/domus/internal/household"
-	"github.com/lukeskelhorn/domus/internal/locale"
-	"github.com/lukeskelhorn/domus/internal/lock"
-	"github.com/lukeskelhorn/domus/internal/photos"
-	"github.com/lukeskelhorn/domus/internal/settings"
-	"github.com/lukeskelhorn/domus/internal/store"
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/auth"
+	"github.com/lukeskelhorn/ingle/internal/avatar"
+	"github.com/lukeskelhorn/ingle/internal/calendar"
+	"github.com/lukeskelhorn/ingle/internal/chores"
+	"github.com/lukeskelhorn/ingle/internal/household"
+	"github.com/lukeskelhorn/ingle/internal/locale"
+	"github.com/lukeskelhorn/ingle/internal/lock"
+	"github.com/lukeskelhorn/ingle/internal/photos"
+	"github.com/lukeskelhorn/ingle/internal/settings"
+	"github.com/lukeskelhorn/ingle/internal/store"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/web"
 )
 
 type harness struct {
@@ -38,7 +39,7 @@ type harness struct {
 	st   *store.Store
 	hh   int64
 	auth *auth.Service
-	// photoDir is the read-only photos folder (DOMUS_PHOTOS_DIR).
+	// photoDir is the read-only photos folder (INGLE_PHOTOS_DIR).
 	photoDir string
 	lib      *photos.Library
 	lock     *lock.Service
@@ -72,7 +73,7 @@ func newHarness(t *testing.T) *harness {
 	t.Helper()
 	ctx := t.Context()
 	dir := t.TempDir()
-	db, err := store.Open(ctx, filepath.Join(dir, "domus.db"))
+	db, err := store.Open(ctx, filepath.Join(dir, "ingle.db"))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -99,6 +100,7 @@ func newHarness(t *testing.T) *harness {
 	h.auth = auth.New(st, set)
 	h.auth.SetClock(h.clock)
 	choreSvc := chores.New(st, set.Location)
+	choreSvc.SetDayStart(set.DayStart)
 	choreSvc.SetClock(h.clock)
 	hhSvc := household.New(st)
 	hhSvc.SetClock(h.clock)
@@ -189,6 +191,16 @@ func (d *device) get(path string) resp {
 
 func (d *device) post(path string, form url.Values) resp {
 	d.h.t.Helper()
+	// Chore and reward forms behave like a browser running the page's
+	// script, which offers emoji suggestions itself. Pass suggest_offered
+	// (even empty) to act otherwise.
+	if (strings.HasPrefix(path, "/admin/chores") || strings.HasPrefix(path, "/admin/rewards")) && !form.Has("suggest_offered") {
+		f := url.Values{"suggest_offered": {"1"}}
+		for k, v := range form {
+			f[k] = v
+		}
+		form = f
+	}
 	req, err := http.NewRequestWithContext(d.h.t.Context(), http.MethodPost, d.h.ts.URL+path, strings.NewReader(form.Encode()))
 	if err != nil {
 		d.h.t.Fatal(err)
@@ -282,7 +294,7 @@ func TestOpenRoutes(t *testing.T) {
 	}{
 		{"/healthz", "text/plain", "ok v9.8.7"},
 		{"/manifest.webmanifest", "application/manifest+json", `"display": "standalone"`},
-		{"/sw.js", "text/javascript", "domus-static"},
+		{"/sw.js", "text/javascript", `"ingle-static-` + web.StaticVersion() + `"`},
 		{"/static/htmx.min.js", "javascript", "htmx"},
 		{"/static/icons/icon-192.png", "image/png", ""},
 	}
@@ -297,13 +309,34 @@ func TestOpenRoutes(t *testing.T) {
 	}
 }
 
+// Pages link static files with the build's asset hash, and the service
+// worker's cache is named after it, so a new build never shows old CSS.
+func TestStaticAssetsAreVersioned(t *testing.T) {
+	h := newHarness(t)
+	d := h.device()
+	v := web.StaticVersion()
+	if len(v) != 12 {
+		t.Fatalf("StaticVersion = %q", v)
+	}
+	expect(t, d.get("/setup"), http.StatusOK, `href="/static/app.css?v=`+v+`"`, `src="/static/htmx.min.js?v=`+v+`"`)
+	if r := d.get("/sw.js"); strings.Contains(r.body, "{{VERSION}}") || r.header.Get("Cache-Control") != "no-cache" {
+		t.Errorf("sw.js: placeholder left or Cache-Control %q", r.header.Get("Cache-Control"))
+	}
+	if cc := d.get("/static/app.css?v=" + v).header.Get("Cache-Control"); !strings.Contains(cc, "immutable") {
+		t.Errorf("versioned asset Cache-Control = %q", cc)
+	}
+	if cc := d.get("/static/app.css").header.Get("Cache-Control"); cc != "no-cache" {
+		t.Errorf("unversioned asset Cache-Control = %q", cc)
+	}
+}
+
 func TestEverythingGoesToSetupFirst(t *testing.T) {
 	h := newHarness(t)
 	d := h.device()
 	for _, p := range []string{"/", "/admin", "/signin", "/admin/unlock", "/clock"} {
 		expectRedirect(t, d.get(p), "/setup")
 	}
-	expect(t, d.get("/setup"), http.StatusOK, "Welcome to Domus", `name="pin"`)
+	expect(t, d.get("/setup"), http.StatusOK, "Welcome to Ingle", `name="pin"`)
 }
 
 func TestSetupValidation(t *testing.T) {
@@ -627,7 +660,7 @@ func TestPhotoAvatar(t *testing.T) {
 	if err != nil || cfg.Width != avatar.Size || cfg.Height != avatar.Size {
 		t.Errorf("served avatar %dx%d (%v), want %d square", cfg.Width, cfg.Height, err, avatar.Size)
 	}
-	expect(t, wall.get("/avatars/..%2fdomus.db"), http.StatusNotFound)
+	expect(t, wall.get("/avatars/..%2fingle.db"), http.StatusNotFound)
 	expect(t, wall.get("/avatars/nope.jpg"), http.StatusNotFound)
 
 	// Saving again without a new file keeps the photo; switching to an emoji

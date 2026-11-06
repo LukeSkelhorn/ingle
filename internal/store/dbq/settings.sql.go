@@ -10,7 +10,7 @@ import (
 )
 
 const getSettings = `-- name: GetSettings :one
-SELECT household_id, timezone, day_starts_at, admin_idle_minutes, updated_at, screensaver_idle_minutes, unlock_code_hash, lock_days, lock_from, lock_until, lock_idle_hours, unlock_code_length FROM household_settings WHERE household_id = ?
+SELECT household_id, timezone, day_starts_at, admin_idle_minutes, updated_at, screensaver_idle_minutes, unlock_code_hash, lock_days, lock_from, lock_until, lock_idle_hours, unlock_code_length, calendar_idle_minutes FROM household_settings WHERE household_id = ?
 `
 
 func (q *Queries) GetSettings(ctx context.Context, householdID int64) (HouseholdSetting, error) {
@@ -29,6 +29,7 @@ func (q *Queries) GetSettings(ctx context.Context, householdID int64) (Household
 		&i.LockUntil,
 		&i.LockIdleHours,
 		&i.UnlockCodeLength,
+		&i.CalendarIdleMinutes,
 	)
 	return i, err
 }
@@ -90,9 +91,10 @@ func (q *Queries) SetUnlockCode(ctx context.Context, arg SetUnlockCodeParams) er
 const updateSettings = `-- name: UpdateSettings :one
 UPDATE household_settings
 SET timezone = ?, day_starts_at = ?, admin_idle_minutes = ?, screensaver_idle_minutes = ?,
+    calendar_idle_minutes = ?,
     lock_days = ?, lock_from = ?, lock_until = ?, lock_idle_hours = ?, updated_at = ?
 WHERE household_id = ?
-RETURNING household_id, timezone, day_starts_at, admin_idle_minutes, updated_at, screensaver_idle_minutes, unlock_code_hash, lock_days, lock_from, lock_until, lock_idle_hours, unlock_code_length
+RETURNING household_id, timezone, day_starts_at, admin_idle_minutes, updated_at, screensaver_idle_minutes, unlock_code_hash, lock_days, lock_from, lock_until, lock_idle_hours, unlock_code_length, calendar_idle_minutes
 `
 
 type UpdateSettingsParams struct {
@@ -100,6 +102,7 @@ type UpdateSettingsParams struct {
 	DayStartsAt            string `json:"day_starts_at"`
 	AdminIdleMinutes       int64  `json:"admin_idle_minutes"`
 	ScreensaverIdleMinutes int64  `json:"screensaver_idle_minutes"`
+	CalendarIdleMinutes    int64  `json:"calendar_idle_minutes"`
 	LockDays               int64  `json:"lock_days"`
 	LockFrom               string `json:"lock_from"`
 	LockUntil              string `json:"lock_until"`
@@ -114,6 +117,7 @@ func (q *Queries) UpdateSettings(ctx context.Context, arg UpdateSettingsParams) 
 		arg.DayStartsAt,
 		arg.AdminIdleMinutes,
 		arg.ScreensaverIdleMinutes,
+		arg.CalendarIdleMinutes,
 		arg.LockDays,
 		arg.LockFrom,
 		arg.LockUntil,
@@ -135,6 +139,7 @@ func (q *Queries) UpdateSettings(ctx context.Context, arg UpdateSettingsParams) 
 		&i.LockUntil,
 		&i.LockIdleHours,
 		&i.UnlockCodeLength,
+		&i.CalendarIdleMinutes,
 	)
 	return i, err
 }

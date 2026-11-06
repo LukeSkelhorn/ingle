@@ -1,7 +1,7 @@
 {{define "bodyclass"}}page{{end}}
 {{define "content"}}
 <main class="card card--narrow">
-  <h1>Welcome to Domus</h1>
+  <h1>Welcome to Ingle</h1>
   <p class="muted">Set up your household and the first adult. You can add everyone else afterwards.</p>
   <form method="post" action="/setup" class="stack">
     <fieldset class="stack">
@@ -25,7 +25,7 @@
       <label class="field">
         <span>Email</span>
         <input type="email" name="email" value="{{.Data.Email}}" required autocomplete="email">
-        <small class="muted">Use this with your password to manage Domus from your phone or computer.</small>
+        <small class="muted">Use this with your password to manage Ingle from your phone or computer.</small>
         {{template "err" index .Errors "email"}}
       </label>
       <label class="field">
@@ -59,7 +59,7 @@
       </label>
     </fieldset>
 
-    <button class="btn btn--primary btn--block" type="submit">Set up Domus</button>
+    <button class="btn btn--primary btn--block" type="submit">Set up Ingle</button>
   </form>
 </main>
 {{end}}

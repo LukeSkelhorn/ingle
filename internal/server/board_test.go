@@ -5,13 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"regexp"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
 // boardHousehold sets up Mum (display + phone), Alfie and Isla, an assigned
@@ -106,10 +107,12 @@ func TestBoardShowsColumnsAndPool(t *testing.T) {
 func TestBoardStrangerSeesNothing(t *testing.T) {
 	h, _, _ := boardHousehold(t)
 	stranger := h.device()
-	for _, p := range []string{"/board", "/board/events", "/board/occurrences/1/pick"} {
+	for _, p := range []string{"/board", "/board/events", "/board/occurrences/1/pick", "/board/people/1", "/board/redemptions/1/review"} {
 		expectRedirect(t, stranger.get(p), "/signin")
 	}
-	expectRedirect(t, stranger.post("/board/occurrences/1/complete", nil), "/signin")
+	for _, p := range []string{"/board/occurrences/1/complete", "/board/rewards/1/claim", "/board/redemptions/1/approve", "/board/redemptions/1/cancel", "/board/people/1/goal", "/board/people/1/goal/clear"} {
+		expectRedirect(t, stranger.post(p, nil), "/signin")
+	}
 }
 
 func TestBoardCompleteAndUndo(t *testing.T) {
@@ -343,7 +346,7 @@ func TestAdminCompletions(t *testing.T) {
 	expect(t, r, http.StatusOK, "Waiting for a grown-up")
 
 	expect(t, wall.get("/admin/completions"), http.StatusSeeOther)
-	expect(t, phone.get("/admin"), http.StatusOK, `href="/admin/completions"`, "Domus v9.8.7")
+	expect(t, phone.get("/admin"), http.StatusOK, `href="/admin/completions"`, "Ingle v9.8.7")
 	r = phone.get("/admin/completions")
 	expect(t, r, http.StatusOK, "Waiting for a grown-up", "Tidy bedroom", "Last 7 days", "Feed the cat", "Reverse")
 
@@ -423,5 +426,450 @@ func waitEvent(t *testing.T, events <-chan string) {
 		}
 	case <-time.After(3 * time.Second):
 		t.Error("no board event")
+	}
+}
+
+func TestPersonSheet(t *testing.T) {
+	h, wall, phone := boardHousehold(t)
+	alfie := h.person("Alfie")
+	sheet := "/board/people/" + itoa(alfie.ID)
+
+	// The column header opens the sheet.
+	if col := section(wall.get("/").body, "Alfie"); !strings.Contains(col, `hx-get="`+sheet+`"`) {
+		t.Errorf("Alfie's column doesn't open his sheet\n%s", col)
+	}
+
+	// Rewards: one he'll afford, one he won't, one archived.
+	for _, v := range []url.Values{
+		{"title": {"Film night pick"}, "cost_points": {"40"}},
+		{"title": {"Comic"}, "cost_points": {"60"}, "money": {"2.50"}},
+		{"title": {"Sweets"}, "cost_points": {"10"}},
+	} {
+		expectRedirect(t, phone.post("/admin/rewards", v), "/admin/rewards")
+	}
+	rewards := must(h.st.Q.ListRewards(t.Context(), h.hh))
+	for _, rw := range rewards {
+		if rw.Title == "Sweets" {
+			expectRedirect(t, phone.post("/admin/rewards/"+itoa(rw.ID)+"/archive", nil), "/admin/rewards")
+		}
+	}
+
+	// 40 pts and £1 from last week (it's Wednesday 1 July; the week began
+	// Monday 29 June), plus Feed the cat (2 pts) today.
+	if _, err := h.st.Q.InsertLedgerEntry(t.Context(), dbq.InsertLedgerEntryParams{
+		HouseholdID: h.hh, PersonID: alfie.ID, Points: 40, Pence: 100, Kind: "completion",
+		CreatedAt: time.Date(2026, 6, 28, 12, 0, 0, 0, time.UTC).Unix(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	expect(t, wall.post("/board/occurrences/"+itoa(h.occurrence("Feed the cat").ID)+"/complete", nil), http.StatusOK)
+
+	r := wall.get(sheet)
+	expect(t, r, http.StatusOK, "Alfie", "🦖", "42 pts", "£1.00", "This week: 2 pts",
+		`data-refresh="`+sheet+`"`, "Film night pick", "Comic", "18 pts more · £1.50 more")
+	if strings.Contains(r.body, "Sweets") {
+		t.Error("archived reward on the sheet")
+	}
+	film := r.body[strings.Index(r.body, "Film night pick")-200:]
+	if !strings.Contains(film[:200], "reward--affordable") {
+		t.Errorf("Film night pick not marked affordable\n%s", film[:300])
+	}
+	comic := r.body[strings.Index(r.body, "Comic")-200:]
+	if strings.Contains(comic[:200], "reward--affordable") {
+		t.Error("Comic marked affordable")
+	}
+
+	// Phones (adults) can open it too; a stranger can't.
+	expect(t, phone.get(sheet), http.StatusOK, "42 pts")
+	expectRedirect(t, h.device().get(sheet), "/signin")
+
+	// Isla has nothing yet.
+	expect(t, wall.get("/board/people/"+itoa(h.person("Isla").ID)), http.StatusOK, "0 pts", "This week: nothing yet", "40 pts more")
+
+	// Unknown and archived people are gone from the board.
+	for _, p := range []string{"/board/people/9999", "/board/people/x"} {
+		if got := wall.get(p).status; got != http.StatusConflict && got != http.StatusNotFound {
+			t.Errorf("GET %s = %d", p, got)
+		}
+	}
+	r = wall.get("/board/people/9999")
+	if got := toastOf(t, r); !got.Error || got.Message == "" {
+		t.Errorf("unknown person toast = %+v", got)
+	}
+}
+
+func TestClaimRewardFromTheBoard(t *testing.T) {
+	h, wall, phone := boardHousehold(t)
+	alfie := h.person("Alfie")
+	sheet := "/board/people/" + itoa(alfie.ID)
+	expectRedirect(t, phone.post("/admin/rewards", url.Values{"title": {"Screen time"}, "cost_points": {"30"}}), "/admin/rewards")
+	expectRedirect(t, phone.post("/admin/rewards", url.Values{"title": {"Lego set"}, "cost_points": {"500"}}), "/admin/rewards")
+	var screen, lego int64
+	for _, rw := range must(h.st.Q.ListRewards(t.Context(), h.hh)) {
+		switch rw.Title {
+		case "Screen time":
+			screen = rw.ID
+		case "Lego set":
+			lego = rw.ID
+		}
+	}
+	claim := "/board/rewards/" + itoa(screen) + "/claim"
+	if _, err := h.st.Q.InsertLedgerEntry(t.Context(), dbq.InsertLedgerEntryParams{
+		HouseholdID: h.hh, PersonID: alfie.ID, Points: 70, Kind: "completion", CreatedAt: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Affordable rewards have Claim; the rest say what's missing.
+	r := wall.get(sheet)
+	expect(t, r, http.StatusOK, `hx-post="`+claim+`"`, `"person": "`+itoa(alfie.ID)+`"`)
+	if strings.Contains(r.body, "/board/rewards/"+itoa(lego)+"/claim") {
+		t.Error("Lego set (unaffordable) has Claim")
+	}
+
+	// No adult at the wall: it waits, and the points are held.
+	r = wall.post(claim, url.Values{"person": {itoa(alfie.ID)}})
+	expect(t, r, http.StatusOK, `id="board"`, "🎁 1 waiting", "40 pts")
+	if tt := toastOf(t, r); tt.Error || !strings.Contains(tt.Message, "grown-up") {
+		t.Errorf("toast = %+v", tt)
+	}
+	expect(t, wall.get(sheet), http.StatusOK, "40 pts", "(30 pts held)", "Waiting for a grown-up", "/cancel")
+	expect(t, wall.post(claim, nil), http.StatusBadRequest)
+	r = wall.post("/board/rewards/"+itoa(lego)+"/claim", url.Values{"person": {itoa(alfie.ID)}})
+	expect(t, r, http.StatusConflict)
+	if tt := toastOf(t, r); !tt.Error || !strings.Contains(tt.Message, "Not enough") {
+		t.Errorf("unaffordable toast = %+v", tt)
+	}
+
+	waiting := must(h.st.Q.ListPendingRedemptions(t.Context(), h.hh))
+	if len(waiting) != 1 {
+		t.Fatalf("waiting = %d", len(waiting))
+	}
+	id := itoa(waiting[0].ID)
+	review := "/board/redemptions/" + id + "/review"
+
+	// The wall can't approve, but can cancel.
+	expect(t, wall.get(review), http.StatusConflict)
+	expect(t, wall.post("/board/redemptions/"+id+"/approve", nil), http.StatusForbidden)
+	expect(t, wall.post("/board/redemptions/"+id+"/cancel", nil), http.StatusOK, "70 pts")
+	if strings.Contains(wall.get("/board").body, "waiting") {
+		t.Error("cancelled claim still waiting on the board")
+	}
+
+	// Claim again, then unlock on the wall: the sheet offers review.
+	expect(t, wall.post(claim, url.Values{"person": {itoa(alfie.ID)}}), http.StatusOK, "🎁 1 waiting")
+	id = itoa(must(h.st.Q.ListPendingRedemptions(t.Context(), h.hh))[0].ID)
+	review = "/board/redemptions/" + id + "/review"
+	expectRedirect(t, wall.post("/admin/unlock", url.Values{"person": {itoa(h.person("Mum").ID)}, "pin": {"2468"}}), "/admin")
+	expect(t, wall.get(sheet), http.StatusOK, `hx-get="`+review+`"`)
+	expect(t, wall.get(review), http.StatusOK, "Screen time", "Alfie", "Approve", "Decline", "30 pts")
+	expect(t, wall.post("/board/redemptions/"+id+"/approve", nil), http.StatusOK, "40 pts")
+	expect(t, wall.post("/board/redemptions/"+id+"/approve", nil), http.StatusConflict)
+	expect(t, wall.get(review), http.StatusConflict)
+
+	// With an adult there, a claim is approved at once.
+	r = wall.post(claim, url.Values{"person": {itoa(alfie.ID)}})
+	expect(t, r, http.StatusOK, "10 pts")
+	if tt := toastOf(t, r); !strings.Contains(tt.Message, "Enjoy, Alfie") {
+		t.Errorf("toast = %+v", tt)
+	}
+	if n := len(must(h.st.Q.ListPendingRedemptions(t.Context(), h.hh))); n != 0 {
+		t.Errorf("%d claims waiting after an adult claimed", n)
+	}
+
+	// The feed names the reward.
+	expect(t, phone.get("/admin"), http.StatusOK, "Alfie</strong> claimed Screen time")
+}
+
+func TestAdminRewardClaims(t *testing.T) {
+	h, wall, phone := boardHousehold(t)
+	alfie := h.person("Alfie")
+	expectRedirect(t, phone.post("/admin/rewards", url.Values{"title": {"Screen time"}, "cost_points": {"30"}}), "/admin/rewards")
+	screen := must(h.st.Q.ListRewards(t.Context(), h.hh))[0]
+	if _, err := h.st.Q.InsertLedgerEntry(t.Context(), dbq.InsertLedgerEntryParams{
+		HouseholdID: h.hh, PersonID: alfie.ID, Points: 70, Kind: "completion", CreatedAt: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	claim := "/board/rewards/" + itoa(screen.ID) + "/claim"
+	for range 2 {
+		expect(t, wall.post(claim, url.Values{"person": {itoa(alfie.ID)}}), http.StatusOK)
+	}
+	expect(t, phone.get("/admin"), http.StatusOK, "<strong>2</strong><span>Waiting for approval")
+	pending := must(h.st.Q.ListPendingRedemptions(t.Context(), h.hh))
+	expect(t, phone.get("/admin/completions"), http.StatusOK, "Rewards waiting", "Screen time",
+		"/admin/rewards/claims/"+itoa(pending[0].ID)+"/approve")
+
+	expect(t, phone.post("/admin/rewards/claims/"+itoa(pending[0].ID)+"/approve", nil), http.StatusOK, "Reward approved.")
+	expect(t, phone.post("/admin/rewards/claims/"+itoa(pending[1].ID)+"/decline", nil), http.StatusOK, "Reward declined")
+	expect(t, phone.post("/admin/rewards/claims/"+itoa(pending[1].ID)+"/decline", nil), http.StatusConflict, "already checked")
+	r := phone.get("/admin/completions")
+	if strings.Contains(r.body, "Rewards waiting") {
+		t.Error("settled claims still listed")
+	}
+	expect(t, wall.get("/board/people/"+itoa(alfie.ID)), http.StatusOK, "40 pts")
+	expect(t, phone.get("/admin"), http.StatusOK, "declined a claim for Screen time")
+}
+
+func TestSaveForAReward(t *testing.T) {
+	h, wall, phone := boardHousehold(t)
+	alfie := h.person("Alfie")
+	sheet := "/board/people/" + itoa(alfie.ID)
+	goal := sheet + "/goal"
+	expectRedirect(t, phone.post("/admin/rewards", url.Values{"title": {"Lego set"}, "emoji": {"🧱"}, "cost_points": {"100"}}), "/admin/rewards")
+	expectRedirect(t, phone.post("/admin/rewards", url.Values{"title": {"Sweets"}, "cost_points": {"10"}}), "/admin/rewards")
+	expect(t, phone.post("/admin/rewards", url.Values{"title": {"Odd"}, "emoji": {"x"}, "cost_points": {"1"}}), http.StatusUnprocessableEntity, "Use a single emoji")
+	var lego, sweets int64
+	for _, rw := range must(h.st.Q.ListRewards(t.Context(), h.hh)) {
+		switch rw.Title {
+		case "Lego set":
+			lego = rw.ID
+		case "Sweets":
+			sweets = rw.ID
+		}
+	}
+	if _, err := h.st.Q.InsertLedgerEntry(t.Context(), dbq.InsertLedgerEntryParams{
+		HouseholdID: h.hh, PersonID: alfie.ID, Points: 60, Kind: "completion", CreatedAt: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Only rewards they can't afford yet offer saving.
+	r := wall.get(sheet)
+	expect(t, r, http.StatusOK, "🧱", `hx-post="`+goal+`" hx-vals='{"reward": "`+itoa(lego)+`"}'`)
+	if strings.Contains(r.body, `"reward": "`+itoa(sweets)+`"`) {
+		t.Error("affordable Sweets offers Save for this")
+	}
+
+	r = wall.post(goal, url.Values{"reward": {itoa(lego)}})
+	expect(t, r, http.StatusOK, `id="board"`)
+	if tt := toastOf(t, r); tt.Message != "Saving for Lego set 🧱" {
+		t.Errorf("toast = %+v", tt)
+	}
+	col := section(r.body, "Alfie")
+	for _, want := range []string{`class="goal"`, "🧱", "Lego set", "60 of 100 pts", "width: 60%"} {
+		if !strings.Contains(col, want) {
+			t.Errorf("column missing %q", want)
+		}
+	}
+	if strings.Contains(col, "data-celebrate") {
+		t.Error("celebrating before the goal is reached")
+	}
+	expect(t, wall.get(sheet), http.StatusOK, "Saving for", "Stop saving", "Your goal")
+	expect(t, wall.post(goal, nil), http.StatusBadRequest)
+	expect(t, wall.post(goal, url.Values{"reward": {"9999"}}), http.StatusConflict)
+
+	// Reached: Claim on the column, and a key to celebrate once.
+	if _, err := h.st.Q.InsertLedgerEntry(t.Context(), dbq.InsertLedgerEntryParams{
+		HouseholdID: h.hh, PersonID: alfie.ID, Points: 40, Kind: "completion", CreatedAt: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	col = section(wall.get("/board").body, "Alfie")
+	setAt := *h.person("Alfie").GoalSetAt
+	for _, want := range []string{
+		"goal--reached", `data-celebrate="` + itoa(alfie.ID) + ":" + itoa(lego) + ":" + itoa(setAt) + `"`,
+		`hx-post="/board/rewards/` + itoa(lego) + `/claim"`, "saved enough!",
+	} {
+		if !strings.Contains(col, want) {
+			t.Errorf("reached column missing %q", want)
+		}
+	}
+
+	// Claimed: waiting. Approved: the goal is gone.
+	col = section(wall.post("/board/rewards/"+itoa(lego)+"/claim", url.Values{"person": {itoa(alfie.ID)}}).body, "Alfie")
+	if !strings.Contains(col, "goal--waiting") || strings.Contains(col, "data-celebrate") {
+		t.Errorf("claimed goal should wait without celebrating: %s", col)
+	}
+	pending := must(h.st.Q.ListPendingRedemptions(t.Context(), h.hh))
+	expect(t, phone.post("/admin/rewards/claims/"+itoa(pending[0].ID)+"/approve", nil), http.StatusOK)
+	if strings.Contains(section(wall.get("/board").body, "Alfie"), `class="goal`) {
+		t.Error("goal still shown after approval")
+	}
+
+	// Stop saving.
+	expect(t, wall.post(goal, url.Values{"reward": {itoa(sweets)}}), http.StatusOK, "Sweets")
+	r = wall.post(goal+"/clear", nil)
+	expect(t, r, http.StatusOK)
+	if tt := toastOf(t, r); tt.Message != "Goal removed" {
+		t.Errorf("toast = %+v", tt)
+	}
+	if h.person("Alfie").GoalRewardID != nil {
+		t.Error("goal not cleared")
+	}
+}
+
+func TestAdminPersonGoal(t *testing.T) {
+	h, _, phone := boardHousehold(t)
+	alfie := h.person("Alfie")
+	expectRedirect(t, phone.post("/admin/rewards", url.Values{"title": {"Lego set"}, "emoji": {"🧱"}, "cost_points": {"100"}}), "/admin/rewards")
+	lego := must(h.st.Q.ListRewards(t.Context(), h.hh))[0]
+	page := "/admin/people/" + itoa(alfie.ID)
+	expect(t, phone.get(page), http.StatusOK, "Saving for", `<option value="`+itoa(lego.ID)+`">🧱 Lego set (100 pts)</option>`)
+
+	form := url.Values{"name": {"Alfie"}, "kind": {"child"}, "colour": {"#46A758"}, "avatar_mode": {"emoji"}, "emoji": {"🦖"}, "sort_order": {"1"}}
+	form.Set("goal", itoa(lego.ID))
+	expect(t, phone.post(page, form), http.StatusOK, "Saved.", `<option value="`+itoa(lego.ID)+`" selected>`)
+	first := h.person("Alfie")
+	if first.GoalRewardID == nil || *first.GoalRewardID != lego.ID {
+		t.Fatalf("goal = %v", first.GoalRewardID)
+	}
+	// Saving again doesn't restart it.
+	h.advance(time.Hour)
+	expect(t, phone.post(page, form), http.StatusOK)
+	if again := h.person("Alfie"); *again.GoalSetAt != *first.GoalSetAt {
+		t.Error("re-saving the same goal reset it")
+	}
+	// A form without the field leaves it alone; an empty choice clears it.
+	form.Del("goal")
+	expect(t, phone.post(page, form), http.StatusOK)
+	if h.person("Alfie").GoalRewardID == nil {
+		t.Error("goal cleared by a form without it")
+	}
+	form.Set("goal", "")
+	expect(t, phone.post(page, form), http.StatusOK)
+	if h.person("Alfie").GoalRewardID != nil {
+		t.Error("goal not cleared")
+	}
+
+	// Archiving the reward clears goals quietly.
+	form.Set("goal", itoa(lego.ID))
+	expect(t, phone.post(page, form), http.StatusOK)
+	expectRedirect(t, phone.post("/admin/rewards/"+itoa(lego.ID)+"/archive", nil), "/admin/rewards")
+	if h.person("Alfie").GoalRewardID != nil {
+		t.Error("archived reward still a goal")
+	}
+	expect(t, phone.post(page, form), http.StatusOK, "that reward has gone")
+}
+
+func TestToastHeaderIsASCII(t *testing.T) {
+	rec := httptest.NewRecorder()
+	setToast(rec, toast{Message: "Enjoy, Zoë! 🎁"})
+	h := rec.Header().Get("HX-Trigger")
+	for _, c := range []byte(h) {
+		if c >= 0x80 {
+			t.Fatalf("HX-Trigger has non-ASCII: %q", h)
+		}
+	}
+	var m map[string]toast
+	if err := json.Unmarshal([]byte(h), &m); err != nil || m["toast"].Message != "Enjoy, Zoë! 🎁" {
+		t.Errorf("round trip = %+v, %v (%q)", m, err, h)
+	}
+}
+
+func TestBoardSharedChore(t *testing.T) {
+	h, wall, phone := boardHousehold(t)
+	mum, alfie, isla := h.person("Mum"), h.person("Alfie"), h.person("Isla")
+	expectRedirect(t, phone.post("/admin/chores", url.Values{
+		"title": {"School run"}, "mode": {"shared"}, "people_ids": {itoa(mum.ID), itoa(isla.ID)},
+		"repeat": {"daily"}, "starts_on": {"2026-07-01"}, "points": {"0"},
+	}), "/admin/chores")
+	occ := h.occurrence("School run")
+
+	r := wall.get("/board")
+	for _, p := range []dbq.Person{mum, isla} {
+		sec := section(r.body, p.Name)
+		if !strings.Contains(sec, "School run") || !strings.Contains(sec, `hx-vals='{"person": "`+itoa(p.ID)+`"}'`) {
+			t.Errorf("%s's column has no School run tapping as them:\n%s", p.Name, sec)
+		}
+	}
+	if strings.Contains(section(r.body, "Alfie"), "School run") || strings.Contains(poolOf(r.body), "School run") {
+		t.Error("School run shown for Alfie or in Up for grabs")
+	}
+	if !strings.Contains(section(r.body, "Mum"), `aria-label="Shared with Isla"`) {
+		t.Error("Mum's card doesn't say who it's shared with")
+	}
+
+	// Alfie isn't one of them.
+	r = wall.post("/board/occurrences/"+itoa(occ.ID)+"/complete", url.Values{"person": {itoa(alfie.ID)}})
+	if r.status != http.StatusConflict || !toastOf(t, r).Error {
+		t.Errorf("Alfie completing = %d %+v", r.status, toastOf(t, r))
+	}
+	// Without saying who, it can't tell.
+	r = wall.post("/board/occurrences/"+itoa(occ.ID)+"/complete", nil)
+	if tt := toastOf(t, r); tt.Message != "Choose who did it." {
+		t.Errorf("no person toast = %+v", tt)
+	}
+
+	r = wall.post("/board/occurrences/"+itoa(occ.ID)+"/complete", url.Values{"person": {itoa(isla.ID)}})
+	expect(t, r, http.StatusOK)
+	if tt := toastOf(t, r); tt.Message != "Nice one, Isla! Done for everyone." {
+		t.Errorf("toast = %+v", tt)
+	}
+	if strings.Contains(section(r.body, "Mum"), "School run") {
+		t.Error("still in Mum's column after Isla did it")
+	}
+	if !strings.Contains(section(r.body, "Isla"), "School run") {
+		t.Error("not ticked in Isla's column")
+	}
+}
+
+// The page script keeps each column's scroll position across refreshes by
+// person, and starts afresh when the board day changes.
+func TestBoardScrollHooks(t *testing.T) {
+	h, wall, _ := boardHousehold(t)
+	alfie := h.person("Alfie")
+	expect(t, wall.get("/board"), http.StatusOK,
+		`id="board" class="board__body" data-day="2026-07-01"`,
+		`aria-label="Alfie" data-person="`+itoa(alfie.ID)+`"`)
+	expect(t, wall.get("/"), http.StatusOK, "htmx:beforeSwap", "has-more")
+}
+
+func TestBoardOnTheDay(t *testing.T) {
+	h, wall, phone := boardHousehold(t)
+	alfie, isla := h.person("Alfie"), h.person("Isla")
+	expectRedirect(t, phone.post("/admin/chores", url.Values{
+		"title": {"Bins out"}, "mode": {"assigned"}, "assignee_id": {itoa(alfie.ID)}, "repeat": {"once"},
+		"starts_on": {"2026-07-01"}, "points": {"3"}, "due_time": {"08:00"}, "on_the_day": {"1"},
+	}), "/admin/chores")
+	expectRedirect(t, phone.post("/admin/chores", url.Values{
+		"title": {"Milk out"}, "mode": {"pool"}, "repeat": {"once"},
+		"starts_on": {"2026-07-01"}, "points": {"1"}, "on_the_day": {"1"},
+	}), "/admin/chores")
+	bins, milk := h.occurrence("Bins out"), h.occurrence("Milk out")
+
+	r := phone.get("/admin/chores")
+	expect(t, r, http.StatusOK, "Only on the day")
+	expect(t, phone.get("/admin/chores/"+itoa(h.chore("Bins out").ID)), http.StatusOK,
+		`name="on_the_day" value="1" checked`)
+
+	// 00:30 BST: on the board until 08:00, refreshing then.
+	r = wall.get("/board")
+	expect(t, r, http.StatusOK, "Until 08:00", "Today only", `data-next-in="27001"`)
+	if strings.Contains(section(r.body, "Alfie"), "by 08:00</span><span class=\"chip\">3") {
+		t.Error("shows both by and until")
+	}
+
+	h.advance(8 * time.Hour) // 08:30
+	r = wall.get("/board")
+	if strings.Contains(r.body, "Bins out") {
+		t.Error("bins still on the board at 08:30")
+	}
+	r = wall.post("/board/occurrences/"+itoa(bins.ID)+"/complete", nil)
+	expect(t, r, http.StatusConflict)
+	if tt := toastOf(t, r); !tt.Error || tt.Message != "Too late for that one." {
+		t.Errorf("late toast = %+v", tt)
+	}
+
+	// Next day it's under Missed.
+	h.advance(24 * time.Hour)
+	if strings.Contains(wall.get("/board").body, "Milk out") {
+		t.Error("milk carried over")
+	}
+	r = phone.get("/admin/completions")
+	expect(t, r, http.StatusOK, "Missed", "Bins out", "Milk out",
+		`action="/admin/completions/missed/`+itoa(bins.ID)+`/done"`, `name="person" value="`+itoa(alfie.ID)+`"`, "Who did it?")
+	expect(t, wall.post("/admin/completions/missed/"+itoa(bins.ID)+"/done", url.Values{"person": {itoa(alfie.ID)}}), http.StatusSeeOther)
+	expect(t, phone.post("/admin/completions/missed/"+itoa(milk.ID)+"/done", nil), http.StatusBadRequest, "Choose who did it.")
+	expect(t, phone.post("/admin/completions/missed/"+itoa(bins.ID)+"/done", url.Values{"person": {itoa(alfie.ID)}}), http.StatusOK, "Marked done. Points added.")
+	r = phone.post("/admin/completions/missed/"+itoa(milk.ID)+"/done", url.Values{"person": {itoa(isla.ID)}})
+	expect(t, r, http.StatusOK, "Marked done.")
+	if strings.Contains(r.body, "<h2>Missed</h2>") {
+		t.Error("Missed still shown after marking both")
+	}
+	for p, want := range map[int64]int64{alfie.ID: 3, isla.ID: 1} {
+		if b := must(h.st.Q.BalanceForPerson(t.Context(), dbq.BalanceForPersonParams{HouseholdID: h.hh, PersonID: p})); b.Points != want {
+			t.Errorf("person %d points = %d, want %d", p, b.Points, want)
+		}
 	}
 }

@@ -1,19 +1,23 @@
 -- name: InsertOccurrence :execrows
-INSERT INTO chore_occurrences (household_id, chore_id, due_on, assignee_id)
-VALUES (?, ?, ?, ?)
+INSERT INTO chore_occurrences (household_id, chore_id, due_on, assignee_id, available_from)
+VALUES (?, ?, ?, ?, ?)
 ON CONFLICT (chore_id, due_on) DO NOTHING;
 
 -- name: GetOccurrence :one
 SELECT * FROM chore_occurrences WHERE household_id = ? AND id = ?;
 
 -- name: ListBoard :many
+-- Occurrences on the board at some point in [from_date, to_date]: due in the
+-- range, or (flexible-day chores) with their window overlapping it.
 SELECT
-    o.id, o.chore_id, o.due_on, o.assignee_id, o.claimed_by, o.claimed_at, o.status,
-    c.title, c.description, c.mode, c.due_time, c.points, c.pence, c.requires_approval
+    o.id, o.chore_id, o.due_on, o.available_from, o.assignee_id, o.claimed_by, o.claimed_at, o.status,
+    c.title, c.emoji, c.description, c.mode, c.due_time, c.points, c.pence, c.requires_approval,
+    c.rrule, c.starts_on, c.day_mode, c.on_the_day
 FROM chore_occurrences o
 JOIN chores c ON c.id = o.chore_id
 WHERE o.household_id = sqlc.arg(household_id)
-  AND o.due_on >= sqlc.arg(from_date) AND o.due_on <= sqlc.arg(to_date)
+  AND o.due_on >= sqlc.arg(from_date)
+  AND (o.due_on <= sqlc.arg(to_date) OR o.available_from <= sqlc.arg(to_date))
   AND c.archived_at IS NULL
 ORDER BY o.due_on, c.due_time, c.title;
 
@@ -45,5 +49,15 @@ DELETE FROM chore_occurrences
 WHERE chore_occurrences.household_id = sqlc.arg(household_id)
   AND chore_occurrences.chore_id = sqlc.arg(chore_id)
   AND chore_occurrences.due_on >= sqlc.arg(from_date)
+  AND chore_occurrences.status = 'open' AND chore_occurrences.claimed_by IS NULL
+  AND NOT EXISTS (SELECT 1 FROM completions c WHERE c.occurrence_id = chore_occurrences.id);
+
+-- name: AssignOpenOccurrences :exec
+-- Gives a chore's not-yet-started occurrences to person_id (a shared chore
+-- that's down to one person becomes theirs).
+UPDATE chore_occurrences
+SET assignee_id = sqlc.arg(person_id)
+WHERE chore_occurrences.household_id = sqlc.arg(household_id)
+  AND chore_occurrences.chore_id = sqlc.arg(chore_id)
   AND chore_occurrences.status = 'open' AND chore_occurrences.claimed_by IS NULL
   AND NOT EXISTS (SELECT 1 FROM completions c WHERE c.occurrence_id = chore_occurrences.id);

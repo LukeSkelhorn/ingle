@@ -1,4 +1,4 @@
-{{define "title"}}Domus{{end}}
+{{define "title"}}Ingle{{end}}
 {{define "bodyclass"}}is-board locked{{end}}
 {{define "content"}}
 {{/* The locked display: photos and the clock, nothing personal (no
@@ -32,8 +32,8 @@
     </div>
   </dialog>
 </main>
-<script src="/static/saver.js"></script>
-<script src="/static/pinpad.js"></script>
+<script src="{{asset "saver.js"}}"></script>
+<script src="{{asset "pinpad.js"}}"></script>
 <script>
   (function () {
     var el = document.getElementById("screensaver"),
@@ -42,7 +42,7 @@
         pinStep = pad.querySelector('[data-step="pin"]'),
         choices = whoStep.querySelectorAll("[data-person]"),
         person = null, busy = false, closeTimer,
-        saver = DomusSaver(el, {
+        saver = IngleSaver(el, {
           info: function () {
             fetch("/clock?big=1", { credentials: "same-origin" })
               .then(function (r) { return r.ok ? r.text() : null; })
@@ -50,7 +50,7 @@
               .catch(function () {});
           },
         }),
-        pinpad = DomusPinpad(pinStep.querySelector("[data-pinpad]"), {
+        pinpad = InglePinpad(pinStep.querySelector("[data-pinpad]"), {
           active: function () { return pad.open && !pinStep.hidden; },
           onSubmit: submit,
         });
@@ -97,7 +97,7 @@
             pinpad.error(d.error || "That didn't work. Try again.");
           });
         })
-        .catch(function () { pinpad.error("Can't reach Domus. Try again."); })
+        .catch(function () { pinpad.error("Can't reach Ingle. Try again."); })
         .finally(function () { busy = false; });
     }
     function cancel() {

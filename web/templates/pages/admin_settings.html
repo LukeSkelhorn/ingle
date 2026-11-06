@@ -34,6 +34,12 @@
       <small class="muted">Photos, the clock and what's on today. 0 turns it off; the 🌙 button on the board still works.</small>
       {{template "err" index .Errors "screensaver_idle_minutes"}}
     </label>
+    <label class="field field--short">
+      <span>Return to chores after (minutes idle)</span>
+      <input type="number" name="calendar_idle_minutes" value="{{.Data.CalendarIdleMinutes}}" min="0" max="60" required inputmode="numeric">
+      <small class="muted">On displays, the calendar goes back to the chores after this long untouched. 0 is never.</small>
+      {{template "err" index .Errors "calendar_idle_minutes"}}
+    </label>
     <fieldset class="field">
       <legend>Lock the displays on a schedule</legend>
       <div class="segmented">

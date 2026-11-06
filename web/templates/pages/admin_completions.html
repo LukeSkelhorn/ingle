@@ -14,12 +14,56 @@
       {{range .Data.Pending}}
       <li class="list__row list__row--review">
         {{template "avatar" (avatar .Person "sm")}}
-        <span class="list__main"><strong>{{.Title}}</strong>
+        <span class="list__main"><strong>{{with .Emoji}}{{.}} {{end}}{{.Title}}</strong>
           <small class="muted">{{.Person.Name}} · {{when .CompletedAt}}{{with worth .Points .Pence}} · {{.}}{{end}}</small></span>
         <span class="list__actions">
           <form method="post" action="/admin/completions/{{.ID}}/reject"><button class="btn btn--ghost" type="submit">Not done yet</button></form>
           <form method="post" action="/admin/completions/{{.ID}}/approve"><button class="btn btn--primary" type="submit">Approve</button></form>
         </span>
+      </li>
+      {{end}}
+    </ul>
+  </section>
+  {{end}}
+
+  {{if .Data.Claims}}
+  <section>
+    <h2>Rewards waiting</h2>
+    <ul class="list card">
+      {{range .Data.Claims}}
+      <li class="list__row list__row--review">
+        {{template "avatar" (avatar .Person "sm")}}
+        <span class="list__main"><strong>{{with .Emoji}}{{.}} {{end}}{{.Title}}</strong>
+          <small class="muted">{{.Person.Name}} · {{when .RequestedAt}}{{with worth .Points .Pence}} · {{.}}{{end}}</small></span>
+        <span class="list__actions">
+          <form method="post" action="/admin/rewards/claims/{{.ID}}/decline"><button class="btn btn--ghost" type="submit">Decline</button></form>
+          <form method="post" action="/admin/rewards/claims/{{.ID}}/approve"><button class="btn btn--primary" type="submit">Approve</button></form>
+        </span>
+      </li>
+      {{end}}
+    </ul>
+  </section>
+  {{end}}
+
+  {{if .Data.Missed}}
+  <section>
+    <h2>Missed</h2>
+    <p class="muted">Chores that had to be done on the day and weren't. Done but nobody ticked it? Mark it done and the points are added.</p>
+    <ul class="list card">
+      {{range .Data.Missed}}
+      <li class="list__row list__row--review">
+        {{with .Person}}{{template "avatar" (avatar . "sm")}}{{else}}<span class="avatar avatar--sm avatar--pool" aria-hidden="true">?</span>{{end}}
+        <span class="list__main"><strong>{{with .Emoji}}{{.}} {{end}}{{.Title}}</strong>
+          <small class="muted">{{with .Person}}{{.Name}}{{else}}{{orNames .Choices}}{{end}} · {{shortDate .DueOn}}{{with .DueTime}} by {{.}}{{end}}{{with worth .Points .Pence}} · {{.}}{{end}}</small></span>
+        <form class="list__actions" method="post" action="/admin/completions/missed/{{.OccurrenceID}}/done">
+          {{with .Person}}<input type="hidden" name="person" value="{{.ID}}">
+          {{else}}<label class="visually-hidden" for="missed-{{.OccurrenceID}}">Who did it?</label>
+          <select id="missed-{{.OccurrenceID}}" name="person" required>
+            <option value="">Who did it?</option>
+            {{range .Choices}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+          </select>{{end}}
+          <button class="btn btn--primary" type="submit">Mark done</button>
+        </form>
       </li>
       {{end}}
     </ul>
@@ -33,7 +77,7 @@
       {{range .Data.Recent}}
       <li class="list__row list__row--review">
         {{template "avatar" (avatar .Person "sm")}}
-        <span class="list__main"><strong>{{.Title}}</strong>
+        <span class="list__main"><strong>{{with .Emoji}}{{.}} {{end}}{{.Title}}</strong>
           <small class="muted">{{.Person.Name}} · {{when .CompletedAt}}{{with worth .Points .Pence}} · {{.}}{{end}}</small></span>
         <span class="list__actions">
           {{if .Counted}}

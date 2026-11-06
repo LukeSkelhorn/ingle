@@ -97,7 +97,7 @@ SELECT
     c.id, c.occurrence_id, c.person_id, c.completed_at, c.status, c.reviewed_at, c.points, c.pence,
     p.name AS person_name, p.colour AS person_colour, p.avatar AS person_avatar,
     r.name AS reviewer_name,
-    ch.title, o.due_on
+    ch.title, ch.emoji, o.due_on
 FROM completions c
 JOIN chore_occurrences o ON o.id = c.occurrence_id
 JOIN chores ch ON ch.id = o.chore_id
@@ -125,6 +125,7 @@ type GetCompletionDetailRow struct {
 	PersonAvatar *string `json:"person_avatar"`
 	ReviewerName *string `json:"reviewer_name"`
 	Title        string  `json:"title"`
+	Emoji        string  `json:"emoji"`
 	DueOn        string  `json:"due_on"`
 }
 
@@ -145,6 +146,7 @@ func (q *Queries) GetCompletionDetail(ctx context.Context, arg GetCompletionDeta
 		&i.PersonAvatar,
 		&i.ReviewerName,
 		&i.Title,
+		&i.Emoji,
 		&i.DueOn,
 	)
 	return i, err
@@ -155,7 +157,7 @@ SELECT
     c.id, c.occurrence_id, c.person_id, c.completed_at, c.status, c.reviewed_at, c.points, c.pence,
     p.name AS person_name, p.colour AS person_colour, p.avatar AS person_avatar,
     r.name AS reviewer_name,
-    ch.title, o.due_on
+    ch.title, ch.emoji, o.due_on
 FROM completions c
 JOIN chore_occurrences o ON o.id = c.occurrence_id
 JOIN chores ch ON ch.id = o.chore_id
@@ -185,6 +187,7 @@ type ListCompletionDetailsRow struct {
 	PersonAvatar *string `json:"person_avatar"`
 	ReviewerName *string `json:"reviewer_name"`
 	Title        string  `json:"title"`
+	Emoji        string  `json:"emoji"`
 	DueOn        string  `json:"due_on"`
 }
 
@@ -213,6 +216,7 @@ func (q *Queries) ListCompletionDetails(ctx context.Context, arg ListCompletionD
 			&i.PersonAvatar,
 			&i.ReviewerName,
 			&i.Title,
+			&i.Emoji,
 			&i.DueOn,
 		); err != nil {
 			return nil, err
@@ -233,7 +237,8 @@ SELECT c.id, c.occurrence_id, c.person_id, c.completed_at, c.status
 FROM completions c
 JOIN chore_occurrences o ON o.id = c.occurrence_id
 WHERE c.household_id = ?1
-  AND o.due_on >= ?2 AND o.due_on <= ?3
+  AND o.due_on >= ?2
+  AND (o.due_on <= ?3 OR o.available_from <= ?3)
   AND c.status <> 'rejected'
 `
 
@@ -252,7 +257,7 @@ type ListLiveCompletionsForRangeRow struct {
 }
 
 // The live (pending or approved) completion for each occurrence due in
-// [from_date, to_date], for the board.
+// [from_date, to_date] (or whose window overlaps it), for the board.
 func (q *Queries) ListLiveCompletionsForRange(ctx context.Context, arg ListLiveCompletionsForRangeParams) ([]ListLiveCompletionsForRangeRow, error) {
 	rows, err := q.db.QueryContext(ctx, listLiveCompletionsForRange, arg.HouseholdID, arg.FromDate, arg.ToDate)
 	if err != nil {

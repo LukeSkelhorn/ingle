@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>{{block "title" .}}{{if .Title}}{{.Title}} · {{end}}Domus{{end}}</title>
+  <title>{{block "title" .}}{{if .Title}}{{.Title}} · {{end}}Ingle{{end}}</title>
   <meta name="theme-color" content="#4A90D9">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/static/icons/icon-192.png" type="image/png">
@@ -11,12 +11,12 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Domus">
-  <link rel="stylesheet" href="/static/app.css">
+  <meta name="apple-mobile-web-app-title" content="Ingle">
+  <link rel="stylesheet" href="{{asset "app.css"}}">
   <!-- Swap 409/422 responses too: the board answers a stale tap with the
        current board and an error toast. -->
   <meta name="htmx-config" content='{"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"409","swap":true},{"code":"422","swap":true},{"code":"[45]..","swap":false,"error":true}]}'>
-  <script src="/static/htmx.min.js" defer></script>
+  <script src="{{asset "htmx.min.js"}}" defer></script>
 </head>
 <body class="{{block "bodyclass" .}}{{end}}">
   {{block "content" .}}{{end}}
@@ -59,6 +59,55 @@
       document.addEventListener("change", update);
       update();
     })();
+    // Emoji pickers on the chore and reward forms suggest an emoji from the
+    // title as it's typed ("Feed the dog" → 🐶), matching whole words the
+    // way the server does (emoji.Suggest).
+    document.querySelectorAll("[data-emoji-picker]").forEach(function (p) {
+      var form = p.closest("form"),
+          title = form && form.querySelector('[name="title"]'),
+          typed = p.querySelector('[name="emoji_typed"]'),
+          hint = p.querySelector(".emoji-field__hint"),
+          btn = hint.querySelector("button"),
+          map = {};
+      // The page offers suggestions itself, so saving shouldn't stop to.
+      p.querySelector('[name="suggest_offered"]').value = "1";
+      try { map = JSON.parse(p.dataset.suggest || "{}"); } catch (err) { /* no suggestions */ }
+      function words(s) { return s.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean).join(" "); }
+      function suggest(t) {
+        var text = " " + words(t) + " ", best = "", at = -1, len = 0;
+        Object.keys(map).forEach(function (k) {
+          var i = text.indexOf(" " + k + " ");
+          if (i >= 0 && (at < 0 || i < at || (i === at && k.length > len))) { best = map[k]; at = i; len = k.length; }
+        });
+        return best;
+      }
+      function radio(v) {
+        return Array.prototype.find.call(p.querySelectorAll('[name="emoji"]'), function (r) { return r.value === v; });
+      }
+      function chosen() {
+        var c = p.querySelector('[name="emoji"]:checked');
+        return (c && c.value) || typed.value.trim();
+      }
+      function update() {
+        var e = title && !chosen() ? suggest(title.value) : "";
+        hint.hidden = !e;
+        btn.dataset.emoji = e;
+        btn.querySelector("span").textContent = e;
+      }
+      btn.addEventListener("click", function () {
+        var e = btn.dataset.emoji, r = radio(e);
+        if (r) { r.checked = true; typed.value = ""; } else { typed.value = e; radio("").checked = false; }
+        update();
+      });
+      p.addEventListener("change", function (e) { if (e.target.name === "emoji") { typed.value = ""; update(); } });
+      typed.addEventListener("input", function () {
+        if (typed.value.trim()) { var c = p.querySelector('[name="emoji"]:checked'); if (c) c.checked = false; }
+        else radio("").checked = true;
+        update();
+      });
+      if (title) title.addEventListener("input", update);
+      update();
+    });
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js");
     }

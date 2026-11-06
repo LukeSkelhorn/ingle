@@ -4,10 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"strings"
+	"time"
+	"unicode/utf16"
+	"unicode/utf8"
 
-	"github.com/lukeskelhorn/domus/internal/chores"
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/chores"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
 // boardView is what the "board" partial renders.
@@ -17,6 +22,10 @@ type boardView struct {
 	// shows the admin link on an empty board and makes done chores tappable
 	// for review.
 	Adult bool
+	// NextIn is how many seconds until an Only on the day chore runs out
+	// and the board should refresh (0 for none). Relative, so a display
+	// whose clock is off still refreshes on time.
+	NextIn int64
 }
 
 // boardPage is the full board page: clock plus the board.
@@ -37,7 +46,11 @@ func (s *Server) loadBoard(r *http.Request) (boardView, error) {
 	if err != nil {
 		return boardView{}, err
 	}
-	return boardView{Board: b, Adult: identityFrom(r.Context()).Session != nil}, nil
+	v := boardView{Board: b, Adult: identityFrom(r.Context()).Session != nil}
+	if !b.NextChange.IsZero() {
+		v.NextIn = max(int64(b.NextChange.Sub(s.now())/time.Second)+1, 1)
+	}
+	return v, nil
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
@@ -140,6 +153,9 @@ func (s *Server) handleComplete(w http.ResponseWriter, r *http.Request) {
 		Message: "Nice one, " + s.personName(r, *person) + "!",
 		Undo:    "/board/completions/" + itoa(c.ID) + "/undo",
 	}
+	if s.Chores.IsShared(r.Context(), s.HouseholdID, id) {
+		t.Message += " Done for everyone."
+	}
 	if c.Status == chores.StatusPending {
 		t.Message = "Done! A grown-up will check it."
 	}
@@ -209,7 +225,7 @@ func (s *Server) handleReviewSheet(w http.ResponseWriter, r *http.Request) {
 const needAdult = "Ask a grown-up to unlock admin."
 
 // boardReview runs an adult action (approve, reject, reverse) from the board.
-func (s *Server) boardReview(fn func(ctx context.Context, hh, completionID, reviewerID int64) error, msg string) http.HandlerFunc {
+func (s *Server) boardReview(fn func(ctx context.Context, hh, id, reviewerID int64) error, msg string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, _, ok := s.boardAction(w, r)
 		if !ok {
@@ -256,7 +272,25 @@ func setToast(w http.ResponseWriter, t toast) {
 	if err != nil {
 		return
 	}
-	w.Header().Set("HX-Trigger", string(b))
+	w.Header().Set("HX-Trigger", asciiJSON(b))
+}
+
+// asciiJSON escapes non-ASCII characters in JSON as \uXXXX. Browsers read
+// header values as Latin-1, so "Zoë" or an emoji sent as UTF-8 in a header
+// comes out garbled. Non-ASCII can only be inside JSON strings, so escaping
+// it there is safe.
+func asciiJSON(b []byte) string {
+	var sb strings.Builder
+	for _, r := range string(b) {
+		if r < utf8.RuneSelf {
+			sb.WriteRune(r)
+			continue
+		}
+		for _, u := range utf16.Encode([]rune{r}) {
+			fmt.Fprintf(&sb, `\u%04x`, u)
+		}
+	}
+	return sb.String()
 }
 
 // boardDone finishes a successful board action: tell every other screen and
@@ -288,6 +322,8 @@ func boardErrorText(err error) (string, bool) {
 		return "Someone's already on that one.", true
 	case errors.Is(err, chores.ErrNotOpen):
 		return "That's already done.", true
+	case errors.Is(err, chores.ErrTooLate):
+		return "Too late for that one.", true
 	case errors.Is(err, chores.ErrNotYours):
 		return "That's someone else's chore.", true
 	case errors.Is(err, chores.ErrNotClaimable):
@@ -304,8 +340,10 @@ func boardErrorText(err error) (string, bool) {
 		return "Someone has already checked that one.", true
 	case errors.Is(err, chores.ErrNotAdult):
 		return needAdult, true
+	case errors.Is(err, chores.ErrInsufficientBalance):
+		return "Not enough for that yet.", true
 	case errors.Is(err, chores.ErrNotFound):
-		return "That chore has gone.", true
+		return "That's gone.", true
 	}
 	return "", false
 }
@@ -316,4 +354,171 @@ func (s *Server) personName(r *http.Request, id int64) string {
 		return "you"
 	}
 	return p.Name
+}
+
+// personSheetView is a person's sheet: balance, this week, their waiting
+// reward claims and the rewards. Adult makes waiting claims tappable for
+// review.
+type personSheetView struct {
+	chores.Summary
+	Waiting []chores.RedemptionDetail
+	Rewards []rewardRow
+	Adult   bool
+}
+
+// rewardRow is one reward on a person's sheet. NeedPoints and NeedPence are
+// how much more they need; a reward is affordable when both are zero.
+type rewardRow struct {
+	dbq.Reward
+	NeedPoints, NeedPence int64
+}
+
+func (r rewardRow) Affordable() bool { return r.NeedPoints == 0 && r.NeedPence == 0 }
+
+func (s *Server) handlePersonSheet(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	ctx := r.Context()
+	loc := s.Locale
+	loc.Location = s.Settings.Location(ctx, s.HouseholdID)
+	sum, err := s.Chores.PersonSummary(ctx, s.HouseholdID, id, loc.StartOfWeek(s.now()))
+	if errors.Is(err, chores.ErrNotFound) {
+		// Archived since this screen last refreshed.
+		s.boardFailed(w, r, "They're not on the board any more.")
+		return
+	}
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	rewards, err := s.Household.Rewards(ctx, s.HouseholdID)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	waiting, err := s.Chores.PendingRedemptions(ctx, s.HouseholdID, &id)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	v := personSheetView{
+		Summary: sum, Waiting: waiting, Rewards: make([]rewardRow, 0, len(rewards)),
+		Adult: boardAdult(r) != nil,
+	}
+	for _, rw := range rewards {
+		v.Rewards = append(v.Rewards, rewardRow{
+			Reward:     rw,
+			NeedPoints: max(0, rw.CostPoints-sum.Points),
+			NeedPence:  max(0, rw.CostPence-sum.Pence),
+		})
+	}
+	s.renderPartial(w, r, "person", v)
+}
+
+// handleRewardClaim is a child asking for a reward from their sheet. With an
+// adult there (signed in or unlocked) it's approved at once.
+func (s *Server) handleRewardClaim(w http.ResponseWriter, r *http.Request) {
+	id, person, ok := s.boardAction(w, r)
+	if !ok {
+		return
+	}
+	if person == nil {
+		http.Error(w, "who is claiming?", http.StatusBadRequest)
+		return
+	}
+	var approver *int64
+	if adult := boardAdult(r); adult != nil {
+		approver = &adult.ID
+	}
+	red, err := s.Chores.ClaimReward(r.Context(), s.HouseholdID, id, *person, approver)
+	if err != nil {
+		s.boardError(w, r, err)
+		return
+	}
+	msg := "Asked a grown-up 🎁"
+	if red.Status == chores.StatusApproved {
+		msg = "Enjoy, " + s.personName(r, *person) + "! 🎁"
+	}
+	s.boardDone(w, r, toast{Message: msg})
+}
+
+// handleGoalSet has a person save for a reward. Like completing a chore,
+// anyone at the board can do it.
+func (s *Server) handleGoalSet(w http.ResponseWriter, r *http.Request) {
+	id, _, ok := s.boardAction(w, r)
+	if !ok {
+		return
+	}
+	rewardID := newForm(r).optID("reward")
+	if rewardID == nil {
+		http.Error(w, "which reward?", http.StatusBadRequest)
+		return
+	}
+	rw, err := s.Chores.SetGoal(r.Context(), s.HouseholdID, id, *rewardID)
+	if err != nil {
+		s.boardError(w, r, err)
+		return
+	}
+	emoji := rw.Emoji
+	if emoji == "" {
+		emoji = chores.DefaultGoalEmoji
+	}
+	s.boardDone(w, r, toast{Message: "Saving for " + rw.Title + " " + emoji})
+}
+
+// handleGoalClear stops a person saving for anything.
+func (s *Server) handleGoalClear(w http.ResponseWriter, r *http.Request) {
+	id, _, ok := s.boardAction(w, r)
+	if !ok {
+		return
+	}
+	if err := s.Chores.ClearGoal(r.Context(), s.HouseholdID, id); err != nil {
+		s.boardError(w, r, err)
+		return
+	}
+	s.boardDone(w, r, toast{Message: "Goal removed"})
+}
+
+// claimReviewView is an adult's sheet for a waiting reward claim.
+type claimReviewView struct {
+	D chores.RedemptionDetail
+}
+
+func (s *Server) handleClaimReviewSheet(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	if boardAdult(r) == nil {
+		s.boardFailed(w, r, needAdult)
+		return
+	}
+	d, err := s.Chores.Redemption(r.Context(), s.HouseholdID, id)
+	if err != nil {
+		s.boardError(w, r, err)
+		return
+	}
+	if !d.Pending() {
+		s.boardError(w, r, chores.ErrNotPending)
+		return
+	}
+	s.renderPartial(w, r, "claim_review", claimReviewView{D: d})
+}
+
+// handleClaimCancel is a child changing their mind about a waiting claim.
+// Like completing a chore, anyone at the board can do it.
+func (s *Server) handleClaimCancel(w http.ResponseWriter, r *http.Request) {
+	id, _, ok := s.boardAction(w, r)
+	if !ok {
+		return
+	}
+	if err := s.Chores.CancelRedemption(r.Context(), s.HouseholdID, id); err != nil {
+		s.boardError(w, r, err)
+		return
+	}
+	s.boardDone(w, r, toast{Message: "Cancelled. Points are free again."})
 }

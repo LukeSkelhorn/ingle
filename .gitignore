@@ -32,7 +32,7 @@ go.work.sum
 # .idea/
 # .vscode/
 
-# Domus
+# Ingle
 /bin/
 /data/
 *.db

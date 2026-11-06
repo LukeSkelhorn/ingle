@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lukeskelhorn/domus/internal/store"
-	"github.com/lukeskelhorn/domus/internal/valid"
+	"github.com/lukeskelhorn/ingle/internal/store"
+	"github.com/lukeskelhorn/ingle/internal/valid"
 )
 
 func TestBoardDay(t *testing.T) {
@@ -42,7 +42,7 @@ func TestBoardDay(t *testing.T) {
 
 func TestServiceUpdate(t *testing.T) {
 	ctx := t.Context()
-	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "domus.db"))
+	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "ingle.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,28 +67,28 @@ func TestServiceUpdate(t *testing.T) {
 	}
 	got, err := svc.Get(ctx, h.ID)
 	if err != nil || got.Location.String() != "Europe/London" || got.AdminIdleMinutes != 2 || got.DayStartsAt != "00:00" ||
-		got.ScreensaverIdle() != 5*time.Minute {
+		got.ScreensaverIdle() != 5*time.Minute || got.CalendarIdle() != 2*time.Minute {
 		t.Fatalf("defaults = %+v, %v", got, err)
 	}
 
 	err = svc.Update(ctx, h.ID, mum.ID, Input{
-		HouseholdName: "", Timezone: "Local", DayStartsAt: "25:00", AdminIdleMinutes: 0, ScreensaverIdleMinutes: 121,
+		HouseholdName: "", Timezone: "Local", DayStartsAt: "25:00", AdminIdleMinutes: 0, ScreensaverIdleMinutes: 121, CalendarIdleMinutes: 61,
 		LockDays: 128, LockFrom: "9am", LockUntil: "15:00", LockIdleHours: 73,
 	})
 	var ve valid.Errors
-	if !errors.As(err, &ve) || len(ve) != 8 {
+	if !errors.As(err, &ve) || len(ve) != 9 {
 		t.Fatalf("Update(bad) = %v", err)
 	}
 
 	if err := svc.Update(ctx, h.ID, mum.ID, Input{
-		HouseholdName: "Smiths", Timezone: "America/New_York", DayStartsAt: "04:30", AdminIdleMinutes: 10, ScreensaverIdleMinutes: 0,
+		HouseholdName: "Smiths", Timezone: "America/New_York", DayStartsAt: "04:30", AdminIdleMinutes: 10, ScreensaverIdleMinutes: 0, CalendarIdleMinutes: 7,
 		LockDays: 0b0111110, LockFrom: "08:45", LockUntil: "15:15", LockIdleHours: 12,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	got, err = svc.Get(ctx, h.ID)
 	if err != nil || got.HouseholdName != "Smiths" || got.Location.String() != "America/New_York" ||
-		got.AdminIdle() != 10*time.Minute || got.DayStartsAt != "04:30" || got.ScreensaverIdle() != 0 ||
+		got.AdminIdle() != 10*time.Minute || got.DayStartsAt != "04:30" || got.ScreensaverIdle() != 0 || got.CalendarIdle() != 7*time.Minute ||
 		got.LockDays != 0b0111110 || got.LockFrom != "08:45" || got.LockUntil != "15:15" || got.LockIdle() != 12*time.Hour {
 		t.Fatalf("after update = %+v, %v", got, err)
 	}

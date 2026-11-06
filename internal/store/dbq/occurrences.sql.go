@@ -9,6 +9,28 @@ import (
 	"context"
 )
 
+const assignOpenOccurrences = `-- name: AssignOpenOccurrences :exec
+UPDATE chore_occurrences
+SET assignee_id = ?1
+WHERE chore_occurrences.household_id = ?2
+  AND chore_occurrences.chore_id = ?3
+  AND chore_occurrences.status = 'open' AND chore_occurrences.claimed_by IS NULL
+  AND NOT EXISTS (SELECT 1 FROM completions c WHERE c.occurrence_id = chore_occurrences.id)
+`
+
+type AssignOpenOccurrencesParams struct {
+	PersonID    *int64 `json:"person_id"`
+	HouseholdID int64  `json:"household_id"`
+	ChoreID     int64  `json:"chore_id"`
+}
+
+// Gives a chore's not-yet-started occurrences to person_id (a shared chore
+// that's down to one person becomes theirs).
+func (q *Queries) AssignOpenOccurrences(ctx context.Context, arg AssignOpenOccurrencesParams) error {
+	_, err := q.db.ExecContext(ctx, assignOpenOccurrences, arg.PersonID, arg.HouseholdID, arg.ChoreID)
+	return err
+}
+
 const claimOccurrence = `-- name: ClaimOccurrence :execrows
 UPDATE chore_occurrences
 SET claimed_by = ?1, claimed_at = ?2, status = 'claimed'
@@ -63,7 +85,7 @@ func (q *Queries) DeleteFutureOpenOccurrences(ctx context.Context, arg DeleteFut
 }
 
 const getOccurrence = `-- name: GetOccurrence :one
-SELECT id, household_id, chore_id, due_on, assignee_id, claimed_by, claimed_at, status FROM chore_occurrences WHERE household_id = ? AND id = ?
+SELECT id, household_id, chore_id, due_on, assignee_id, claimed_by, claimed_at, status, available_from FROM chore_occurrences WHERE household_id = ? AND id = ?
 `
 
 type GetOccurrenceParams struct {
@@ -83,21 +105,23 @@ func (q *Queries) GetOccurrence(ctx context.Context, arg GetOccurrenceParams) (C
 		&i.ClaimedBy,
 		&i.ClaimedAt,
 		&i.Status,
+		&i.AvailableFrom,
 	)
 	return i, err
 }
 
 const insertOccurrence = `-- name: InsertOccurrence :execrows
-INSERT INTO chore_occurrences (household_id, chore_id, due_on, assignee_id)
-VALUES (?, ?, ?, ?)
+INSERT INTO chore_occurrences (household_id, chore_id, due_on, assignee_id, available_from)
+VALUES (?, ?, ?, ?, ?)
 ON CONFLICT (chore_id, due_on) DO NOTHING
 `
 
 type InsertOccurrenceParams struct {
-	HouseholdID int64  `json:"household_id"`
-	ChoreID     int64  `json:"chore_id"`
-	DueOn       string `json:"due_on"`
-	AssigneeID  *int64 `json:"assignee_id"`
+	HouseholdID   int64   `json:"household_id"`
+	ChoreID       int64   `json:"chore_id"`
+	DueOn         string  `json:"due_on"`
+	AssigneeID    *int64  `json:"assignee_id"`
+	AvailableFrom *string `json:"available_from"`
 }
 
 func (q *Queries) InsertOccurrence(ctx context.Context, arg InsertOccurrenceParams) (int64, error) {
@@ -106,6 +130,7 @@ func (q *Queries) InsertOccurrence(ctx context.Context, arg InsertOccurrencePara
 		arg.ChoreID,
 		arg.DueOn,
 		arg.AssigneeID,
+		arg.AvailableFrom,
 	)
 	if err != nil {
 		return 0, err
@@ -115,12 +140,14 @@ func (q *Queries) InsertOccurrence(ctx context.Context, arg InsertOccurrencePara
 
 const listBoard = `-- name: ListBoard :many
 SELECT
-    o.id, o.chore_id, o.due_on, o.assignee_id, o.claimed_by, o.claimed_at, o.status,
-    c.title, c.description, c.mode, c.due_time, c.points, c.pence, c.requires_approval
+    o.id, o.chore_id, o.due_on, o.available_from, o.assignee_id, o.claimed_by, o.claimed_at, o.status,
+    c.title, c.emoji, c.description, c.mode, c.due_time, c.points, c.pence, c.requires_approval,
+    c.rrule, c.starts_on, c.day_mode, c.on_the_day
 FROM chore_occurrences o
 JOIN chores c ON c.id = o.chore_id
 WHERE o.household_id = ?1
-  AND o.due_on >= ?2 AND o.due_on <= ?3
+  AND o.due_on >= ?2
+  AND (o.due_on <= ?3 OR o.available_from <= ?3)
   AND c.archived_at IS NULL
 ORDER BY o.due_on, c.due_time, c.title
 `
@@ -135,19 +162,27 @@ type ListBoardRow struct {
 	ID               int64   `json:"id"`
 	ChoreID          int64   `json:"chore_id"`
 	DueOn            string  `json:"due_on"`
+	AvailableFrom    *string `json:"available_from"`
 	AssigneeID       *int64  `json:"assignee_id"`
 	ClaimedBy        *int64  `json:"claimed_by"`
 	ClaimedAt        *int64  `json:"claimed_at"`
 	Status           string  `json:"status"`
 	Title            string  `json:"title"`
+	Emoji            string  `json:"emoji"`
 	Description      string  `json:"description"`
 	Mode             string  `json:"mode"`
 	DueTime          *string `json:"due_time"`
 	Points           int64   `json:"points"`
 	Pence            int64   `json:"pence"`
 	RequiresApproval int64   `json:"requires_approval"`
+	Rrule            *string `json:"rrule"`
+	StartsOn         string  `json:"starts_on"`
+	DayMode          string  `json:"day_mode"`
+	OnTheDay         int64   `json:"on_the_day"`
 }
 
+// Occurrences on the board at some point in [from_date, to_date]: due in the
+// range, or (flexible-day chores) with their window overlapping it.
 func (q *Queries) ListBoard(ctx context.Context, arg ListBoardParams) ([]ListBoardRow, error) {
 	rows, err := q.db.QueryContext(ctx, listBoard, arg.HouseholdID, arg.FromDate, arg.ToDate)
 	if err != nil {
@@ -161,17 +196,23 @@ func (q *Queries) ListBoard(ctx context.Context, arg ListBoardParams) ([]ListBoa
 			&i.ID,
 			&i.ChoreID,
 			&i.DueOn,
+			&i.AvailableFrom,
 			&i.AssigneeID,
 			&i.ClaimedBy,
 			&i.ClaimedAt,
 			&i.Status,
 			&i.Title,
+			&i.Emoji,
 			&i.Description,
 			&i.Mode,
 			&i.DueTime,
 			&i.Points,
 			&i.Pence,
 			&i.RequiresApproval,
+			&i.Rrule,
+			&i.StartsOn,
+			&i.DayMode,
+			&i.OnTheDay,
 		); err != nil {
 			return nil, err
 		}

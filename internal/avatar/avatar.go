@@ -17,7 +17,7 @@ import (
 
 	"github.com/disintegration/imaging"
 
-	"github.com/lukeskelhorn/domus/internal/picture"
+	"github.com/lukeskelhorn/ingle/internal/picture"
 )
 
 // Size is the width and height of stored photos, in pixels.

@@ -9,6 +9,21 @@ import (
 	"context"
 )
 
+const addChorePerson = `-- name: AddChorePerson :exec
+INSERT INTO chore_people (household_id, chore_id, person_id) VALUES (?, ?, ?)
+`
+
+type AddChorePersonParams struct {
+	HouseholdID int64 `json:"household_id"`
+	ChoreID     int64 `json:"chore_id"`
+	PersonID    int64 `json:"person_id"`
+}
+
+func (q *Queries) AddChorePerson(ctx context.Context, arg AddChorePersonParams) error {
+	_, err := q.db.ExecContext(ctx, addChorePerson, arg.HouseholdID, arg.ChoreID, arg.PersonID)
+	return err
+}
+
 const archiveChore = `-- name: ArchiveChore :exec
 UPDATE chores SET archived_at = ?, updated_at = ? WHERE household_id = ? AND id = ?
 `
@@ -32,15 +47,16 @@ func (q *Queries) ArchiveChore(ctx context.Context, arg ArchiveChoreParams) erro
 
 const createChore = `-- name: CreateChore :one
 INSERT INTO chores (
-    household_id, title, description, mode, assignee_id, rrule, starts_on,
+    household_id, title, emoji, description, mode, assignee_id, rrule, starts_on,
     due_time, points, pence, requires_approval, created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-RETURNING id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at, emoji, day_mode, on_the_day
 `
 
 type CreateChoreParams struct {
 	HouseholdID      int64   `json:"household_id"`
 	Title            string  `json:"title"`
+	Emoji            string  `json:"emoji"`
 	Description      string  `json:"description"`
 	Mode             string  `json:"mode"`
 	AssigneeID       *int64  `json:"assignee_id"`
@@ -58,6 +74,7 @@ func (q *Queries) CreateChore(ctx context.Context, arg CreateChoreParams) (Chore
 	row := q.db.QueryRowContext(ctx, createChore,
 		arg.HouseholdID,
 		arg.Title,
+		arg.Emoji,
 		arg.Description,
 		arg.Mode,
 		arg.AssigneeID,
@@ -87,12 +104,29 @@ func (q *Queries) CreateChore(ctx context.Context, arg CreateChoreParams) (Chore
 		&i.ArchivedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Emoji,
+		&i.DayMode,
+		&i.OnTheDay,
 	)
 	return i, err
 }
 
+const deleteChorePeople = `-- name: DeleteChorePeople :exec
+DELETE FROM chore_people WHERE household_id = ? AND chore_id = ?
+`
+
+type DeleteChorePeopleParams struct {
+	HouseholdID int64 `json:"household_id"`
+	ChoreID     int64 `json:"chore_id"`
+}
+
+func (q *Queries) DeleteChorePeople(ctx context.Context, arg DeleteChorePeopleParams) error {
+	_, err := q.db.ExecContext(ctx, deleteChorePeople, arg.HouseholdID, arg.ChoreID)
+	return err
+}
+
 const getChore = `-- name: GetChore :one
-SELECT id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at FROM chores WHERE household_id = ? AND id = ?
+SELECT id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at, emoji, day_mode, on_the_day FROM chores WHERE household_id = ? AND id = ?
 `
 
 type GetChoreParams struct {
@@ -119,12 +153,54 @@ func (q *Queries) GetChore(ctx context.Context, arg GetChoreParams) (Chore, erro
 		&i.ArchivedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Emoji,
+		&i.DayMode,
+		&i.OnTheDay,
 	)
 	return i, err
 }
 
+const listChorePeople = `-- name: ListChorePeople :many
+SELECT cp.chore_id, cp.person_id
+FROM chore_people cp
+JOIN chores c ON c.id = cp.chore_id
+JOIN people p ON p.id = cp.person_id
+WHERE cp.household_id = ? AND c.archived_at IS NULL AND p.archived_at IS NULL
+ORDER BY cp.chore_id, p.sort_order, p.id
+`
+
+type ListChorePeopleRow struct {
+	ChoreID  int64 `json:"chore_id"`
+	PersonID int64 `json:"person_id"`
+}
+
+// Who each active shared chore is for: the chosen people still active, in
+// board order.
+func (q *Queries) ListChorePeople(ctx context.Context, householdID int64) ([]ListChorePeopleRow, error) {
+	rows, err := q.db.QueryContext(ctx, listChorePeople, householdID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListChorePeopleRow{}
+	for rows.Next() {
+		var i ListChorePeopleRow
+		if err := rows.Scan(&i.ChoreID, &i.PersonID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChores = `-- name: ListChores :many
-SELECT id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at FROM chores
+SELECT id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at, emoji, day_mode, on_the_day FROM chores
 WHERE household_id = ? AND archived_at IS NULL
 ORDER BY title
 `
@@ -154,6 +230,9 @@ func (q *Queries) ListChores(ctx context.Context, householdID int64) ([]Chore, e
 			&i.ArchivedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Emoji,
+			&i.DayMode,
+			&i.OnTheDay,
 		); err != nil {
 			return nil, err
 		}
@@ -168,16 +247,200 @@ func (q *Queries) ListChores(ctx context.Context, householdID int64) ([]Chore, e
 	return items, nil
 }
 
+const listPeopleForChore = `-- name: ListPeopleForChore :many
+SELECT cp.person_id
+FROM chore_people cp
+JOIN people p ON p.id = cp.person_id
+WHERE cp.household_id = ? AND cp.chore_id = ? AND p.archived_at IS NULL
+ORDER BY p.sort_order, p.id
+`
+
+type ListPeopleForChoreParams struct {
+	HouseholdID int64 `json:"household_id"`
+	ChoreID     int64 `json:"chore_id"`
+}
+
+func (q *Queries) ListPeopleForChore(ctx context.Context, arg ListPeopleForChoreParams) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, listPeopleForChore, arg.HouseholdID, arg.ChoreID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int64{}
+	for rows.Next() {
+		var person_id int64
+		if err := rows.Scan(&person_id); err != nil {
+			return nil, err
+		}
+		items = append(items, person_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSharedChoresWithOnePerson = `-- name: ListSharedChoresWithOnePerson :many
+SELECT c.id AS chore_id, cp.person_id
+FROM chores c
+JOIN chore_people cp ON cp.chore_id = c.id
+WHERE c.household_id = ? AND c.mode = 'shared' AND c.archived_at IS NULL
+  AND (SELECT COUNT(*) FROM chore_people x WHERE x.chore_id = c.id) = 1
+`
+
+type ListSharedChoresWithOnePersonRow struct {
+	ChoreID  int64 `json:"chore_id"`
+	PersonID int64 `json:"person_id"`
+}
+
+// Active shared chores left with a single chosen person, and who that is.
+func (q *Queries) ListSharedChoresWithOnePerson(ctx context.Context, householdID int64) ([]ListSharedChoresWithOnePersonRow, error) {
+	rows, err := q.db.QueryContext(ctx, listSharedChoresWithOnePerson, householdID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListSharedChoresWithOnePersonRow{}
+	for rows.Next() {
+		var i ListSharedChoresWithOnePersonRow
+		if err := rows.Scan(&i.ChoreID, &i.PersonID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const makeChoreAssigned = `-- name: MakeChoreAssigned :exec
+UPDATE chores SET mode = 'assigned', assignee_id = ?1, updated_at = ?2
+WHERE household_id = ?3 AND id = ?4
+`
+
+type MakeChoreAssignedParams struct {
+	PersonID    *int64 `json:"person_id"`
+	UpdatedAt   int64  `json:"updated_at"`
+	HouseholdID int64  `json:"household_id"`
+	ID          int64  `json:"id"`
+}
+
+func (q *Queries) MakeChoreAssigned(ctx context.Context, arg MakeChoreAssignedParams) error {
+	_, err := q.db.ExecContext(ctx, makeChoreAssigned,
+		arg.PersonID,
+		arg.UpdatedAt,
+		arg.HouseholdID,
+		arg.ID,
+	)
+	return err
+}
+
+const removePersonFromSharedChores = `-- name: RemovePersonFromSharedChores :exec
+DELETE FROM chore_people WHERE household_id = ? AND person_id = ?
+`
+
+type RemovePersonFromSharedChoresParams struct {
+	HouseholdID int64 `json:"household_id"`
+	PersonID    int64 `json:"person_id"`
+}
+
+func (q *Queries) RemovePersonFromSharedChores(ctx context.Context, arg RemovePersonFromSharedChoresParams) error {
+	_, err := q.db.ExecContext(ctx, removePersonFromSharedChores, arg.HouseholdID, arg.PersonID)
+	return err
+}
+
+const setChoreDayMode = `-- name: SetChoreDayMode :one
+UPDATE chores SET day_mode = ? WHERE household_id = ? AND id = ?
+RETURNING id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at, emoji, day_mode, on_the_day
+`
+
+type SetChoreDayModeParams struct {
+	DayMode     string `json:"day_mode"`
+	HouseholdID int64  `json:"household_id"`
+	ID          int64  `json:"id"`
+}
+
+func (q *Queries) SetChoreDayMode(ctx context.Context, arg SetChoreDayModeParams) (Chore, error) {
+	row := q.db.QueryRowContext(ctx, setChoreDayMode, arg.DayMode, arg.HouseholdID, arg.ID)
+	var i Chore
+	err := row.Scan(
+		&i.ID,
+		&i.HouseholdID,
+		&i.Title,
+		&i.Description,
+		&i.Mode,
+		&i.AssigneeID,
+		&i.Rrule,
+		&i.StartsOn,
+		&i.DueTime,
+		&i.Points,
+		&i.Pence,
+		&i.RequiresApproval,
+		&i.ArchivedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Emoji,
+		&i.DayMode,
+		&i.OnTheDay,
+	)
+	return i, err
+}
+
+const setChoreOnTheDay = `-- name: SetChoreOnTheDay :one
+UPDATE chores SET on_the_day = ? WHERE household_id = ? AND id = ?
+RETURNING id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at, emoji, day_mode, on_the_day
+`
+
+type SetChoreOnTheDayParams struct {
+	OnTheDay    int64 `json:"on_the_day"`
+	HouseholdID int64 `json:"household_id"`
+	ID          int64 `json:"id"`
+}
+
+func (q *Queries) SetChoreOnTheDay(ctx context.Context, arg SetChoreOnTheDayParams) (Chore, error) {
+	row := q.db.QueryRowContext(ctx, setChoreOnTheDay, arg.OnTheDay, arg.HouseholdID, arg.ID)
+	var i Chore
+	err := row.Scan(
+		&i.ID,
+		&i.HouseholdID,
+		&i.Title,
+		&i.Description,
+		&i.Mode,
+		&i.AssigneeID,
+		&i.Rrule,
+		&i.StartsOn,
+		&i.DueTime,
+		&i.Points,
+		&i.Pence,
+		&i.RequiresApproval,
+		&i.ArchivedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Emoji,
+		&i.DayMode,
+		&i.OnTheDay,
+	)
+	return i, err
+}
+
 const updateChore = `-- name: UpdateChore :one
 UPDATE chores SET
-    title = ?, description = ?, mode = ?, assignee_id = ?, rrule = ?, starts_on = ?,
+    title = ?, emoji = ?, description = ?, mode = ?, assignee_id = ?, rrule = ?, starts_on = ?,
     due_time = ?, points = ?, pence = ?, requires_approval = ?, updated_at = ?
 WHERE household_id = ? AND id = ?
-RETURNING id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at
+RETURNING id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at, emoji, day_mode, on_the_day
 `
 
 type UpdateChoreParams struct {
 	Title            string  `json:"title"`
+	Emoji            string  `json:"emoji"`
 	Description      string  `json:"description"`
 	Mode             string  `json:"mode"`
 	AssigneeID       *int64  `json:"assignee_id"`
@@ -195,6 +458,7 @@ type UpdateChoreParams struct {
 func (q *Queries) UpdateChore(ctx context.Context, arg UpdateChoreParams) (Chore, error) {
 	row := q.db.QueryRowContext(ctx, updateChore,
 		arg.Title,
+		arg.Emoji,
 		arg.Description,
 		arg.Mode,
 		arg.AssigneeID,
@@ -225,6 +489,9 @@ func (q *Queries) UpdateChore(ctx context.Context, arg UpdateChoreParams) (Chore
 		&i.ArchivedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Emoji,
+		&i.DayMode,
+		&i.OnTheDay,
 	)
 	return i, err
 }

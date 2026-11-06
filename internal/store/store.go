@@ -15,7 +15,7 @@ import (
 	"github.com/pressly/goose/v3"
 	_ "modernc.org/sqlite" // registers the pure-Go "sqlite" driver
 
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
 //go:embed migrations/*.sql

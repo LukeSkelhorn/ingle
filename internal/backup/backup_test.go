@@ -12,13 +12,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lukeskelhorn/domus/internal/store"
+	"github.com/lukeskelhorn/ingle/internal/store"
 )
 
 func setup(t *testing.T) (*sql.DB, string) {
 	t.Helper()
 	dir := t.TempDir()
-	db, err := store.Open(context.Background(), filepath.Join(dir, "domus.db"))
+	db, err := store.Open(context.Background(), filepath.Join(dir, "ingle.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if filepath.Base(path) != "domus-20261104-030000.tar.gz" {
+	if filepath.Base(path) != "ingle-20261104-030000.tar.gz" {
 		t.Errorf("name = %s", filepath.Base(path))
 	}
 	got := entries(t, path)
@@ -85,7 +85,7 @@ func TestRun(t *testing.T) {
 		names = append(names, n)
 	}
 	sort.Strings(names)
-	want := []string{"avatars/1.png", "domus.db", "photos/a.jpg", "photos/a_t.jpg"}
+	want := []string{"avatars/1.png", "ingle.db", "photos/a.jpg", "photos/a_t.jpg"}
 	if len(names) != len(want) {
 		t.Fatalf("entries = %v, want %v", names, want)
 	}
@@ -99,8 +99,8 @@ func TestRun(t *testing.T) {
 	}
 
 	// The snapshot is a working database with the household in it.
-	restored := filepath.Join(t.TempDir(), "domus.db")
-	if err := os.WriteFile(restored, got["domus.db"], 0o640); err != nil {
+	restored := filepath.Join(t.TempDir(), "ingle.db")
+	if err := os.WriteFile(restored, got["ingle.db"], 0o640); err != nil {
 		t.Fatal(err)
 	}
 	rdb, err := store.Open(context.Background(), restored)
@@ -136,7 +136,7 @@ func TestPrune(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(all) != 2 || filepath.Base(all[0]) != "domus-20261103-030000.tar.gz" || filepath.Base(all[1]) != "domus-20261104-030000.tar.gz" {
+	if len(all) != 2 || filepath.Base(all[0]) != "ingle-20261103-030000.tar.gz" || filepath.Base(all[1]) != "ingle-20261104-030000.tar.gz" {
 		t.Errorf("kept %v", all)
 	}
 	if _, err := os.Stat(filepath.Join(dest, "notes.txt")); err != nil {
@@ -193,5 +193,27 @@ func TestCheck(t *testing.T) {
 	files, _ := os.ReadDir(filepath.Join(dir, "new"))
 	if len(files) != 0 {
 		t.Errorf("Check left %d files", len(files))
+	}
+}
+
+// Backups from before the rename to Ingle are still pruned, oldest first,
+// alongside the new ones.
+func TestPruneLegacyNames(t *testing.T) {
+	db, dir := setup(t)
+	dest := t.TempDir()
+	for _, n := range []string{"domus-20261101-030000.tar.gz", "domus-20261102-030000.tar.gz"} {
+		if err := os.WriteFile(filepath.Join(dest, n), nil, 0o640); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := Run(context.Background(), db, dir, dest, 2, time.Date(2026, 11, 3, 3, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatal(err)
+	}
+	all, err := List(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 2 || filepath.Base(all[0]) != "domus-20261102-030000.tar.gz" || filepath.Base(all[1]) != "ingle-20261103-030000.tar.gz" {
+		t.Errorf("kept %v", all)
 	}
 }

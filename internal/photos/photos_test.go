@@ -16,8 +16,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lukeskelhorn/domus/internal/store"
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/store"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
 type fixture struct {
@@ -34,7 +34,7 @@ func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	ctx := t.Context()
 	data := t.TempDir()
-	db, err := store.Open(ctx, filepath.Join(data, "domus.db"))
+	db, err := store.Open(ctx, filepath.Join(data, "ingle.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +138,7 @@ func TestUploadAndDelete(t *testing.T) {
 	if _, err := f.lib.OpenUpload(ctx, f.hh+1, p.File, false); !errors.Is(err, ErrNotFound) {
 		t.Errorf("other household = %v, want ErrNotFound", err)
 	}
-	if _, err := f.lib.OpenUpload(ctx, f.hh, "../domus.db", false); !errors.Is(err, ErrNotFound) {
+	if _, err := f.lib.OpenUpload(ctx, f.hh, "../ingle.db", false); !errors.Is(err, ErrNotFound) {
 		t.Errorf("traversal = %v, want ErrNotFound", err)
 	}
 
@@ -195,7 +195,7 @@ func TestFolder(t *testing.T) {
 	write(t, filepath.Join(f.photo, "notes.txt"), []byte("hi"))
 	write(t, filepath.Join(f.photo, ".hidden.jpg"), jpegBytes(t, 10, 10))
 	write(t, filepath.Join(f.photo, ".thumbs", "x.jpg"), jpegBytes(t, 10, 10))
-	if err := os.Symlink(filepath.Join(f.data, "domus.db"), filepath.Join(f.photo, "escape.jpg")); err != nil {
+	if err := os.Symlink(filepath.Join(f.data, "ingle.db"), filepath.Join(f.photo, "escape.jpg")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -240,7 +240,7 @@ func TestFolder(t *testing.T) {
 	if len(slides) != 2 {
 		t.Errorf("Slides = %v, want beach and garden", slides)
 	}
-	for _, bad := range []string{"0000000000000000", "../../domus.db", folderID("notes.txt")} {
+	for _, bad := range []string{"0000000000000000", "../../ingle.db", folderID("notes.txt")} {
 		if _, err := f.lib.OpenFolder(ctx, bad); !errors.Is(err, ErrNotFound) {
 			t.Errorf("OpenFolder(%q) = %v, want ErrNotFound", bad, err)
 		}

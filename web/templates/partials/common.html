@@ -8,7 +8,7 @@
 
 {{define "admin_nav"}}
 <header class="admin__bar">
-  <a class="admin__brand" href="/admin">{{if .Household}}{{.Household}}{{else}}Domus{{end}}</a>
+  <a class="admin__brand" href="/admin">{{if .Household}}{{.Household}}{{else}}Ingle{{end}}</a>
   <nav class="admin__nav" aria-label="Admin">
     <a href="/admin/people"{{if eq .Nav "people"}} aria-current="page"{{end}}>People</a>
     <a href="/admin/chores"{{if eq .Nav "chores"}} aria-current="page"{{end}}>Chores</a>
@@ -60,3 +60,31 @@
   {{template "err" .Err}}
 </fieldset>
 {{end}}
+
+{{/* The chore and reward emoji: dict "F" emojiField "Err" string. A grid
+     with None, a box to type any emoji, and (with JavaScript) a "Use 🐶"
+     suggestion from the form's title as it's typed. */}}
+{{define "emoji_field"}}{{with .F}}
+<fieldset class="field emoji-field" data-emoji-picker data-suggest="{{.Suggest}}">
+  <legend>Emoji (optional)</legend>
+  <div class="emojis">
+    <label class="emoji">
+      <input type="radio" name="emoji" value=""{{if not .Value}} checked{{end}}>
+      <span class="emoji__none">None</span>
+    </label>
+    {{range .Grid}}
+    <label class="emoji">
+      <input type="radio" name="emoji" value="{{.}}"{{if eq . $.F.Value}} checked{{end}}>
+      <span>{{.}}</span>
+    </label>
+    {{end}}
+  </div>
+  <div class="emoji-field__more">
+    <input class="emoji-field__typed" name="emoji_typed" value="{{.Typed}}" maxlength="16" autocomplete="off"
+           placeholder="or type one" aria-label="Or type any emoji">
+    <p class="emoji-field__hint" hidden><button class="btn emoji-field__suggest" type="button">Use <span></span></button></p>
+  </div>
+  <input type="hidden" name="suggest_offered" value="{{if .Offered}}1{{end}}">
+  {{template "err" $.Err}}
+</fieldset>
+{{end}}{{end}}

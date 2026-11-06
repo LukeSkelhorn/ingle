@@ -10,18 +10,21 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/teambition/rrule-go"
 
-	"github.com/lukeskelhorn/domus/internal/store"
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/store"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
 // Chore modes.
 const (
 	ModeAssigned = "assigned"
 	ModePool     = "pool"
+	// ModeShared is done once by any of a few chosen people (chore_people).
+	ModeShared = "shared"
 )
 
 // Status values shared by occurrences, completions and redemptions.
@@ -64,17 +67,29 @@ func FixedLocation(loc *time.Location) LocationFunc {
 	return func(context.Context, int64) *time.Location { return loc }
 }
 
+// DayStartFunc returns when a household's board day rolls over, as time
+// since local midnight.
+type DayStartFunc func(ctx context.Context, householdID int64) time.Duration
+
 // Service runs chore operations for the households in a store.
 type Service struct {
-	st  *store.Store
-	loc LocationFunc
-	now func() time.Time
+	st       *store.Store
+	loc      LocationFunc
+	dayStart DayStartFunc
+	now      func() time.Time
 }
 
 // New returns a Service that evaluates recurrence in the zone loc returns.
 func New(st *store.Store, loc LocationFunc) *Service {
-	return &Service{st: st, loc: loc, now: time.Now}
+	return &Service{
+		st: st, loc: loc, now: time.Now,
+		dayStart: func(context.Context, int64) time.Duration { return 0 },
+	}
 }
+
+// SetDayStart sets where the board day's rollover comes from (midnight
+// until set). Only on the day chores come off the board at it.
+func (s *Service) SetDayStart(f DayStartFunc) { s.dayStart = f }
 
 // SetClock replaces the clock (tests).
 func (s *Service) SetClock(now func() time.Time) { s.now = now }
@@ -122,6 +137,9 @@ func window(from time.Time, days int, loc *time.Location) (start, end time.Time)
 }
 
 func materialiseChore(ctx context.Context, q *dbq.Queries, c dbq.Chore, start, end time.Time, loc *time.Location) (int, error) {
+	if c.DayMode == DayAny && c.Rrule != nil {
+		return materialiseFlex(ctx, q, c, start, end, loc)
+	}
 	dates, err := occurrenceDates(c, start, end, loc)
 	if err != nil {
 		return 0, fmt.Errorf("chore %d: %w", c.ID, err)
@@ -133,6 +151,31 @@ func materialiseChore(ctx context.Context, q *dbq.Queries, c dbq.Chore, start, e
 			ChoreID:     c.ID,
 			DueOn:       d,
 			AssigneeID:  c.AssigneeID,
+		})
+		if err != nil {
+			return 0, fmt.Errorf("insert occurrence: %w", err)
+		}
+		created += int(n)
+	}
+	return created, nil
+}
+
+// materialiseFlex creates one occurrence per week for a flexible-day chore,
+// on the board from the week's first allowed day and due on its last.
+func materialiseFlex(ctx context.Context, q *dbq.Queries, c dbq.Chore, start, end time.Time, loc *time.Location) (int, error) {
+	ws, err := flexWindows(c, start, end, loc)
+	if err != nil {
+		return 0, fmt.Errorf("chore %d: %w", c.ID, err)
+	}
+	created := 0
+	for _, w := range ws {
+		from := w.From()
+		n, err := q.InsertOccurrence(ctx, dbq.InsertOccurrenceParams{
+			HouseholdID:   c.HouseholdID,
+			ChoreID:       c.ID,
+			DueOn:         w.Due(),
+			AssigneeID:    c.AssigneeID,
+			AvailableFrom: &from,
 		})
 		if err != nil {
 			return 0, fmt.Errorf("insert occurrence: %w", err)
@@ -179,6 +222,21 @@ func (s *Service) Claim(ctx context.Context, householdID, occurrenceID, personID
 	return s.st.WithTx(ctx, func(q *dbq.Queries) error {
 		if _, err := getPerson(ctx, q, householdID, personID); err != nil {
 			return err
+		}
+		occ, err := getOccurrence(ctx, q, householdID, occurrenceID)
+		if err != nil {
+			return err
+		}
+		chore, err := q.GetChore(ctx, dbq.GetChoreParams{HouseholdID: householdID, ID: occ.ChoreID})
+		if err != nil {
+			return fmt.Errorf("get chore: %w", err)
+		}
+		// A shared chore is already theirs to do; nobody claims it.
+		if chore.Mode == ModeShared {
+			return ErrNotClaimable
+		}
+		if occ.Status != StatusDone && s.tooLate(ctx, householdID, chore, occ) {
+			return ErrTooLate
 		}
 		n, err := q.ClaimOccurrence(ctx, dbq.ClaimOccurrenceParams{
 			PersonID:    &personID,
@@ -246,48 +304,83 @@ func (s *Service) Complete(ctx context.Context, householdID, occurrenceID, perso
 		if occ.Status == StatusDone {
 			return ErrNotOpen
 		}
-		owner := occ.AssigneeID
-		if owner == nil {
-			owner = occ.ClaimedBy
-		}
-		if owner != nil && *owner != personID {
-			return ErrNotYours
-		}
 		chore, err := q.GetChore(ctx, dbq.GetChoreParams{HouseholdID: householdID, ID: occ.ChoreID})
 		if err != nil {
 			return fmt.Errorf("get chore: %w", err)
+		}
+		if err := canDo(ctx, q, chore, occ, personID); err != nil {
+			return err
+		}
+		if s.tooLate(ctx, householdID, chore, occ) {
+			return ErrTooLate
 		}
 
 		status := StatusApproved
 		if chore.RequiresApproval == 1 {
 			status = StatusPending
 		}
-		now := s.now().Unix()
-		out, err = q.CreateCompletion(ctx, dbq.CreateCompletionParams{
-			HouseholdID:  householdID,
-			OccurrenceID: occurrenceID,
-			PersonID:     personID,
-			CompletedAt:  now,
-			Status:       status,
-			Points:       chore.Points,
-			Pence:        chore.Pence,
-		})
+		out, err = s.recordCompletion(ctx, q, chore, occurrenceID, personID, status, nil)
 		if err != nil {
-			return fmt.Errorf("create completion: %w", err)
-		}
-		if err := q.SetOccurrenceStatus(ctx, dbq.SetOccurrenceStatusParams{
-			Status: StatusDone, HouseholdID: householdID, ID: occurrenceID,
-		}); err != nil {
-			return fmt.Errorf("mark done: %w", err)
-		}
-		if status == StatusApproved {
-			if err := creditCompletion(ctx, q, out, nil, now); err != nil {
-				return err
-			}
+			return err
 		}
 		return s.activity(ctx, q, householdID, personID, "chore.completed", out.ID)
 	})
 	return out, err
+}
+
+// canDo checks personID may complete occ: its assignee or claimant, one of
+// a shared chore's people, or anyone for an unclaimed pool chore.
+func canDo(ctx context.Context, q *dbq.Queries, chore dbq.Chore, occ dbq.ChoreOccurrence, personID int64) error {
+	owner := occ.AssigneeID
+	if owner == nil {
+		owner = occ.ClaimedBy
+	}
+	if owner != nil {
+		if *owner != personID {
+			return ErrNotYours
+		}
+		return nil
+	}
+	if chore.Mode == ModeShared {
+		people, err := q.ListPeopleForChore(ctx, dbq.ListPeopleForChoreParams{HouseholdID: chore.HouseholdID, ChoreID: chore.ID})
+		if err != nil {
+			return fmt.Errorf("chore people: %w", err)
+		}
+		if !slices.Contains(people, personID) {
+			return ErrNotYours
+		}
+	}
+	return nil
+}
+
+// recordCompletion creates personID's completion of an occurrence of chore,
+// marks the occurrence done and, when approved, credits it. reviewer is the
+// adult who approved it, if one did.
+func (s *Service) recordCompletion(ctx context.Context, q *dbq.Queries, chore dbq.Chore, occurrenceID, personID int64, status string, reviewer *int64) (dbq.Completion, error) {
+	now := s.now().Unix()
+	out, err := q.CreateCompletion(ctx, dbq.CreateCompletionParams{
+		HouseholdID:  chore.HouseholdID,
+		OccurrenceID: occurrenceID,
+		PersonID:     personID,
+		CompletedAt:  now,
+		Status:       status,
+		Points:       chore.Points,
+		Pence:        chore.Pence,
+	})
+	if err != nil {
+		return out, fmt.Errorf("create completion: %w", err)
+	}
+	if err := q.SetOccurrenceStatus(ctx, dbq.SetOccurrenceStatusParams{
+		Status: StatusDone, HouseholdID: chore.HouseholdID, ID: occurrenceID,
+	}); err != nil {
+		return out, fmt.Errorf("mark done: %w", err)
+	}
+	if status == StatusApproved {
+		if err := creditCompletion(ctx, q, out, reviewer, now); err != nil {
+			return out, err
+		}
+	}
+	return out, nil
 }
 
 // Approve credits a pending completion. reviewerID must be an adult.
@@ -358,59 +451,6 @@ func (s *Service) reviewTx(ctx context.Context, q *dbq.Queries, householdID, com
 	return s.activity(ctx, q, householdID, reviewerID, verb, completionID)
 }
 
-// Redeem spends personID's balance on a reward. It fails with
-// ErrInsufficientBalance if either points or pence would go negative.
-func (s *Service) Redeem(ctx context.Context, householdID, rewardID, personID int64) (dbq.Redemption, error) {
-	var out dbq.Redemption
-	err := s.st.WithTx(ctx, func(q *dbq.Queries) error {
-		if _, err := getPerson(ctx, q, householdID, personID); err != nil {
-			return err
-		}
-		reward, err := q.GetReward(ctx, dbq.GetRewardParams{HouseholdID: householdID, ID: rewardID})
-		if err != nil {
-			return notFound(err)
-		}
-		if reward.ArchivedAt != nil {
-			return ErrNotFound
-		}
-		bal, err := q.BalanceForPerson(ctx, dbq.BalanceForPersonParams{HouseholdID: householdID, PersonID: personID})
-		if err != nil {
-			return fmt.Errorf("balance: %w", err)
-		}
-		if bal.Points < reward.CostPoints || bal.Pence < reward.CostPence {
-			return ErrInsufficientBalance
-		}
-
-		now := s.now().Unix()
-		out, err = q.CreateRedemption(ctx, dbq.CreateRedemptionParams{
-			HouseholdID: householdID,
-			RewardID:    rewardID,
-			PersonID:    personID,
-			Points:      reward.CostPoints,
-			Pence:       reward.CostPence,
-			Status:      StatusApproved,
-			RequestedAt: now,
-		})
-		if err != nil {
-			return fmt.Errorf("create redemption: %w", err)
-		}
-		if _, err := q.InsertLedgerEntry(ctx, dbq.InsertLedgerEntryParams{
-			HouseholdID:  householdID,
-			PersonID:     personID,
-			Points:       -reward.CostPoints,
-			Pence:        -reward.CostPence,
-			Kind:         "redemption",
-			RedemptionID: &out.ID,
-			Note:         reward.Title,
-			CreatedAt:    now,
-		}); err != nil {
-			return fmt.Errorf("ledger: %w", err)
-		}
-		return s.activity(ctx, q, householdID, personID, "reward.redeemed", out.ID)
-	})
-	return out, err
-}
-
 func creditCompletion(ctx context.Context, q *dbq.Queries, c dbq.Completion, by *int64, now int64) error {
 	if _, err := q.InsertLedgerEntry(ctx, dbq.InsertLedgerEntryParams{
 		HouseholdID:  c.HouseholdID,
@@ -429,14 +469,17 @@ func creditCompletion(ctx context.Context, q *dbq.Queries, c dbq.Completion, by 
 
 func (s *Service) activity(ctx context.Context, q *dbq.Queries, householdID, actorID int64, verb string, subjectID int64) error {
 	subjectType := map[string]string{
-		"chore.claimed":   "occurrence",
-		"chore.released":  "occurrence",
-		"chore.completed": "completion",
-		"chore.undone":    "occurrence",
-		"chore.approved":  "completion",
-		"chore.rejected":  "completion",
-		"chore.reversed":  "completion",
-		"reward.redeemed": "redemption",
+		"chore.claimed":    "occurrence",
+		"chore.released":   "occurrence",
+		"chore.completed":  "completion",
+		"chore.undone":     "occurrence",
+		"chore.approved":   "completion",
+		"chore.rejected":   "completion",
+		"chore.reversed":   "completion",
+		"reward.requested": "redemption",
+		"reward.redeemed":  "redemption",
+		"reward.declined":  "redemption",
+		"reward.cancelled": "redemption",
 	}[verb]
 	if err := q.InsertActivity(ctx, dbq.InsertActivityParams{
 		HouseholdID: householdID,
@@ -462,6 +505,24 @@ func getPerson(ctx context.Context, q *dbq.Queries, householdID, id int64) (dbq.
 		return dbq.Person{}, ErrNotFound
 	}
 	return p, nil
+}
+
+func choreIsShared(ctx context.Context, q *dbq.Queries, householdID, choreID int64) (bool, error) {
+	c, err := q.GetChore(ctx, dbq.GetChoreParams{HouseholdID: householdID, ID: choreID})
+	if err != nil {
+		return false, notFound(err)
+	}
+	return c.Mode == ModeShared, nil
+}
+
+// IsShared reports whether an occurrence belongs to a shared chore.
+func (s *Service) IsShared(ctx context.Context, householdID, occurrenceID int64) bool {
+	occ, err := getOccurrence(ctx, s.st.Q, householdID, occurrenceID)
+	if err != nil {
+		return false
+	}
+	shared, _ := choreIsShared(ctx, s.st.Q, householdID, occ.ChoreID)
+	return shared
 }
 
 func getOccurrence(ctx context.Context, q *dbq.Queries, householdID, id int64) (dbq.ChoreOccurrence, error) {

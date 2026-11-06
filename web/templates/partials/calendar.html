@@ -1,0 +1,122 @@
+{{/* The board calendar: a week or month of calendar-feed events and
+     chores. It's read-only: chores open a sheet saying what they are, and
+     are only ticked off from the chores view. The page loads it into
+     #calendar and re-fetches data-src when the board changes. */}}
+{{define "calendar"}}
+<div class="cal__wrap cal__wrap--{{.View}}" data-src="{{.Self}}">
+  <div class="cal__bar">
+    <div class="cal__nav">
+      <button class="btn cal__arrow" type="button" aria-label="Previous {{.View}}"
+              {{with .Prev}}hx-get="{{.}}" hx-target="#calendar" hx-swap="innerHTML"{{else}}disabled{{end}}>‹</button>
+      <h2 class="cal__title">{{.Title}}</h2>
+      <button class="btn cal__arrow" type="button" aria-label="Next {{.View}}"
+              {{with .Next}}hx-get="{{.}}" hx-target="#calendar" hx-swap="innerHTML"{{else}}disabled{{end}}>›</button>
+      <button class="btn btn--ghost cal__today" type="button" hx-get="{{.Today}}" hx-target="#calendar" hx-swap="innerHTML"
+              {{if .ShowsToday}}disabled{{end}}>Today</button>
+    </div>
+    <div class="cal__views" role="group" aria-label="Calendar view">
+      <button type="button" hx-get="{{.Week}}" hx-target="#calendar" hx-swap="innerHTML" aria-pressed="{{if eq .View "week"}}true{{else}}false{{end}}">Week</button>
+      <button type="button" hx-get="{{.Month}}" hx-target="#calendar" hx-swap="innerHTML" aria-pressed="{{if eq .View "month"}}true{{else}}false{{end}}">Month</button>
+    </div>
+  </div>
+
+  {{if eq .View "month"}}
+  <div class="cal__month" role="grid" aria-label="{{.Title}}">
+    <div class="cal__heads" role="row">{{range .Weekdays}}<span role="columnheader">{{.}}</span>{{end}}</div>
+    {{range .Weeks}}
+    <div class="cal__mweek" role="row">
+      {{range .}}
+      <button class="cal__cell{{if .Today}} cal__cell--today{{end}}{{if .Outside}} cal__cell--outside{{end}}{{if .Past}} cal__cell--past{{end}}" type="button" role="gridcell"
+              hx-get="/board/calendar/day/{{.Date}}" hx-target="#sheet-body" hx-swap="innerHTML"
+              aria-label="{{.Label}}{{with .Count}}, {{.}} {{if eq . 1}}thing{{else}}things{{end}}{{end}}"{{if .Today}} aria-current="date"{{end}}>
+        <span class="cal__num">{{.Num}}</span>
+        <span class="cal__shown">
+          {{- range .Shown}}<span class="cal-item cal-item--mini{{template "cal_item_class" .}}"{{with .Colour}} style="--item: {{.}}"{{end}}>
+            {{- if .IsChore}}{{with .Chore.Emoji}}{{.}} {{end}}{{else if ne .When "All day"}}<span class="cal-item__when">{{.When}}</span> {{end}}{{.Title}}</span>{{end -}}
+          {{- if .More}}<span class="cal__more">+{{.More}} more</span>{{end -}}
+        </span>
+        <span class="cal__dots" aria-hidden="true">{{range .AllDay}}<i{{with .Colour}} style="--item: {{.}}"{{end}}></i>{{end}}{{range .Items}}<i{{with .Colour}} style="--item: {{.}}"{{end}}></i>{{end}}</span>
+      </button>
+      {{end}}
+    </div>
+    {{end}}
+  </div>
+  {{else}}
+  <div class="cal__week">
+    {{range index .Weeks 0}}
+    <section class="cal__day{{if .Today}} cal__day--today{{end}}{{if .Past}} cal__day--past{{end}}" aria-label="{{.Label}}"{{if .Today}} aria-current="date"{{end}}>
+      <h3 class="cal__dayhead"><span class="cal__dow">{{slice .Label 0 3}}</span> <span class="cal__num">{{.Num}}</span></h3>
+      {{template "cal_list" .}}
+    </section>
+    {{end}}
+  </div>
+  {{end}}
+  {{if not .HasCalendars}}<p class="cal__hint muted">Add calendar feeds in Admin › Calendars to see the family's events here too.</p>{{end}}
+</div>
+{{end}}
+
+{{define "cal_item_class"}}{{if .IsChore}} cal-item--chore{{if .Chore.Pool}}{{if not .Person}} cal-item--pool{{end}}{{end}} cal-item--{{.Chore.Status}}{{else}} cal-item--event{{if eq .When "All day"}} cal-item--allday{{end}}{{end}}{{end}}
+
+{{/* One day's items: all-day events, then events and chores in time order. */}}
+{{define "cal_list"}}
+{{if or .AllDay .Items}}
+<ul class="cal__items">
+  {{range .AllDay}}<li class="cal-item{{template "cal_item_class" .}}"{{with .Colour}} style="--item: {{.}}"{{end}}><span class="cal-item__title">{{.Title}}</span></li>{{end}}
+  {{range .Items}}
+  {{if .IsChore}}
+  <li><button class="cal-item{{template "cal_item_class" .}}" type="button"{{with .Colour}} style="--item: {{.}}"{{end}}
+              hx-get="/board/calendar/chores/{{.Chore.ChoreID}}/{{.Chore.Date}}" hx-target="#sheet-body" hx-swap="innerHTML">
+    {{- with .Chore.Emoji}}<span class="cal-item__emoji" aria-hidden="true">{{.}}</span>{{end}}
+    <span class="cal-item__title">{{.Title}}</span>
+    <span class="cal-item__meta">
+      {{- with .When}}<span class="cal-item__when">{{.}}</span>{{end}}
+      {{- if and .Chore.Or (ne (print .Chore.Status) "done")}}<span class="cal-item__or" title="Any one of {{.Chore.Or}}">{{.Chore.Or}}</span>{{end}}
+      {{- if eq (print .Chore.Status) "done"}}<span class="cal-item__tick" aria-label="Done{{with .DoneBy}} by {{.Name}}{{end}}">✓{{with .DoneBy}} {{template "avatar" (avatar . "xs")}}{{end}}</span>
+      {{- else if eq (print .Chore.Status) "missed"}}<span class="cal-item__state">Missed</span>
+      {{- else if .People}}<span class="cal-item__who cal-item__people">{{range .People}}{{template "avatar" (avatar . "xs")}}{{end}} {{orNames .People}}</span>
+      {{- else if .Person}}<span class="cal-item__who">{{.Person.Name}}</span>
+      {{- else}}<span class="cal-item__who">Up for grabs</span>{{end -}}
+    </span>
+  </button></li>
+  {{else}}
+  <li class="cal-item{{template "cal_item_class" .}}"{{with .Colour}} style="--item: {{.}}"{{end}}><span class="cal-item__when">{{.When}}</span> <span class="cal-item__title">{{.Title}}</span></li>
+  {{end}}
+  {{end}}
+</ul>
+{{else}}
+<p class="cal__nothing">–</p>
+{{end}}
+{{end}}
+
+{{/* The sheet for one day, from the month view. */}}
+{{define "cal_day"}}
+<div class="picker cal-sheet">
+  <h2 class="picker__title" tabindex="-1" autofocus>{{.Day.Label}}</h2>
+  {{if or .Day.AllDay .Day.Items}}{{template "cal_list" .Day}}{{else}}<p class="muted">Nothing on.</p>{{end}}
+  <div class="picker__actions"><button class="btn btn--ghost btn--block" type="button" data-close>Close</button></div>
+</div>
+{{end}}
+
+{{/* The read-only sheet for a chore on the calendar. */}}
+{{define "cal_chore"}}
+{{$c := .Item.Chore}}
+<div class="picker cal-sheet">
+  <h2 class="picker__title" tabindex="-1" autofocus>{{with $c.Emoji}}<span class="picker__emoji" aria-hidden="true">{{.}}</span> {{end}}{{.Item.Title}}</h2>
+  <dl class="cal-sheet__facts">
+    <dt>When</dt><dd>{{.Day}}{{with .Item.When}}, by {{.}}{{end}}</dd>
+    <dt>Who</dt><dd>{{with .Item.Person}}{{template "avatar" (avatar . "xs")}} {{.Name}}{{else}}{{with .Item.People}}{{range .}}{{template "avatar" (avatar . "xs")}}{{end}} {{orNames .}} (any of them){{else}}Up for grabs{{end}}{{end}}</dd>
+    {{with worth $c.Points $c.Pence}}<dt>Worth</dt><dd>{{.}}</dd>{{end}}
+{{with $c.Or}}    <dt>Days</dt><dd>Any one of {{.}}</dd>
+{{end}}    <dt>Repeats</dt><dd>{{.Repeat}}</dd>
+    <dt>Status</dt><dd>
+      {{- if eq (print $c.Status) "done"}}Done{{with .Item.DoneBy}} by {{.Name}}{{end}}{{with .DoneAt}} at {{.}}{{end}}{{if $c.Pending}} (waiting for a grown-up){{end}}
+      {{- else if eq (print $c.Status) "missed"}}Missed
+      {{- else if eq (print $c.Status) "today"}}To do today
+      {{- else}}Coming up{{end -}}
+    </dd>
+  </dl>
+  {{with .Chore.Description}}<p class="cal-sheet__desc">{{.}}</p>{{end}}
+  {{if eq (print $c.Status) "today"}}<p class="muted">Tick it off on the chores board.</p>{{end}}
+  <div class="picker__actions"><button class="btn btn--ghost btn--block" type="button" data-close>Close</button></div>
+</div>
+{{end}}

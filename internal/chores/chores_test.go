@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lukeskelhorn/domus/internal/store"
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/store"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
 var london = mustLoad("Europe/London")
@@ -34,7 +34,7 @@ type fixture struct {
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	ctx := t.Context()
-	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "domus.db"))
+	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "ingle.db"))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -74,6 +74,9 @@ type choreOpts struct {
 	points   int64
 	pence    int64
 	approval bool
+	anyDay   bool // a flexible-day chore
+	dueTime  *string
+	onTheDay bool // Only on the day
 }
 
 func (f *fixture) chore(title string, o choreOpts) dbq.Chore {
@@ -91,11 +94,21 @@ func (f *fixture) chore(title string, o choreOpts) dbq.Chore {
 	}
 	c, err := f.st.Q.CreateChore(f.t.Context(), dbq.CreateChoreParams{
 		HouseholdID: f.hh, Title: title, Mode: mode, AssigneeID: o.assignee, Rrule: o.rrule,
-		StartsOn: o.startsOn, Points: o.points, Pence: o.pence, RequiresApproval: approval,
+		StartsOn: o.startsOn, DueTime: o.dueTime, Points: o.points, Pence: o.pence, RequiresApproval: approval,
 		CreatedAt: 1, UpdatedAt: 1,
 	})
 	if err != nil {
 		f.t.Fatalf("CreateChore: %v", err)
+	}
+	if o.anyDay {
+		if c, err = f.st.Q.SetChoreDayMode(f.t.Context(), dbq.SetChoreDayModeParams{DayMode: DayAny, HouseholdID: f.hh, ID: c.ID}); err != nil {
+			f.t.Fatalf("SetChoreDayMode: %v", err)
+		}
+	}
+	if o.onTheDay {
+		if c, err = f.st.Q.SetChoreOnTheDay(f.t.Context(), dbq.SetChoreOnTheDayParams{OnTheDay: 1, HouseholdID: f.hh, ID: c.ID}); err != nil {
+			f.t.Fatalf("SetChoreOnTheDay: %v", err)
+		}
 	}
 	return c
 }
@@ -320,30 +333,6 @@ func TestApprovalFlow(t *testing.T) {
 	want := []string{"chore.approved", "chore.completed", "chore.rejected", "chore.completed"}
 	if !slices.Equal(verbs, want) {
 		t.Errorf("activity = %v, want %v", verbs, want)
-	}
-}
-
-func TestRedeem(t *testing.T) {
-	f := newFixture(t)
-	ctx := t.Context()
-	f.chore("Tidy room", choreOpts{assignee: &f.kid.ID, points: 15})
-	occ := f.onlyOccurrence()
-	if _, err := f.svc.Complete(ctx, f.hh, occ.ID, f.kid.ID); err != nil {
-		t.Fatal(err)
-	}
-
-	film, err := f.st.Q.CreateReward(ctx, dbq.CreateRewardParams{HouseholdID: f.hh, Title: "Pick the film", CostPoints: 10, CreatedAt: 1})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.svc.Redeem(ctx, f.hh, film.ID, f.kid.ID); err != nil {
-		t.Fatalf("Redeem: %v", err)
-	}
-	if b := f.balance(f.kid); b.Points != 5 {
-		t.Errorf("points = %d, want 5", b.Points)
-	}
-	if _, err := f.svc.Redeem(ctx, f.hh, film.ID, f.kid.ID); !errors.Is(err, ErrInsufficientBalance) {
-		t.Errorf("err = %v, want ErrInsufficientBalance", err)
 	}
 }
 

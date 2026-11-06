@@ -1,14 +1,17 @@
-// Package backup writes Domus backups: a gzipped tar of a consistent
+// Package backup writes Ingle backups: a gzipped tar of a consistent
 // snapshot of the database plus the uploaded photos and avatars.
 //
 // An archive unpacks straight into the data directory:
 //
-//	domus.db
+//	ingle.db
 //	photos/...
 //	avatars/...
 //
-// photo-cache/ is left out because Domus rebuilds it, and the read-only
-// photos folder (DOMUS_PHOTOS_DIR) isn't Domus's to back up.
+// photo-cache/ is left out because Ingle rebuilds it, and the read-only
+// photos folder (INGLE_PHOTOS_DIR) isn't Ingle's to back up.
+//
+// Backups from before the rename to Ingle are domus-*.tar.gz holding a
+// domus.db. They're still listed and pruned with the new ones.
 package backup
 
 import (
@@ -31,9 +34,15 @@ import (
 var Dirs = []string{"photos", "avatars"}
 
 const (
-	prefix = "domus-"
+	prefix = "ingle-"
 	suffix = ".tar.gz"
+	// dbName is the database's name inside an archive.
+	dbName = "ingle.db"
 )
+
+// prefixes are the archive name prefixes List recognises: the current one
+// and the one from before the rename.
+var prefixes = []string{prefix, "domus-"}
 
 // Run writes a backup of db and dataDir's Dirs into destDir, named after
 // now, and then deletes all but the newest keep backups there. It returns
@@ -80,7 +89,7 @@ func writeArchive(ctx context.Context, path, snap, dataDir string) (err error) {
 	gz := gzip.NewWriter(f)
 	tw := tar.NewWriter(gz)
 
-	if err := addFile(tw, snap, "domus.db"); err != nil {
+	if err := addFile(tw, snap, dbName); err != nil {
 		return err
 	}
 	for _, d := range Dirs {
@@ -166,12 +175,29 @@ func List(dir string) ([]string, error) {
 	}
 	var out []string
 	for _, e := range entries {
-		if n := e.Name(); e.Type().IsRegular() && strings.HasPrefix(n, prefix) && strings.HasSuffix(n, suffix) {
+		if n := e.Name(); e.Type().IsRegular() && stamp(n) != "" {
 			out = append(out, filepath.Join(dir, n))
 		}
 	}
-	sort.Strings(out) // the timestamped names sort by age
+	// The timestamps sort by age, whichever prefix the name has.
+	sort.SliceStable(out, func(i, j int) bool {
+		return stamp(filepath.Base(out[i])) < stamp(filepath.Base(out[j]))
+	})
 	return out, nil
+}
+
+// stamp returns the timestamp part of a backup's file name, or "" if name
+// isn't a backup.
+func stamp(name string) string {
+	if !strings.HasSuffix(name, suffix) {
+		return ""
+	}
+	for _, p := range prefixes {
+		if s, ok := strings.CutPrefix(name, p); ok {
+			return strings.TrimSuffix(s, suffix)
+		}
+	}
+	return ""
 }
 
 // Prune deletes all but the newest keep backups in dir. keep <= 0 keeps

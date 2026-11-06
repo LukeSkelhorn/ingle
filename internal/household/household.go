@@ -13,10 +13,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lukeskelhorn/domus/internal/auth"
-	"github.com/lukeskelhorn/domus/internal/store"
-	"github.com/lukeskelhorn/domus/internal/store/dbq"
-	"github.com/lukeskelhorn/domus/internal/valid"
+	"github.com/lukeskelhorn/ingle/internal/auth"
+	"github.com/lukeskelhorn/ingle/internal/emoji"
+	"github.com/lukeskelhorn/ingle/internal/store"
+	"github.com/lukeskelhorn/ingle/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/valid"
 )
 
 // Person kinds.
@@ -49,11 +50,14 @@ type PersonInput struct {
 	Colour    string
 	Avatar    *string // "emoji:…" or "photo:…", nil for none
 	SortOrder int64
+	// PictureCards shows their column as big emoji tiles (children only).
+	PictureCards bool
 }
 
 // RewardInput is the editable part of a reward.
 type RewardInput struct {
 	Title       string
+	Emoji       string // a single emoji, or "" for none
 	Description string
 	CostPoints  int64
 	CostPence   int64
@@ -211,7 +215,7 @@ func (s *Service) UpdatePerson(ctx context.Context, householdID, actorID, id int
 		}
 		p, err = q.UpdatePerson(ctx, dbq.UpdatePersonParams{
 			Name: strings.TrimSpace(in.Name), Kind: in.Kind, Colour: strings.ToUpper(in.Colour),
-			Avatar: in.Avatar, SortOrder: in.SortOrder, HouseholdID: householdID, ID: id,
+			Avatar: in.Avatar, SortOrder: in.SortOrder, PictureCards: pictureCards(in), HouseholdID: householdID, ID: id,
 		})
 		if err != nil {
 			return uniqueErr(err)
@@ -223,7 +227,8 @@ func (s *Service) UpdatePerson(ctx context.Context, householdID, actorID, id int
 
 // ArchivePerson hides a person from the board, keeping their history. It
 // fails while they have assigned chores, or if they are the last adult who
-// can sign in.
+// can sign in. They're taken out of any shared chores; one left with a
+// single person becomes that person's assigned chore.
 func (s *Service) ArchivePerson(ctx context.Context, householdID, actorID, id int64) error {
 	now := s.now()
 	return s.st.WithTx(ctx, func(q *dbq.Queries) error {
@@ -247,6 +252,9 @@ func (s *Service) ArchivePerson(ctx context.Context, householdID, actorID, id in
 			}
 		}
 		at := now.Unix()
+		if err := leaveSharedChores(ctx, q, householdID, id, at); err != nil {
+			return err
+		}
 		if err := q.ArchivePerson(ctx, dbq.ArchivePersonParams{ArchivedAt: &at, HouseholdID: householdID, ID: id}); err != nil {
 			return fmt.Errorf("archive person: %w", err)
 		}
@@ -400,7 +408,7 @@ func (s *Service) CreateReward(ctx context.Context, householdID, actorID int64, 
 	err := s.st.WithTx(ctx, func(q *dbq.Queries) error {
 		var err error
 		r, err = q.CreateReward(ctx, dbq.CreateRewardParams{
-			HouseholdID: householdID, Title: strings.TrimSpace(in.Title), Description: strings.TrimSpace(in.Description),
+			HouseholdID: householdID, Title: strings.TrimSpace(in.Title), Emoji: strings.TrimSpace(in.Emoji), Description: strings.TrimSpace(in.Description),
 			CostPoints: in.CostPoints, CostPence: in.CostPence, CreatedAt: now.Unix(),
 		})
 		if err != nil {
@@ -421,7 +429,7 @@ func (s *Service) UpdateReward(ctx context.Context, householdID, actorID, id int
 	err := s.st.WithTx(ctx, func(q *dbq.Queries) error {
 		var err error
 		r, err = q.UpdateReward(ctx, dbq.UpdateRewardParams{
-			Title: strings.TrimSpace(in.Title), Description: strings.TrimSpace(in.Description),
+			Title: strings.TrimSpace(in.Title), Emoji: strings.TrimSpace(in.Emoji), Description: strings.TrimSpace(in.Description),
 			CostPoints: in.CostPoints, CostPence: in.CostPence, HouseholdID: householdID, ID: id,
 		})
 		if err != nil {
@@ -432,7 +440,8 @@ func (s *Service) UpdateReward(ctx context.Context, householdID, actorID, id int
 	return r, err
 }
 
-// ArchiveReward hides a reward.
+// ArchiveReward hides a reward. Anyone saving for it loses the goal; it
+// doesn't come back if the reward is restored.
 func (s *Service) ArchiveReward(ctx context.Context, householdID, actorID, id int64) error {
 	now := s.now()
 	return s.st.WithTx(ctx, func(q *dbq.Queries) error {
@@ -442,6 +451,9 @@ func (s *Service) ArchiveReward(ctx context.Context, householdID, actorID, id in
 		at := now.Unix()
 		if err := q.ArchiveReward(ctx, dbq.ArchiveRewardParams{ArchivedAt: &at, HouseholdID: householdID, ID: id}); err != nil {
 			return fmt.Errorf("archive reward: %w", err)
+		}
+		if err := q.ClearGoalsForReward(ctx, dbq.ClearGoalsForRewardParams{HouseholdID: householdID, GoalRewardID: &id}); err != nil {
+			return fmt.Errorf("clear goals: %w", err)
 		}
 		return log(ctx, q, householdID, actorID, "reward.archived", "reward", id, now)
 	})
@@ -464,12 +476,20 @@ func (s *Service) RestoreReward(ctx context.Context, householdID, actorID, id in
 func createPerson(ctx context.Context, q *dbq.Queries, householdID int64, in PersonInput, now time.Time) (dbq.Person, error) {
 	p, err := q.CreatePerson(ctx, dbq.CreatePersonParams{
 		HouseholdID: householdID, Name: strings.TrimSpace(in.Name), Kind: in.Kind,
-		Colour: strings.ToUpper(in.Colour), Avatar: in.Avatar, SortOrder: in.SortOrder, CreatedAt: now.Unix(),
+		Colour: strings.ToUpper(in.Colour), Avatar: in.Avatar, SortOrder: in.SortOrder, PictureCards: pictureCards(in), CreatedAt: now.Unix(),
 	})
 	if err != nil {
 		return dbq.Person{}, uniqueErr(err)
 	}
 	return p, nil
+}
+
+// pictureCards is the stored picture_cards flag: only children have them.
+func pictureCards(in PersonInput) int64 {
+	if in.PictureCards && in.Kind == KindChild {
+		return 1
+	}
+	return 0
 }
 
 func validatePerson(in PersonInput) valid.Errors {
@@ -493,6 +513,9 @@ func validateReward(in RewardInput) valid.Errors {
 	errs := valid.Errors{}
 	if n := len([]rune(strings.TrimSpace(in.Title))); n < 1 || n > 100 {
 		errs.Add("title", "Enter a title (up to 100 characters).")
+	}
+	if e := strings.TrimSpace(in.Emoji); e != "" && !emoji.Valid(e) {
+		errs.Add("emoji", "Use a single emoji.")
 	}
 	if len(in.Description) > 1000 {
 		errs.Add("description", "Keep it under 1,000 characters.")
@@ -571,4 +594,33 @@ func notFound(err error) error {
 		return ErrNotFound
 	}
 	return err
+}
+
+// leaveSharedChores takes personID out of every shared chore. A shared chore
+// down to one person becomes theirs: assigned, with its not-yet-started
+// occurrences given to them.
+func leaveSharedChores(ctx context.Context, q *dbq.Queries, householdID, personID, at int64) error {
+	if err := q.RemovePersonFromSharedChores(ctx, dbq.RemovePersonFromSharedChoresParams{HouseholdID: householdID, PersonID: personID}); err != nil {
+		return fmt.Errorf("leave shared chores: %w", err)
+	}
+	solo, err := q.ListSharedChoresWithOnePerson(ctx, householdID)
+	if err != nil {
+		return fmt.Errorf("shared chores: %w", err)
+	}
+	for _, c := range solo {
+		if err := q.MakeChoreAssigned(ctx, dbq.MakeChoreAssignedParams{
+			PersonID: &c.PersonID, UpdatedAt: at, HouseholdID: householdID, ID: c.ChoreID,
+		}); err != nil {
+			return fmt.Errorf("assign chore: %w", err)
+		}
+		if err := q.AssignOpenOccurrences(ctx, dbq.AssignOpenOccurrencesParams{
+			PersonID: &c.PersonID, HouseholdID: householdID, ChoreID: c.ChoreID,
+		}); err != nil {
+			return fmt.Errorf("assign occurrences: %w", err)
+		}
+		if err := q.DeleteChorePeople(ctx, dbq.DeleteChorePeopleParams{HouseholdID: householdID, ChoreID: c.ChoreID}); err != nil {
+			return fmt.Errorf("clear chore people: %w", err)
+		}
+	}
+	return nil
 }
