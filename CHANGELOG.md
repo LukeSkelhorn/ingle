@@ -6,6 +6,14 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ## [Unreleased]
 
+### Added
+
+- **Each of these people:** for chores everyone does, like **Brush teeth**, **Make bed** or **Exercise**. In **Admin › Chores**, **Who does it?** has a new option, **Each of these people**: choose **Everyone** (anyone added to the household later gets it too) or tick who. Each of them gets their own card in their column and ticks it off themselves; one person doing theirs doesn't tick it off for anyone else. Kids earn the chore's points and pocket money; adults earn its **Adults' points** and no money. Times, Show it, Only on the day, approval, the calendar and Admin › Completions all work per person. One chore replaces the separate copies you had for each person: set it up, then archive the old ones. ([DOM-50](https://linear.app/skeltech/issue/DOM-50))
+
+### Upgrade notes
+
+- This release has a database migration (chores get the new option, and each day's chores can have a copy per person). Ingle takes care of it on start. To go back to v0.2.3 afterwards, restore the backup taken before upgrading.
+
 ## [v0.2.3] - 2026-11-07
 
 Timed chores: several times a day, and only on the board when they're near.

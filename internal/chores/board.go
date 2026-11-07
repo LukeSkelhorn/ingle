@@ -144,13 +144,16 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 	for _, c := range comps {
 		byOcc[c.OccurrenceID] = c
 	}
-	// latest is when each chore's newest occurrence on the board came up:
-	// its due date, or the first day of a flexible-day window. An overdue
-	// occurrence older than that has been superseded.
-	latest := map[int64]string{}
+	// latest is when each chore's newest occurrence on the board came up
+	// (per person, for an "each" chore): its due date, or the first day of a
+	// flexible-day window. An overdue occurrence older than that has been
+	// superseded.
+	type copyOf struct{ chore, person int64 }
+	latest := map[copyOf]string{}
 	for _, r := range rows {
-		if start := availableFrom(r); start > latest[r.ChoreID] {
-			latest[r.ChoreID] = start
+		k := copyOf{r.ChoreID, r.ForPerson}
+		if start := availableFrom(r); start > latest[k] {
+			latest[k] = start
 		}
 	}
 	loc, dayStart, now := s.loc(ctx, householdID), s.dayStart(ctx, householdID), s.now()
@@ -195,7 +198,7 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 		}
 		comp, done := byOcc[r.ID]
 		flex := r.AvailableFrom != nil
-		if r.DueOn < today && latest[r.ChoreID] > r.DueOn {
+		if r.DueOn < today && latest[copyOf{r.ChoreID, r.ForPerson}] > r.DueOn {
 			continue // superseded by a newer occurrence
 		}
 		if (r.DueOn < today || flex) && done && comp.CompletedAt < boardDay.Unix() {
@@ -290,6 +293,7 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 			continue // owner archived since
 		}
 		card.Claimed = card.Pool && !done
+		card.Points, card.Pence = Earns(r.Mode, col.Person.Kind, r.Points, r.Pence, r.AdultPoints)
 		col.Cards = append(col.Cards, card)
 		col.TotalToday++
 		if done {

@@ -120,14 +120,14 @@ func TestCalendar(t *testing.T) {
 
 	// ChoreOn.
 	d := time.Date(2026, 11, 2, 0, 0, 0, 0, london)
-	c, ch, err := f.svc.ChoreOn(ctx, f.hh, d, teeth.ID, "2026-11-25")
+	c, ch, err := f.svc.ChoreOn(ctx, f.hh, d, teeth.ID, "2026-11-25", CalPick{})
 	if err != nil || c.Status != CalUpcoming || ch.ID != teeth.ID {
 		t.Errorf("ChoreOn = %+v, %v", c, err)
 	}
-	if _, _, err := f.svc.ChoreOn(ctx, f.hh, d, later.ID, "2026-11-25"); !errors.Is(err, ErrNotFound) {
+	if _, _, err := f.svc.ChoreOn(ctx, f.hh, d, later.ID, "2026-11-25", CalPick{}); !errors.Is(err, ErrNotFound) {
 		t.Errorf("ChoreOn before it starts = %v, want ErrNotFound", err)
 	}
-	if _, _, err := f.svc.ChoreOn(ctx, f.hh, d, gone.ID, "2026-11-03"); !errors.Is(err, ErrNotFound) {
+	if _, _, err := f.svc.ChoreOn(ctx, f.hh, d, gone.ID, "2026-11-03", CalPick{}); !errors.Is(err, ErrNotFound) {
 		t.Errorf("ChoreOn archived = %v, want ErrNotFound", err)
 	}
 }

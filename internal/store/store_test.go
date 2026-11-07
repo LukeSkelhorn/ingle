@@ -354,3 +354,85 @@ func TestChoreTimesMigration(t *testing.T) {
 		t.Errorf("foreign_keys = %d (%v), want 1", on, err)
 	}
 }
+
+func TestEachPersonMigration(t *testing.T) {
+	st := openTest(t)
+	ctx := t.Context()
+	sub, err := fs.Sub(migrations, "migrations")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := goose.NewProvider(goose.DialectSQLite3, st.DB, sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.DownTo(ctx, 14); err != nil {
+		t.Fatalf("DownTo(14): %v", err)
+	}
+	exec := func(qs ...string) {
+		t.Helper()
+		for _, q := range qs {
+			if _, err := st.DB.ExecContext(ctx, q); err != nil {
+				t.Fatalf("%s: %v", q, err)
+			}
+		}
+	}
+	one := func(q string, dest ...any) {
+		t.Helper()
+		if err := st.DB.QueryRowContext(ctx, q).Scan(dest...); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	exec(
+		`INSERT INTO households (id, name, created_at) VALUES (1, 'Home', 1)`,
+		`INSERT INTO people (id, household_id, name, kind, colour, created_at) VALUES (1, 1, 'Alfie', 'child', '#46A758', 1), (2, 1, 'Mum', 'adult', '#4A90D9', 1)`,
+		`INSERT INTO chores (id, household_id, title, mode, assignee_id, starts_on, due_times, on_the_day, created_at, updated_at) VALUES (1, 1, 'Teeth', 'assigned', 1, '2026-11-02', '07:30', 1, 1, 1)`,
+		`INSERT INTO chore_occurrences (id, household_id, chore_id, due_on, due_time, assignee_id, status) VALUES (7, 1, 1, '2026-11-02', '07:30', 1, 'done')`,
+		`INSERT INTO completions (id, household_id, occurrence_id, person_id, completed_at, status, points, pence) VALUES (1, 1, 7, 1, 1, 'approved', 5, 0)`,
+	)
+	if _, err := p.Up(ctx); err != nil {
+		t.Fatalf("Up: %v", err)
+	}
+	var kept string
+	one(`SELECT c.title || '/' || c.due_times || '/' || c.on_the_day || '/' || c.for_everyone || '/' || c.adult_points || ' ' ||
+	            o.id || '@' || o.due_time || '/' || o.for_person || '/' || o.status
+	     FROM chores c JOIN chore_occurrences o ON o.chore_id = c.id`, &kept)
+	if kept != "Teeth/07:30/1/0/0 7@07:30/0/done" {
+		t.Errorf("after up: %q", kept)
+	}
+
+	// An Everyone chore with a copy each; a second copy for the same person
+	// is refused.
+	exec(
+		`INSERT INTO chores (id, household_id, title, mode, starts_on, for_everyone, adult_points, points, created_at, updated_at) VALUES (2, 1, 'Bed', 'each', '2026-11-02', 1, 1, 2, 1, 1)`,
+		`INSERT INTO chore_occurrences (id, household_id, chore_id, due_on, assignee_id, for_person, status) VALUES (8, 1, 2, '2026-11-02', 1, 1, 'done'), (9, 1, 2, '2026-11-02', 2, 2, 'done')`,
+		`INSERT INTO completions (id, household_id, occurrence_id, person_id, completed_at, status, points, pence) VALUES (2, 1, 8, 1, 2, 'approved', 2, 0), (3, 1, 9, 2, 2, 'approved', 1, 0)`,
+		`INSERT INTO ledger_entries (household_id, person_id, points, pence, kind, completion_id, created_at) VALUES (1, 2, 1, 0, 'completion', 3, 2)`,
+	)
+	if _, err := st.DB.ExecContext(ctx, `INSERT INTO chore_occurrences (household_id, chore_id, due_on, assignee_id, for_person) VALUES (1, 2, '2026-11-02', 1, 1)`); err == nil {
+		t.Error("second copy for the same person accepted")
+	}
+	if _, err := st.DB.ExecContext(ctx, `INSERT INTO chores (household_id, title, mode, starts_on, created_at, updated_at) VALUES (1, 'X', 'every', '2026-11-02', 1, 1)`); err == nil {
+		t.Error("unknown mode accepted")
+	}
+
+	if _, err := p.DownTo(ctx, 14); err != nil {
+		t.Fatalf("DownTo(14) again: %v", err)
+	}
+	var mode, people string
+	var occs, comps, unlinked int
+	one(`SELECT mode FROM chores WHERE id = 2`, &mode)
+	one(`SELECT group_concat(person_id) FROM (SELECT person_id FROM chore_people WHERE chore_id = 2 ORDER BY person_id)`, &people)
+	one(`SELECT (SELECT count(*) FROM chore_occurrences WHERE chore_id = 2 AND assignee_id IS NULL), (SELECT count(*) FROM completions), (SELECT count(*) FROM ledger_entries WHERE completion_id IS NULL)`, &occs, &comps, &unlinked)
+	if mode != "shared" || people != "1,2" || occs != 1 || comps != 2 || unlinked != 1 {
+		t.Errorf("after down: mode %q, people %q, %d unassigned occurrences, %d completions, %d unlinked; want shared, 1,2, 1, 2, 1", mode, people, occs, comps, unlinked)
+	}
+	var on int
+	one(`PRAGMA foreign_keys`, &on)
+	if on != 1 {
+		t.Errorf("foreign_keys = %d, want 1", on)
+	}
+	if _, err := p.Up(ctx); err != nil {
+		t.Fatalf("Up again: %v", err)
+	}
+}

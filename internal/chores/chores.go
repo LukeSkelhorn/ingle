@@ -25,6 +25,9 @@ const (
 	ModePool     = "pool"
 	// ModeShared is done once by any of a few chosen people (chore_people).
 	ModeShared = "shared"
+	// ModeEach puts a copy on each chosen person's column (chore_people,
+	// or everyone with for_everyone), and each does their own.
+	ModeEach = "each"
 )
 
 // Status values shared by occurrences, completions and redemptions.
@@ -116,8 +119,12 @@ func (s *Service) Materialise(ctx context.Context, householdID int64, from time.
 
 	created := 0
 	err = s.st.WithTx(ctx, func(q *dbq.Queries) error {
+		who, err := loadDoers(ctx, q, householdID)
+		if err != nil {
+			return err
+		}
 		for _, c := range chores {
-			n, err := materialiseChore(ctx, q, c, start, end, loc)
+			n, err := materialiseChore(ctx, q, c, who.of(c), start, end, loc)
 			if err != nil {
 				return err
 			}
@@ -136,9 +143,11 @@ func window(from time.Time, days int, loc *time.Location) (start, end time.Time)
 	return start, end
 }
 
-func materialiseChore(ctx context.Context, q *dbq.Queries, c dbq.Chore, start, end time.Time, loc *time.Location) (int, error) {
+// materialiseChore creates c's occurrences in [start, end]. people is who
+// an "each" chore is for (each gets their own copy); nil for other chores.
+func materialiseChore(ctx context.Context, q *dbq.Queries, c dbq.Chore, people []int64, start, end time.Time, loc *time.Location) (int, error) {
 	if c.DayMode == DayAny && c.Rrule != nil {
-		return materialiseFlex(ctx, q, c, start, end, loc)
+		return materialiseFlex(ctx, q, c, people, start, end, loc)
 	}
 	dates, err := occurrenceDates(c, start, end, loc)
 	if err != nil {
@@ -147,17 +156,20 @@ func materialiseChore(ctx context.Context, q *dbq.Queries, c dbq.Chore, start, e
 	created := 0
 	for _, d := range dates {
 		for _, t := range times(c) {
-			n, err := q.InsertOccurrence(ctx, dbq.InsertOccurrenceParams{
-				HouseholdID: c.HouseholdID,
-				ChoreID:     c.ID,
-				DueOn:       d,
-				DueTime:     t,
-				AssigneeID:  c.AssigneeID,
-			})
-			if err != nil {
-				return 0, fmt.Errorf("insert occurrence: %w", err)
+			for _, sl := range slots(c, people) {
+				n, err := q.InsertOccurrence(ctx, dbq.InsertOccurrenceParams{
+					HouseholdID: c.HouseholdID,
+					ChoreID:     c.ID,
+					DueOn:       d,
+					DueTime:     t,
+					AssigneeID:  sl.assignee,
+					ForPerson:   sl.forPerson,
+				})
+				if err != nil {
+					return 0, fmt.Errorf("insert occurrence: %w", err)
+				}
+				created += int(n)
 			}
-			created += int(n)
 		}
 	}
 	return created, nil
@@ -165,7 +177,7 @@ func materialiseChore(ctx context.Context, q *dbq.Queries, c dbq.Chore, start, e
 
 // materialiseFlex creates one occurrence per week for a flexible-day chore,
 // on the board from the week's first allowed day and due on its last.
-func materialiseFlex(ctx context.Context, q *dbq.Queries, c dbq.Chore, start, end time.Time, loc *time.Location) (int, error) {
+func materialiseFlex(ctx context.Context, q *dbq.Queries, c dbq.Chore, people []int64, start, end time.Time, loc *time.Location) (int, error) {
 	ws, err := flexWindows(c, start, end, loc)
 	if err != nil {
 		return 0, fmt.Errorf("chore %d: %w", c.ID, err)
@@ -173,18 +185,21 @@ func materialiseFlex(ctx context.Context, q *dbq.Queries, c dbq.Chore, start, en
 	created := 0
 	for _, w := range ws {
 		from := w.From()
-		n, err := q.InsertOccurrence(ctx, dbq.InsertOccurrenceParams{
-			HouseholdID:   c.HouseholdID,
-			ChoreID:       c.ID,
-			DueOn:         w.Due(),
-			DueTime:       times(c)[0], // flexible chores have one time
-			AssigneeID:    c.AssigneeID,
-			AvailableFrom: &from,
-		})
-		if err != nil {
-			return 0, fmt.Errorf("insert occurrence: %w", err)
+		for _, sl := range slots(c, people) {
+			n, err := q.InsertOccurrence(ctx, dbq.InsertOccurrenceParams{
+				HouseholdID:   c.HouseholdID,
+				ChoreID:       c.ID,
+				DueOn:         w.Due(),
+				DueTime:       times(c)[0], // flexible chores have one time
+				AssigneeID:    sl.assignee,
+				AvailableFrom: &from,
+				ForPerson:     sl.forPerson,
+			})
+			if err != nil {
+				return 0, fmt.Errorf("insert occurrence: %w", err)
+			}
+			created += int(n)
 		}
-		created += int(n)
 	}
 	return created, nil
 }
@@ -362,14 +377,22 @@ func canDo(ctx context.Context, q *dbq.Queries, chore dbq.Chore, occ dbq.ChoreOc
 // adult who approved it, if one did.
 func (s *Service) recordCompletion(ctx context.Context, q *dbq.Queries, chore dbq.Chore, occurrenceID, personID int64, status string, reviewer *int64) (dbq.Completion, error) {
 	now := s.now().Unix()
+	points, pence := chore.Points, chore.Pence
+	if chore.Mode == ModeEach {
+		p, err := getPerson(ctx, q, chore.HouseholdID, personID)
+		if err != nil {
+			return dbq.Completion{}, err
+		}
+		points, pence = Earns(chore.Mode, p.Kind, chore.Points, chore.Pence, chore.AdultPoints)
+	}
 	out, err := q.CreateCompletion(ctx, dbq.CreateCompletionParams{
 		HouseholdID:  chore.HouseholdID,
 		OccurrenceID: occurrenceID,
 		PersonID:     personID,
 		CompletedAt:  now,
 		Status:       status,
-		Points:       chore.Points,
-		Pence:        chore.Pence,
+		Points:       points,
+		Pence:        pence,
 	})
 	if err != nil {
 		return out, fmt.Errorf("create completion: %w", err)

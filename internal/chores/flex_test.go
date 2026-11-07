@@ -265,7 +265,7 @@ func TestFlexCalendar(t *testing.T) {
 	}
 
 	// The sheet finds it on either day.
-	if _, _, err := f.svc.ChoreOn(ctx, f.hh, mon, week2[0].ChoreID, "2026-11-26"); err != nil {
+	if _, _, err := f.svc.ChoreOn(ctx, f.hh, mon, week2[0].ChoreID, "2026-11-26", CalPick{}); err != nil {
 		t.Errorf("ChoreOn projected Thu: %v", err)
 	}
 }

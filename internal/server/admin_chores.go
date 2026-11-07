@@ -20,7 +20,8 @@ import (
 type choreRow struct {
 	Chore    dbq.Chore
 	Assignee *dbq.Person
-	People   []dbq.Person // a shared chore's chosen people
+	People   []dbq.Person // a shared or "each" chore's chosen people (everyone for an Everyone chore)
+	Each     string       // an "each" chore's people: "Everyone" or "Each: Mum and Thomas"
 	Schedule string
 	Times    string // "07:30 and 19:30", "" for an untimed chore
 	Shows    string // "1 hour before", "" when it shows all day
@@ -184,10 +185,23 @@ func (s *Server) handleChores(w http.ResponseWriter, r *http.Request) {
 				row.People = append(row.People, *p)
 			}
 		}
-		// A person's chores include the shared ones they're chosen for; Up
-		// for grabs is only the chores anyone can claim.
+		everyone := c.Mode == chores.ModeEach && c.ForEveryone == 1
+		if everyone {
+			row.People = people
+		}
+		if c.Mode == chores.ModeEach {
+			row.Each = "Everyone"
+			if !everyone {
+				row.Each = "Each: " + joinNames(row.People, "and")
+				if len(row.People) == 0 {
+					row.Each = "Each: nobody yet"
+				}
+			}
+		}
+		// A person's chores include the shared and "each" ones they're
+		// chosen for; Up for grabs is only the chores anyone can claim.
 		mine := func(id int64) bool {
-			return (c.AssigneeID != nil && *c.AssigneeID == id) || slices.Contains(shared[c.ID], id)
+			return (c.AssigneeID != nil && *c.AssigneeID == id) || slices.Contains(shared[c.ID], id) || everyone
 		}
 		switch {
 		case page.Pool && c.Mode != chores.ModePool,
@@ -231,7 +245,9 @@ type choreForm struct {
 	Description      string
 	Mode             string
 	AssigneeID       int64
-	PeopleIDs        []int64 // a shared chore's chosen people
+	PeopleIDs        []int64 // a shared or "each" chore's chosen people
+	Everyone         bool    // an "each" chore for everyone
+	AdultPoints      int64   // an "each" chore's adults' points
 	Repeat           string
 	Days             []time.Weekday
 	DayMode          string // chores.DayEach or chores.DayAny
@@ -313,6 +329,7 @@ func (s *Server) newChoreForm(r *http.Request) (choreForm, error) {
 		Days: []time.Weekday{today.Weekday()}, MonthDay: today.Day(),
 		StartsOn: today.Format(chores.DateLayout), Money: "0.00", Emoji: newEmojiField(emoji.Chore, ""),
 		ShowBefore: strconv.FormatInt(chores.DefaultShowBefore, 10),
+		Everyone:   true, // for Each of these people, until they choose
 		People:     people, WeekOrder: chores.WeekOrder, MonthDays: monthDays,
 	}, nil
 }
@@ -328,11 +345,12 @@ func (s *Server) choreFormFor(r *http.Request, c dbq.Chore) (choreForm, error) {
 	if c.AssigneeID != nil {
 		f.AssigneeID = *c.AssigneeID
 	}
-	if c.Mode == chores.ModeShared {
+	if c.Mode == chores.ModeShared || c.Mode == chores.ModeEach {
 		if f.PeopleIDs, err = s.Chores.ChorePeople(r.Context(), s.HouseholdID, c.ID); err != nil {
 			return f, err
 		}
 	}
+	f.Everyone, f.AdultPoints = c.ForEveryone == 1, c.AdultPoints
 	f.Repeat, f.Days, f.Custom, f.DayMode = rec.Kind, rec.Days, rec.Raw, c.DayMode
 	if rec.Kind == chores.RepeatMonthly {
 		f.MonthDay = rec.MonthDay
@@ -456,7 +474,16 @@ func (s *Server) readChoreForm(w http.ResponseWriter, r *http.Request, f *choreF
 	}
 	f.Back = choreBack(fm.str("back"), f.People)
 	f.PeopleIDs = nil
-	for _, v := range r.Form["people_ids"] {
+	pick := "people_ids"
+	if f.Mode == chores.ModeEach {
+		pick = "each_ids"
+	}
+	f.Everyone = fm.str("each_who") == "everyone"
+	f.AdultPoints = 0
+	if f.Mode == chores.ModeEach {
+		f.AdultPoints = fm.int("adult_points", "Enter a whole number of points.")
+	}
+	for _, v := range r.Form[pick] {
 		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
 			f.PeopleIDs = append(f.PeopleIDs, n)
 		}
@@ -477,8 +504,11 @@ func (s *Server) readChoreForm(w http.ResponseWriter, r *http.Request, f *choreF
 		StartsOn: f.StartsOn, DueTimes: f.DueTimes, ShowBefore: showBefore,
 		Points: f.Points, Pence: pence, RequiresApproval: f.RequiresApproval, OnTheDay: f.OnTheDay,
 	}
-	if f.Mode == chores.ModeShared {
+	if f.Mode == chores.ModeShared || f.Mode == chores.ModeEach {
 		in.PeopleIDs = f.PeopleIDs
+	}
+	if f.Mode == chores.ModeEach {
+		in.Everyone, in.AdultPoints = f.Everyone, f.AdultPoints
 	}
 	if f.Mode == chores.ModeAssigned && f.AssigneeID != 0 {
 		id := f.AssigneeID

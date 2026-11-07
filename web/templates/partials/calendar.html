@@ -65,7 +65,7 @@
   {{range .Items}}
   {{if .IsChore}}
   <li><button class="cal-item{{template "cal_item_class" .}}" type="button"{{with .Colour}} style="--item: {{.}}"{{end}}
-              hx-get="/board/calendar/chores/{{.Chore.ChoreID}}/{{.Chore.Date}}" hx-target="#sheet-body" hx-swap="innerHTML">
+              hx-get="/board/calendar/chores/{{.Chore.ChoreID}}/{{.Chore.Date}}?person={{with .Chore.PersonID}}{{.}}{{end}}&amp;at={{with .Chore.DueTime}}{{.}}{{end}}" hx-target="#sheet-body" hx-swap="innerHTML">
     {{- with .Chore.Emoji}}<span class="cal-item__emoji" aria-hidden="true">{{.}}</span>{{end}}
     <span class="cal-item__title">{{.Title}}</span>
     <span class="cal-item__meta">

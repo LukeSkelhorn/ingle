@@ -28,6 +28,10 @@ RETURNING *;
 UPDATE chores SET on_the_day = ? WHERE household_id = ? AND id = ?
 RETURNING *;
 
+-- name: SetChoreEach :one
+UPDATE chores SET for_everyone = ?, adult_points = ? WHERE household_id = ? AND id = ?
+RETURNING *;
+
 -- name: ArchiveChore :exec
 UPDATE chores SET archived_at = ?, updated_at = ? WHERE household_id = ? AND id = ?;
 
