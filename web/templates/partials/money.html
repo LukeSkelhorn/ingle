@@ -1,0 +1,73 @@
+{{/* My money: someone's own balance, opened on a household display with
+     their own PIN. The board loads these into the sheet. */}}
+
+{{/* The PIN pad for one person's My money (moneyPinView). The script posts
+     the PIN and swaps in their My money, or shows what went wrong. */}}
+{{define "money_pin"}}{{$p := .Person}}
+<div class="picker money-pin" style="--person: {{$p.Colour}}" data-money-pin data-person="{{$p.ID}}">
+  <div class="person__head">
+    {{template "avatar" (avatar $p "lg")}}
+    <h2 class="picker__title" tabindex="-1" autofocus>{{$p.Name}}'s money</h2>
+  </div>
+  {{if .NotDisplay}}
+  <p class="muted">My money opens on a household display.</p>
+  {{else if not $p.PinHash}}
+  <p>Ask a grown-up to set your PIN in Admin › People.</p>
+  {{else}}
+  <p class="muted">{{if .Expired}}Enter your PIN again.{{else}}Enter your PIN.{{end}}</p>
+  {{template "pinpad" $p.PinLength}}
+  <script>
+    (function () {
+      var root = document.querySelector("#sheet-body [data-money-pin]"),
+          sheet = document.getElementById("sheet"),
+          body = document.getElementById("sheet-body"),
+          padEl = root.querySelector("[data-pinpad]"),
+          busy = false, pad;
+      pad = InglePinpad(padEl, {
+        active: function () { return sheet.open && document.body.contains(padEl); },
+        onSubmit: function (pin) {
+          if (busy) return;
+          busy = true;
+          fetch("/board/money/" + root.dataset.person + "/pin", {
+            method: "POST", credentials: "same-origin", body: new URLSearchParams({ pin: pin }),
+          })
+            .then(function (r) {
+              if (r.ok) return r.text().then(function (html) {
+                body.innerHTML = html;
+                if (window.htmx) htmx.process(body);
+                var t = body.querySelector("[autofocus]");
+                if (t) t.focus();
+              });
+              return r.json().catch(function () { return {}; }).then(function (d) {
+                pad.error(d.error || "That didn't work. Try again.");
+              });
+            })
+            .catch(function () { pad.error("Can't reach Ingle. Try again."); })
+            .finally(function () { busy = false; });
+        },
+      });
+    })();
+  </script>
+  {{end}}
+  <div class="picker__actions">
+    <button class="btn btn--ghost btn--block" type="button" data-close>Close</button>
+  </div>
+</div>
+{{end}}
+
+{{/* Someone's My money (myMoneyView), after their PIN. data-refresh keeps
+     it up to date while the PIN check lasts; after that it asks again. */}}
+{{define "my_money"}}
+<div class="person my-money" style="--person: {{.Person.Colour}}" data-refresh="/board/money/{{.Person.ID}}/view?t={{.Token}}">
+  <div class="person__head">
+    {{template "avatar" (avatar .Person "lg")}}
+    <h2 class="picker__title" tabindex="-1" autofocus>{{.Person.Name}}'s money</h2>
+  </div>
+  <p class="person__balance">{{pts .Points}}{{if .Pence}} <span class="person__money">{{money .Pence}}</span>{{end}}
+    {{- with worth .HeldPoints .HeldPence}} <span class="person__held">({{.}} held)</span>{{end}}</p>
+  <p class="person__week">This week: {{with net .WeekPoints .WeekPence}}{{.}}{{else}}nothing yet{{end}}</p>
+  <div class="picker__actions">
+    <button class="btn btn--ghost btn--block" type="button" data-close>Close</button>
+  </div>
+</div>
+{{end}}

@@ -386,8 +386,14 @@ func (s *Server) credentialAction(w http.ResponseWriter, r *http.Request, flash 
 	s.renderPerson(w, r, http.StatusOK, s.personFormFor(r, p), nil, flash)
 }
 
+// errKidPINOff: a child's PIN only opens My money, so it needs that module.
+var errKidPINOff = errors.New("my money is off")
+
 func (s *Server) handlePersonSetPIN(w http.ResponseWriter, r *http.Request) {
 	s.credentialAction(w, r, "PIN saved.", func(p dbq.Person, f *form) error {
+		if p.Kind != household.KindAdult && !s.moduleOn(r.Context(), modMoney) {
+			return errKidPINOff
+		}
 		if f.str("pin") != f.str("pin_confirm") {
 			f.errs.Add("pin_confirm", "The PINs don't match.")
 			return nil
@@ -426,7 +432,9 @@ func conflictMessage(err error) (string, bool) {
 	case errors.Is(err, household.ErrLastAdmin):
 		return "At least one adult must be able to sign in, so this can't be done for the last one.", true
 	case errors.Is(err, household.ErrNotAdult):
-		return "Only adults can have a PIN or sign-in.", true
+		return "Only adults can have a sign-in.", true
+	case errors.Is(err, errKidPINOff):
+		return "A child's PIN opens My money. Turn My money on in Admin › Modules first.", true
 	case errors.Is(err, household.ErrNotFound):
 		return "That person couldn't be found.", true
 	}

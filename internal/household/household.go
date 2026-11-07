@@ -29,7 +29,7 @@ const (
 // Errors returned by Service.
 var (
 	ErrNotFound          = errors.New("not found")
-	ErrNotAdult          = errors.New("only adults can have a PIN or sign-in")
+	ErrNotAdult          = errors.New("only adults can have a sign-in")
 	ErrHasAssignedChores = errors.New("reassign or archive their chores first")
 	ErrLastAdmin         = errors.New("at least one adult must be able to sign in")
 	ErrSetupDone         = errors.New("household is already set up")
@@ -193,7 +193,8 @@ func (s *Service) CreatePerson(ctx context.Context, householdID, actorID int64, 
 
 // UpdatePerson edits a family member. Changing an adult to a child removes
 // their PIN and sign-in (and fails with ErrLastAdmin if they are the last
-// adult who can sign in).
+// adult who can sign in). Changing a child to an adult removes their PIN, so
+// a child's money PIN never starts unlocking admin.
 func (s *Service) UpdatePerson(ctx context.Context, householdID, actorID, id int64, in PersonInput) (dbq.Person, error) {
 	if err := validatePerson(in).Err(); err != nil {
 		return dbq.Person{}, err
@@ -211,6 +212,11 @@ func (s *Service) UpdatePerson(ctx context.Context, householdID, actorID, id int
 			}
 			if err := stripCredentials(ctx, q, cur); err != nil {
 				return err
+			}
+		}
+		if in.Kind == KindAdult && cur.Kind == KindChild && cur.PinHash != nil {
+			if err := q.ClearPersonPIN(ctx, dbq.ClearPersonPINParams{HouseholdID: householdID, ID: id}); err != nil {
+				return fmt.Errorf("clear pin: %w", err)
 			}
 		}
 		p, err = q.UpdatePerson(ctx, dbq.UpdatePersonParams{
@@ -279,8 +285,10 @@ func (s *Service) RestorePerson(ctx context.Context, householdID, actorID, id in
 	})
 }
 
-// SetPIN sets an adult's display PIN. Their other sessions end, except keep
-// (the caller's own session, if they are changing their own PIN).
+// SetPIN sets a person's display PIN. An adult's unlocks admin and opens
+// their My money; a child's only opens their own My money. Their other
+// sessions end, except keep (the caller's own session, if they are changing
+// their own PIN).
 func (s *Service) SetPIN(ctx context.Context, householdID, actorID, id int64, pin string, keep []byte) error {
 	if err := auth.ValidatePIN(pin); err != nil {
 		return valid.Errors{"pin": "Use 4 to 6 digits."}
@@ -289,16 +297,16 @@ func (s *Service) SetPIN(ctx context.Context, householdID, actorID, id int64, pi
 	if err != nil {
 		return err
 	}
-	return s.credentialChange(ctx, householdID, actorID, id, "person.pin_set", keep, func(q *dbq.Queries, p dbq.Person) error {
+	return s.credentialChange(ctx, householdID, actorID, id, "person.pin_set", true, keep, func(q *dbq.Queries, p dbq.Person) error {
 		return q.SetPersonPIN(ctx, dbq.SetPersonPINParams{PinHash: &hash, PinLength: auth.PINLength(pin), HouseholdID: householdID, ID: id})
 	})
 }
 
-// ClearPIN removes an adult's PIN, so they can no longer unlock admin on a
-// display.
+// ClearPIN removes a person's PIN, so they can no longer unlock admin (an
+// adult) or open My money on a display.
 func (s *Service) ClearPIN(ctx context.Context, householdID, actorID, id int64, keep []byte) error {
-	return s.credentialChange(ctx, householdID, actorID, id, "person.pin_cleared", keep, func(q *dbq.Queries, p dbq.Person) error {
-		if p.PasswordHash == nil && p.PinHash != nil {
+	return s.credentialChange(ctx, householdID, actorID, id, "person.pin_cleared", true, keep, func(q *dbq.Queries, p dbq.Person) error {
+		if p.Kind == KindAdult && p.PasswordHash == nil && p.PinHash != nil {
 			if err := ensureNotLastAdmin(ctx, q, p); err != nil {
 				return err
 			}
@@ -330,7 +338,7 @@ func (s *Service) SetLogin(ctx context.Context, householdID, actorID, id int64, 
 	if err := errs.Err(); err != nil {
 		return err
 	}
-	return s.credentialChange(ctx, householdID, actorID, id, "person.login_set", keep, func(q *dbq.Queries, p dbq.Person) error {
+	return s.credentialChange(ctx, householdID, actorID, id, "person.login_set", false, keep, func(q *dbq.Queries, p dbq.Person) error {
 		if hash == nil {
 			if p.PasswordHash == nil {
 				return valid.Errors{"password": "Choose a password (10 to 128 characters)."}
@@ -344,7 +352,7 @@ func (s *Service) SetLogin(ctx context.Context, householdID, actorID, id int64, 
 // ClearLogin removes an adult's email and password, so they can only use
 // their PIN on a household display.
 func (s *Service) ClearLogin(ctx context.Context, householdID, actorID, id int64, keep []byte) error {
-	return s.credentialChange(ctx, householdID, actorID, id, "person.login_cleared", keep, func(q *dbq.Queries, p dbq.Person) error {
+	return s.credentialChange(ctx, householdID, actorID, id, "person.login_cleared", false, keep, func(q *dbq.Queries, p dbq.Person) error {
 		if p.PinHash == nil && p.PasswordHash != nil {
 			if err := ensureNotLastAdmin(ctx, q, p); err != nil {
 				return err
@@ -354,7 +362,7 @@ func (s *Service) ClearLogin(ctx context.Context, householdID, actorID, id int64
 	})
 }
 
-func (s *Service) credentialChange(ctx context.Context, householdID, actorID, id int64, verb string, keep []byte, fn func(*dbq.Queries, dbq.Person) error) error {
+func (s *Service) credentialChange(ctx context.Context, householdID, actorID, id int64, verb string, childOK bool, keep []byte, fn func(*dbq.Queries, dbq.Person) error) error {
 	now := s.now()
 	if keep == nil {
 		keep = []byte{}
@@ -367,7 +375,7 @@ func (s *Service) credentialChange(ctx context.Context, householdID, actorID, id
 		if p.ArchivedAt != nil {
 			return ErrNotFound
 		}
-		if p.Kind != KindAdult {
+		if p.Kind != KindAdult && !childOK {
 			return ErrNotAdult
 		}
 		if err := fn(q, p); err != nil {

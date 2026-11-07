@@ -71,6 +71,7 @@ The board has a column for each family member, adults included. Each column show
 - Tapped the wrong thing? **Undo** appears for a few seconds after each completion.
 - **Grown-ups can put it right.** Completions run on the honour system: points count straight away. If something was marked done that wasn't, an adult (unlocked on the display, or signed in on a phone) taps the done chore and chooses **Reverse**. The points come off and the chore goes back on the board. Chores set to need a grown-up's check show **Approve** and **Not done yet** instead. Completions can be reversed for 7 days.
 - Tap a person's avatar or name to open their sheet: their balance, what they've earned this week (reversals and points taken away come off, spending doesn't), their recent points changes with the reasons, and the household's rewards. Rewards they can afford are highlighted; the rest show how much more they need.
+- **My money:** on a household display, a person's sheet has **🔒 My money**. It asks for their PIN on the keypad, then shows their balance. Set a child's PIN (4 to 6 digits) in **Admin › People**. It opens only their own money: never admin, never the locked displays, never anyone else's. An adult's PIN opens their own My money too. My money closes after a minute, and five wrong PINs mean a five-minute wait.
 - Adults can give a bonus or take points away in **Admin › People**, with a reason saying what they did and why. Points can go below zero, and the reason shows on the person's sheet.
 - Tap **Claim** on an affordable reward to ask for it. The points are held while it waits for a grown-up, so they can't be spent twice: the balance shows what's left, the held amount is shown next to it, and the column shows "🎁 1 waiting". The child can cancel a waiting claim. With admin unlocked on the display, tapping a waiting claim opens **Approve** / **Decline**, and anything claimed while an adult is unlocked or signed in is approved straight away.
 - Chores and rewards can have an emoji, shown before the title. In Admin, pick one from the grid or type any emoji; Ingle suggests one from the title as you type ("Feed the dog" → 🐶).
@@ -84,11 +85,12 @@ Every open board (the wall iPad, a second display, an adult's phone) updates liv
 
 ### Modules
 
-Not every family wants everything. In **Admin › Modules**, switch off what you don't use: **Calendar**, **Photos** or **Rewards**. A module that's off disappears everywhere: its admin pages and links, its parts of the board and its background jobs. Its data is kept, so switching it back on brings everything back. Some modules need another (they say so on the page); turning off one that another needs asks first and turns both off.
+Not every family wants everything. In **Admin › Modules**, switch off what you don't use: **Rewards**, **My money**, **Photos** or **Calendar**. A module that's off disappears everywhere: its admin pages and links, its parts of the board and its background jobs. Its data is kept, so switching it back on brings everything back. Some modules need another (they say so on the page); turning off one that another needs asks first and turns both off.
 
 - **Calendar off:** no feeds, and no events on the screensaver. The board calendar still shows chores.
 - **Photos off:** the screensaver and the locked screen show the clock, events and chores without the slideshow.
 - **Rewards off:** no rewards, claims or goals on the board or in admin. Points still work, and claims that were waiting stay waiting until Rewards is back on.
+- **My money off:** no My money button and no PINs for children. Children's PINs are kept for when it's back on.
 
 ### Calendar
 
@@ -199,7 +201,7 @@ deploy/             Docker Compose + Caddy for a home server
 Every table has a `household_id`, so one database can hold several households. A self-hosted install has just one.
 
 - **households** and **household_settings**: name, timezone, when the board's day rolls over, and the admin, screensaver and calendar idle timeouts.
-- **people**: adults and children, each with a colour and an avatar (an emoji or an uploaded photo). Adults can have a PIN and an email + password, all stored as argon2id hashes.
+- **people**: adults and children, each with a colour and an avatar (an emoji or an uploaded photo). Adults can have a PIN and an email + password, all stored as argon2id hashes. Children can have a PIN too, which only opens their My money: admin and unlocking only ever check adults' PINs, and a child who becomes an adult loses theirs. A My money PIN check gives a one-minute token held in memory, not a session.
 - **devices** are registered household displays, and **sessions** are adult sign-ins (PIN on a display, or password elsewhere). Only sha256 hashes of their tokens are stored.
 - **chores** are either *assigned* to one person or sit in the shared *pool*. Recurrence is an iCal `RRULE` evaluated in the household timezone. A chore can award points, pence or both, and can require an adult's approval.
 - **chore_occurrences**: the concrete instances that appear on the board. They're materialised 14 days ahead on startup, then refreshed every hour. Each pool occurrence can be claimed by one person.
