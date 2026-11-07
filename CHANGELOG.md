@@ -6,7 +6,7 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ## [Unreleased]
 
-## [v0.2.2] - 2026-11-06
+## [v0.2.2] - 2026-11-07
 
 Give a bonus, or take points away.
 
