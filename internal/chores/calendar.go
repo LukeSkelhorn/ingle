@@ -73,6 +73,25 @@ func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time
 	if err != nil {
 		return nil, err
 	}
+	who, err := loadDoers(ctx, q, householdID)
+	if err != nil {
+		return nil, err
+	}
+	people, err := q.ListPeople(ctx, householdID)
+	if err != nil {
+		return nil, fmt.Errorf("list people: %w", err)
+	}
+	kind := make(map[int64]string, len(people))
+	for _, p := range people {
+		kind[p.ID] = p.Kind
+	}
+	// earns is what a chore's copy for person is worth.
+	earns := func(mode string, person *int64, points, pence, adultPoints int64) (int64, int64) {
+		if person == nil {
+			return points, pence
+		}
+		return Earns(mode, kind[*person], points, pence, adultPoints)
+	}
 	byOcc := make(map[int64]dbq.ListLiveCompletionsForRangeRow, len(comps))
 	for _, c := range comps {
 		byOcc[c.OccurrenceID] = c
@@ -107,6 +126,7 @@ func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time
 		if r.Mode == ModeShared {
 			c.People = shared[r.ChoreID]
 		}
+		c.Points, c.Pence = earns(r.Mode, c.PersonID, r.Points, r.Pence, r.AdultPoints)
 		comp, done := byOcc[r.ID]
 		// An Only on the day chore past its time is missed, even today.
 		at, onTheDay := onTheDayCutoff(r.OnTheDay, r.DueOn, optTime(r.DueTime), loc, dayStart)
@@ -182,11 +202,17 @@ func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time
 						if d < start {
 							continue
 						}
-						add(CalChore{
-							ChoreID: ch.ID, Date: d, Title: ch.Title, Emoji: ch.Emoji, DueTime: optTime(times(ch)[0]),
-							Points: ch.Points, Pence: ch.Pence, Pool: ch.Mode == ModePool,
-							PersonID: ch.AssigneeID, Status: statusOn(d, today), Or: or, People: shared[ch.ID],
-						})
+						for _, sl := range slots(ch, who.of(ch)) {
+							c := CalChore{
+								ChoreID: ch.ID, Date: d, Title: ch.Title, Emoji: ch.Emoji, DueTime: optTime(times(ch)[0]),
+								Pool: ch.Mode == ModePool, PersonID: sl.assignee, Status: statusOn(d, today), Or: or,
+							}
+							if ch.Mode == ModeShared {
+								c.People = shared[ch.ID]
+							}
+							c.Points, c.Pence = earns(ch.Mode, sl.assignee, ch.Points, ch.Pence, ch.AdultPoints)
+							add(c)
+						}
 					}
 				}
 				continue
@@ -200,11 +226,17 @@ func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time
 					continue
 				}
 				for _, t := range times(ch) {
-					out[d] = append(out[d], CalChore{
-						ChoreID: ch.ID, Date: d, Title: ch.Title, Emoji: ch.Emoji, DueTime: optTime(t),
-						Points: ch.Points, Pence: ch.Pence, Pool: ch.Mode == ModePool,
-						PersonID: ch.AssigneeID, Status: statusOn(d, today), People: shared[ch.ID],
-					})
+					for _, sl := range slots(ch, who.of(ch)) {
+						c := CalChore{
+							ChoreID: ch.ID, Date: d, Title: ch.Title, Emoji: ch.Emoji, DueTime: optTime(t),
+							Pool: ch.Mode == ModePool, PersonID: sl.assignee, Status: statusOn(d, today),
+						}
+						if ch.Mode == ModeShared {
+							c.People = shared[ch.ID]
+						}
+						c.Points, c.Pence = earns(ch.Mode, sl.assignee, ch.Points, ch.Pence, ch.AdultPoints)
+						out[d] = append(out[d], c)
+					}
 				}
 			}
 		}
@@ -216,10 +248,17 @@ func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time
 	return out, nil
 }
 
+// CalPick narrows ChoreOn to one copy of a chore that's on a day more than
+// once: whose it is (an "each" chore) and its time. Zero values match any.
+type CalPick struct {
+	PersonID int64
+	At       string // HH:MM
+}
+
 // ChoreOn returns chore choreID as it falls on date, with the chore itself,
 // for the calendar's read-only chore sheet. ErrNotFound means it isn't due
 // that day.
-func (s *Service) ChoreOn(ctx context.Context, householdID int64, boardDay time.Time, choreID int64, date string) (CalChore, dbq.Chore, error) {
+func (s *Service) ChoreOn(ctx context.Context, householdID int64, boardDay time.Time, choreID int64, date string, pick CalPick) (CalChore, dbq.Chore, error) {
 	ch, err := s.st.Q.GetChore(ctx, dbq.GetChoreParams{HouseholdID: householdID, ID: choreID})
 	if err != nil || ch.ArchivedAt != nil {
 		return CalChore{}, dbq.Chore{}, ErrNotFound
@@ -229,9 +268,12 @@ func (s *Service) ChoreOn(ctx context.Context, householdID int64, boardDay time.
 		return CalChore{}, dbq.Chore{}, err
 	}
 	for _, c := range day[date] {
-		if c.ChoreID == choreID {
-			return c, ch, nil
+		if c.ChoreID != choreID ||
+			(pick.PersonID != 0 && (c.PersonID == nil || *c.PersonID != pick.PersonID)) ||
+			(pick.At != "" && (c.DueTime == nil || *c.DueTime != pick.At)) {
+			continue
 		}
+		return c, ch, nil
 	}
 	return CalChore{}, dbq.Chore{}, ErrNotFound
 }

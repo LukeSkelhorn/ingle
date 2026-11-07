@@ -19,9 +19,11 @@ type Input struct {
 	Title            string
 	Emoji            string // a single emoji, or "" for none
 	Description      string
-	Mode             string  // ModeAssigned or ModePool
+	Mode             string  // ModeAssigned, ModePool, ModeShared or ModeEach
 	AssigneeID       *int64  // required for ModeAssigned, ignored otherwise
-	PeopleIDs        []int64 // ModeShared: who it's for (two or more)
+	PeopleIDs        []int64 // ModeShared: who it's for (two or more); ModeEach: who does their own (one or more)
+	Everyone         bool    // ModeEach: everyone, including people added later (PeopleIDs is ignored)
+	AdultPoints      int64   // ModeEach: what an adult earns (adults get no money for these)
 	Repeat           Recurrence
 	DayMode          string   // DayEach or DayAny; "" means DayEach
 	StartsOn         string   // YYYY-MM-DD
@@ -69,6 +71,9 @@ func (s *Service) CreateChore(ctx context.Context, householdID, actorID int64, i
 		if c, err = setOnTheDay(ctx, q, c, in.OnTheDay); err != nil {
 			return err
 		}
+		if c, err = setEach(ctx, q, c, p.ForEveryone, p.AdultPoints); err != nil {
+			return err
+		}
 		if err := setPeople(ctx, q, c, p.PeopleIDs); err != nil {
 			return err
 		}
@@ -111,6 +116,9 @@ func (s *Service) UpdateChore(ctx context.Context, householdID, actorID, id int6
 			return err
 		}
 		if c, err = setOnTheDay(ctx, q, c, in.OnTheDay); err != nil {
+			return err
+		}
+		if c, err = setEach(ctx, q, c, p.ForEveryone, p.AdultPoints); err != nil {
 			return err
 		}
 		if err := setPeople(ctx, q, c, p.PeopleIDs); err != nil {
@@ -177,12 +185,28 @@ func setOnTheDay(ctx context.Context, q *dbq.Queries, c dbq.Chore, on bool) (dbq
 	return c, nil
 }
 
-// setPeople replaces who a shared chore is for; other chores have nobody.
+// setEach stores an "each" chore's Everyone and adult points (0 for other
+// chores), when they differ.
+func setEach(ctx context.Context, q *dbq.Queries, c dbq.Chore, everyone, adultPoints int64) (dbq.Chore, error) {
+	if c.ForEveryone == everyone && c.AdultPoints == adultPoints {
+		return c, nil
+	}
+	c, err := q.SetChoreEach(ctx, dbq.SetChoreEachParams{
+		ForEveryone: everyone, AdultPoints: adultPoints, HouseholdID: c.HouseholdID, ID: c.ID,
+	})
+	if err != nil {
+		return c, fmt.Errorf("set each: %w", err)
+	}
+	return c, nil
+}
+
+// setPeople replaces who a shared or "each" chore is for; other chores
+// (and Everyone chores) have nobody listed.
 func setPeople(ctx context.Context, q *dbq.Queries, c dbq.Chore, people []int64) error {
 	if err := q.DeleteChorePeople(ctx, dbq.DeleteChorePeopleParams{HouseholdID: c.HouseholdID, ChoreID: c.ID}); err != nil {
 		return fmt.Errorf("clear chore people: %w", err)
 	}
-	if c.Mode != ModeShared {
+	if c.Mode != ModeShared && c.Mode != ModeEach {
 		return nil
 	}
 	for _, id := range people {
@@ -193,7 +217,8 @@ func setPeople(ctx context.Context, q *dbq.Queries, c dbq.Chore, people []int64)
 	return nil
 }
 
-// ChorePeople returns who a shared chore is for (active people only).
+// ChorePeople returns who a shared or "each" chore is for (active people
+// only; none for an Everyone chore).
 func (s *Service) ChorePeople(ctx context.Context, householdID, choreID int64) ([]int64, error) {
 	return s.st.Q.ListPeopleForChore(ctx, dbq.ListPeopleForChoreParams{HouseholdID: householdID, ChoreID: choreID})
 }
@@ -208,9 +233,13 @@ func (s *Service) refresh(ctx context.Context, q *dbq.Queries, c dbq.Chore, old 
 			return fmt.Errorf("clear occurrences: %w", err)
 		}
 	}
+	who, err := loadDoers(ctx, q, c.HouseholdID)
+	if err != nil {
+		return err
+	}
 	loc := s.loc(ctx, c.HouseholdID)
 	start, end := window(boardDay, Window, loc)
-	_, err := materialiseChore(ctx, q, c, start, end, loc)
+	_, err = materialiseChore(ctx, q, c, who.of(c), start, end, loc)
 	return err
 }
 
@@ -234,6 +263,7 @@ type validated struct {
 	DueTimes                                  string
 	ShowBefore                                *int64
 	Points, Pence, RequiresApproval           int64
+	ForEveryone, AdultPoints                  int64
 }
 
 func (s *Service) validate(ctx context.Context, q *dbq.Queries, householdID int64, in Input) (validated, error) {
@@ -285,6 +315,26 @@ func (s *Service) validate(ctx context.Context, q *dbq.Queries, householdID int6
 			errs.Add("people_ids", "Choose at least two people.")
 		case 1:
 			out.Mode, out.AssigneeID, out.PeopleIDs = ModeAssigned, &out.PeopleIDs[0], nil
+		}
+	case ModeEach:
+		if in.AdultPoints < 0 || in.AdultPoints > 100000 {
+			errs.Add("adult_points", "Use 0 to 100,000 points.")
+		}
+		out.AdultPoints = in.AdultPoints
+		if in.Everyone {
+			out.ForEveryone = 1
+			break
+		}
+		for _, id := range in.PeopleIDs {
+			if slices.Contains(out.PeopleIDs, id) {
+				continue
+			}
+			if p, err := getPerson(ctx, q, householdID, id); err == nil {
+				out.PeopleIDs = append(out.PeopleIDs, p.ID)
+			}
+		}
+		if len(out.PeopleIDs) == 0 {
+			errs.Add("each_ids", "Choose who does it, or Everyone.")
 		}
 	default:
 		errs.Add("mode", "Choose who does it.")

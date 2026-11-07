@@ -2,6 +2,7 @@ package server
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/lukeskelhorn/ingle/internal/avatar"
@@ -243,7 +244,17 @@ func (s *Server) handlePersonCreate(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
+	s.fillChores(r)
 	redirect(w, r, "/admin/people/"+itoa(p.ID))
+}
+
+// fillChores materialises chore occurrences now, so someone just added (or
+// back) gets their copies of Everyone chores without waiting for the hourly
+// run. A failure is only logged: the hourly run catches up.
+func (s *Server) fillChores(r *http.Request) {
+	if _, err := s.Chores.Materialise(r.Context(), s.HouseholdID, s.boardDay(r), chores.Window); err != nil {
+		s.Log.ErrorContext(r.Context(), "materialise chores", slog.Any("err", err))
+	}
 }
 
 func (s *Server) handlePersonUpdate(w http.ResponseWriter, r *http.Request) {
@@ -344,6 +355,7 @@ func (s *Server) handlePersonRestore(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
+	s.fillChores(r)
 	redirect(w, r, "/admin/people/"+itoa(p.ID))
 }
 

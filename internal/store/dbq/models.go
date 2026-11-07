@@ -50,6 +50,8 @@ type Chore struct {
 	OnTheDay         int64   `json:"on_the_day"`
 	DueTimes         string  `json:"due_times"`
 	ShowBefore       *int64  `json:"show_before"`
+	ForEveryone      int64   `json:"for_everyone"`
+	AdultPoints      int64   `json:"adult_points"`
 }
 
 type ChoreOccurrence struct {
@@ -63,6 +65,7 @@ type ChoreOccurrence struct {
 	Status        string  `json:"status"`
 	AvailableFrom *string `json:"available_from"`
 	DueTime       string  `json:"due_time"`
+	ForPerson     int64   `json:"for_person"`
 }
 
 type ChorePerson struct {

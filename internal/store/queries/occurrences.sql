@@ -1,7 +1,7 @@
 -- name: InsertOccurrence :execrows
-INSERT INTO chore_occurrences (household_id, chore_id, due_on, due_time, assignee_id, available_from)
-VALUES (?, ?, ?, ?, ?, ?)
-ON CONFLICT (chore_id, due_on, due_time) DO NOTHING;
+INSERT INTO chore_occurrences (household_id, chore_id, due_on, due_time, assignee_id, available_from, for_person)
+VALUES (?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT (chore_id, due_on, due_time, for_person) DO NOTHING;
 
 -- name: GetOccurrence :one
 SELECT * FROM chore_occurrences WHERE household_id = ? AND id = ?;
@@ -11,8 +11,8 @@ SELECT * FROM chore_occurrences WHERE household_id = ? AND id = ?;
 -- range, or (flexible-day chores) with their window overlapping it.
 SELECT
     o.id, o.chore_id, o.due_on, o.available_from, o.assignee_id, o.claimed_by, o.claimed_at, o.status,
-    o.due_time, c.show_before,
-    c.title, c.emoji, c.description, c.mode, c.points, c.pence, c.requires_approval,
+    o.due_time, o.for_person, c.show_before,
+    c.title, c.emoji, c.description, c.mode, c.points, c.pence, c.adult_points, c.requires_approval,
     c.rrule, c.starts_on, c.day_mode, c.on_the_day
 FROM chore_occurrences o
 JOIN chores c ON c.id = o.chore_id
@@ -75,3 +75,12 @@ WHERE household_id = ? AND id = ? AND status IN ('open', 'claimed');
 UPDATE chore_occurrences
 SET status = CASE WHEN claimed_by IS NULL THEN 'open' ELSE 'claimed' END
 WHERE household_id = ? AND id = ? AND status = 'skipped';
+
+-- name: DeleteOpenEachOccurrencesForPerson :exec
+-- Drops a person's not-yet-started copies of 'each' chores (they've left
+-- the household, so they stop getting them).
+DELETE FROM chore_occurrences
+WHERE chore_occurrences.household_id = sqlc.arg(household_id)
+  AND chore_occurrences.for_person = sqlc.arg(person_id)
+  AND chore_occurrences.status = 'open'
+  AND NOT EXISTS (SELECT 1 FROM completions c WHERE c.occurrence_id = chore_occurrences.id);
