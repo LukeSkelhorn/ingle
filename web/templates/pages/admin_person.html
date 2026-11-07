@@ -25,7 +25,7 @@
         <label><input type="radio" name="kind" value="child"{{if eq .Data.Kind "child"}} checked{{end}}> <span>Child</span></label>
         <label><input type="radio" name="kind" value="adult"{{if eq .Data.Kind "adult"}} checked{{end}}> <span>Adult</span></label>
       </div>
-      <small class="muted">Only adults can have a PIN or sign-in and manage the household.</small>
+      <small class="muted">Only adults can sign in and manage the household.</small>
       {{template "err" index .Errors "kind"}}
     </fieldset>
     {{template "colour_picker" (dict "Selected" .Data.Colour "Colours" .Data.Colours "Err" (index .Errors "colour"))}}
@@ -122,10 +122,15 @@
   {{end}}
   {{end}}
 
-  {{if and .Data.ID .Data.IsAdult (not .Data.Archived)}}
-  <section class="card stack">
+  {{$money := moduleOn "money"}}
+  {{if and .Data.ID (not .Data.Archived) (or .Data.IsAdult $money)}}
+  <section class="card stack" id="pin">
     <h2>PIN</h2>
-    <p class="muted">Unlocks admin on a household display. {{if .Data.HasPIN}}A PIN is set.{{else}}No PIN set.{{end}}</p>
+    {{if .Data.IsAdult}}
+    <p class="muted">Unlocks admin on a household display{{if $money}}, and opens your My money{{end}}. {{if .Data.HasPIN}}A PIN is set.{{else}}No PIN set.{{end}}</p>
+    {{else}}
+    <p class="muted">Opens {{.Data.Name}}'s My money on a household display, and nothing else: it can't open admin or unlock the displays. They can type it in themselves while you watch. {{if .Data.HasPIN}}A PIN is set.{{else}}No PIN set.{{end}}</p>
+    {{end}}
     <form class="stack" method="post" action="/admin/people/{{.Data.ID}}/pin">
       <label class="field field--short">
         <span>New PIN (4–6 digits)</span>
@@ -143,7 +148,9 @@
     <form method="post" action="/admin/people/{{.Data.ID}}/pin/clear"><button class="btn btn--danger" type="submit">Remove PIN</button></form>
     {{end}}
   </section>
+  {{end}}
 
+  {{if and .Data.ID .Data.IsAdult (not .Data.Archived)}}
   <section class="card stack">
     <h2>Sign-in</h2>
     <p class="muted">Email and password for managing Ingle from a phone or computer.</p>

@@ -16,6 +16,7 @@ const (
 	modCalendar = "calendar"
 	modPhotos   = "photos"
 	modRewards  = "rewards"
+	modMoney    = "money"
 )
 
 // photoRescanEvery is how often the photos folder is re-indexed.
@@ -25,6 +26,7 @@ const photoRescanEvery = 10 * time.Minute
 // Modules and in the admin bar, and a module's requirements come first.
 func (s *Server) registerModules(reg *module.Registry) {
 	reg.Register(rewardsModule{s})
+	reg.Register(moneyModule{s})
 	reg.Register(photosModule{s})
 	reg.Register(calendarModule{s})
 }
@@ -135,6 +137,28 @@ func (s *Server) runLoop(ctx context.Context, id string, l module.Loop, kick <-c
 			run(false)
 		}
 	}
+}
+
+// Money: My money, a person's own balance opened on the wall with their own
+// PIN. A child's PIN opens only their money; it never opens admin or
+// unlocks the displays.
+type moneyModule struct{ s *Server }
+
+func (moneyModule) ID() string   { return modMoney }
+func (moneyModule) Name() string { return "My money" }
+func (moneyModule) Description() string {
+	return "Kids open their own balance on the wall display with their own PIN."
+}
+func (moneyModule) Requires() []string         { return nil }
+func (moneyModule) DefaultOn() bool            { return true }
+func (moneyModule) AdminNav() []module.NavItem { return nil }
+func (moneyModule) Loops() []module.Loop       { return nil }
+
+func (m moneyModule) Routes(r module.Router) {
+	s := m.s
+	r.Viewer("GET /board/money/{id}", s.handleMoneyPin)
+	r.Viewer("POST /board/money/{id}/pin", s.handleMoneyCheck)
+	r.Viewer("GET /board/money/{id}/view", s.handleMyMoney)
 }
 
 // Rewards: rewards, claiming them and savings goals. Points themselves are

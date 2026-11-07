@@ -1,5 +1,6 @@
-// Package auth handles adult credentials and access: PINs (which unlock
-// admin on a registered household display), passwords (for signing in from
+// Package auth handles credentials and access: PINs (an adult's unlocks
+// admin on a registered household display; anyone's opens their own My
+// money there), passwords (for signing in from
 // personal devices), household display registration and sessions.
 package auth
 

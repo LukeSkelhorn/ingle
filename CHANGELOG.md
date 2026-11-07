@@ -9,10 +9,12 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 ### Added
 
 - **Modules:** switch whole features off in the new **Admin › Modules**: **Calendar** (feeds and their events), **Photos** (the screensaver slideshow) and **Rewards** (rewards, claims and savings goals). A module that's off disappears everywhere: its admin pages and links, its parts of the board and its background jobs. Its data is kept, so switching it back on brings everything back, waiting reward claims included. With Calendar off, the board calendar still shows chores; with Photos off, the screensaver and locked screen show the clock, events and chores without photos; with Rewards off, points still work. A new household starts with all three on. ([DOM-26](https://linear.app/skeltech/issue/DOM-26))
+- **Kid PINs and My money:** children can have their own PIN now. In **Admin › People**, set a 4 to 6 digit PIN for a child; they can type it in themselves while you watch. On a household display, a person's sheet has a **🔒 My money** button that asks for their PIN on the usual keypad and then shows their balance. A child's PIN opens only their own money: it never opens admin, unlocks the displays or opens anyone else's. An adult's PIN opens their own My money too, and still unlocks admin as before. Wrong PINs are limited as for adults (5 tries, then a 5-minute wait), My money closes again after a minute, and it doesn't open while the displays are locked. It's a new module, **My money**, so it can be switched off in **Admin › Modules**. More is coming to My money in this release. ([DOM-20](https://linear.app/skeltech/issue/DOM-20))
 
 ### Upgrade notes
 
 - This release has a database migration (a new table for modules). Ingle takes care of it on start. Nothing changes after upgrading: every module stays on, and **Admin** asks you to choose your modules until you save **Admin › Modules** once.
+- **My money** is on after upgrading. Changing a child to an adult in **Admin › People** removes their PIN, so it never starts unlocking admin; set them a new one.
 
 ## [v0.2.2] - 2026-11-07
 

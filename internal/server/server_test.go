@@ -565,15 +565,16 @@ func TestPeopleAdmin(t *testing.T) {
 
 	expect(t, phone.get("/admin/people"), http.StatusOK, "Alfie", "🦖", "Child")
 	alfie := h.person("Alfie")
-	// Kids have no PIN or sign-in section.
+	// Kids have a My money PIN but no sign-in section…
 	r := phone.get("/admin/people/" + itoa(alfie.ID))
-	expect(t, r, http.StatusOK, "Archive Alfie")
-	if strings.Contains(r.body, "/pin\"") {
-		t.Error("child page offers a PIN form")
+	expect(t, r, http.StatusOK, "Archive Alfie", "Opens Alfie's My money", "can't open admin")
+	if strings.Contains(r.body, "/login\"") {
+		t.Error("child page offers a sign-in form")
 	}
 	// …and can't be given one.
-	expect(t, phone.post("/admin/people/"+itoa(alfie.ID)+"/pin", url.Values{"pin": {"1234"}, "pin_confirm": {"1234"}}),
-		http.StatusConflict, "Only adults")
+	expect(t, phone.post("/admin/people/"+itoa(alfie.ID)+"/login", url.Values{
+		"email": {"alfie@example.com"}, "password": {"a long password"}, "password_confirm": {"a long password"},
+	}), http.StatusConflict, "Only adults")
 
 	// Kids never appear on the unlock screen.
 	wall := h.setUpDisplayLocked()

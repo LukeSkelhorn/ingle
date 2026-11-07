@@ -367,6 +367,7 @@ type personSheetView struct {
 	Rewards     []rewardRow
 	Adjustments []chores.Adjustment // recent bonuses and points taken away
 	Adult       bool
+	Display     bool // on a household display, where My money opens
 }
 
 // rewardRow is one reward on a person's sheet. NeedPoints and NeedPence are
@@ -415,6 +416,7 @@ func (s *Server) handlePersonSheet(w http.ResponseWriter, r *http.Request) {
 	v := personSheetView{
 		Summary: sum, Waiting: waiting, Rewards: make([]rewardRow, 0, len(rewards)),
 		Adjustments: adjustments, Adult: boardAdult(r) != nil,
+		Display: identityFrom(ctx).Device != nil,
 	}
 	for _, rw := range rewards {
 		v.Rewards = append(v.Rewards, rewardRow{
