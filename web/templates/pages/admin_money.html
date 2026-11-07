@@ -1,0 +1,15 @@
+{{define "bodyclass"}}admin{{end}}
+{{define "content"}}
+{{template "admin_nav" .}}
+<main class="admin__main">
+  <p><a href="/admin/people/{{.Data.Person.ID}}">‹ {{.Data.Person.Name}}</a></p>
+  <div class="person__head">
+    {{template "avatar" (avatar .Data.Person "lg")}}
+    <h1>{{.Data.Person.Name}}'s money</h1>
+  </div>
+  <p class="muted">What {{.Data.Person.Name}} sees in My money on the board.</p>
+  <section class="card stack">
+    {{template "my_money" .Data}}
+  </section>
+</main>
+{{end}}

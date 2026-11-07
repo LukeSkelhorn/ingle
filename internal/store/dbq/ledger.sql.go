@@ -191,6 +191,84 @@ func (q *Queries) InsertLedgerEntry(ctx context.Context, arg InsertLedgerEntryPa
 	return i, err
 }
 
+const listLedgerHistory = `-- name: ListLedgerHistory :many
+SELECT
+    l.id, l.kind, l.points, l.pence, l.note, l.created_at,
+    CAST(COALESCE(ch.title, rw.title, '') AS TEXT) AS title,
+    CAST(COALESCE(ch.emoji, rw.emoji, '') AS TEXT) AS emoji
+FROM ledger_entries l
+LEFT JOIN completions c ON c.id = l.completion_id
+LEFT JOIN chore_occurrences o ON o.id = c.occurrence_id
+LEFT JOIN chores ch ON ch.id = o.chore_id
+LEFT JOIN redemptions d ON d.id = l.redemption_id
+LEFT JOIN rewards rw ON rw.id = d.reward_id
+WHERE l.household_id = ?1 AND l.person_id = ?2
+  AND l.created_at >= ?3
+  AND l.id < ?4
+ORDER BY l.id DESC
+LIMIT ?5
+`
+
+type ListLedgerHistoryParams struct {
+	HouseholdID int64 `json:"household_id"`
+	PersonID    int64 `json:"person_id"`
+	SinceUnix   int64 `json:"since_unix"`
+	BeforeID    int64 `json:"before_id"`
+	Lim         int64 `json:"lim"`
+}
+
+type ListLedgerHistoryRow struct {
+	ID        int64  `json:"id"`
+	Kind      string `json:"kind"`
+	Points    int64  `json:"points"`
+	Pence     int64  `json:"pence"`
+	Note      string `json:"note"`
+	CreatedAt int64  `json:"created_at"`
+	Title     string `json:"title"`
+	Emoji     string `json:"emoji"`
+}
+
+// A person's ledger, newest first, for My money: entries since since_unix
+// (0 for any) and older than before_id (math.MaxInt64 for any), with the
+// chore or reward each one was for.
+func (q *Queries) ListLedgerHistory(ctx context.Context, arg ListLedgerHistoryParams) ([]ListLedgerHistoryRow, error) {
+	rows, err := q.db.QueryContext(ctx, listLedgerHistory,
+		arg.HouseholdID,
+		arg.PersonID,
+		arg.SinceUnix,
+		arg.BeforeID,
+		arg.Lim,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListLedgerHistoryRow{}
+	for rows.Next() {
+		var i ListLedgerHistoryRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.Points,
+			&i.Pence,
+			&i.Note,
+			&i.CreatedAt,
+			&i.Title,
+			&i.Emoji,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listManualAdjustments = `-- name: ListManualAdjustments :many
 SELECT l.id, l.points, l.note, l.created_at, COALESCE(p.name, '') AS by_name
 FROM ledger_entries l

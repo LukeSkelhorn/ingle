@@ -75,7 +75,8 @@
   {{with .Data.Points}}
   <section class="card stack" id="points">
     <h2>Points</h2>
-    <p class="muted">{{$.Data.Name}} has <strong class="points-balance">{{pts .Points}}</strong>{{if .HeldPoints}} ({{pts .HeldPoints}} held for a reward){{end}}.</p>
+    <p class="muted">{{$.Data.Name}} has <strong class="points-balance">{{pts .Points}}</strong>{{if .HeldPoints}} ({{pts .HeldPoints}} held for a reward){{end}}.
+      {{- if moduleOn "money"}} <a href="/admin/people/{{$.Data.ID}}/money">My money ›</a>{{end}}</p>
     <form class="stack" method="post" action="/admin/people/{{$.Data.ID}}/points">
       <fieldset class="field">
         <legend>Adjust points</legend>

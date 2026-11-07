@@ -159,6 +159,9 @@ func (m moneyModule) Routes(r module.Router) {
 	r.Viewer("GET /board/money/{id}", s.handleMoneyPin)
 	r.Viewer("POST /board/money/{id}/pin", s.handleMoneyCheck)
 	r.Viewer("GET /board/money/{id}/view", s.handleMyMoney)
+	r.Viewer("GET /board/money/{id}/history", s.handleMoneyHistory)
+	r.Admin("GET /admin/people/{id}/money", s.handleAdminMoney)
+	r.Admin("GET /admin/people/{id}/money/history", s.handleAdminMoneyHistory)
 }
 
 // Rewards: rewards, claiming them and savings goals. Points themselves are

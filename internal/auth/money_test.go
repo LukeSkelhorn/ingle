@@ -51,14 +51,25 @@ func TestMoneyPIN(t *testing.T) {
 	if _, ok := f.svc.MoneyToken(f.disp, "nonsense"); ok {
 		t.Error("made-up token works")
 	}
-	// …and for a minute.
-	f.now = f.now.Add(auth.MoneyTokenTTL - time.Second)
-	if _, ok := f.svc.MoneyToken(f.disp, tok); !ok {
-		t.Error("token expired early")
+	// …and for a minute after each use, up to ten minutes in all.
+	start := f.now
+	for f.now.Before(start.Add(auth.MoneyTokenMax - auth.MoneyTokenTTL)) {
+		f.now = f.now.Add(auth.MoneyTokenTTL - time.Second)
+		if _, ok := f.svc.MoneyToken(f.disp, tok); !ok {
+			t.Fatalf("token expired while in use, after %v", f.now.Sub(start))
+		}
 	}
-	f.now = f.now.Add(time.Second)
+	f.now = start.Add(auth.MoneyTokenMax)
 	if _, ok := f.svc.MoneyToken(f.disp, tok); ok {
-		t.Error("token outlives its minute")
+		t.Error("token outlives MoneyTokenMax")
+	}
+	idle, err := f.svc.CheckMoneyPIN(ctx, f.disp, f.kid.ID, "1111", "a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.now = f.now.Add(auth.MoneyTokenTTL)
+	if _, ok := f.svc.MoneyToken(f.disp, idle); ok {
+		t.Error("unused token outlives its minute")
 	}
 
 	// A child's PIN never opens admin or unlocks the displays.

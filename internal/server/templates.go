@@ -182,6 +182,8 @@ func (s *Server) funcs() template.FuncMap {
 		"pts":       pts,
 		"signedPts": signedPts,
 		"net":       s.net,
+		"change":    s.change,
+		"neg":       func(n int64) int64 { return -n },
 		"percent": func(done, total int) int {
 			if total == 0 {
 				return 0
@@ -257,6 +259,22 @@ func (s *Server) net(points, pence int64) string {
 		parts = append(parts, s.Locale.FormatMoney(pence))
 	}
 	return strings.Join(parts, " · ")
+}
+
+// change describes a signed change to a balance, e.g. "+10 pts +20p" or
+// "−£5.00", or "" if nothing.
+func (s *Server) change(points, pence int64) string {
+	var parts []string
+	if points != 0 {
+		parts = append(parts, signedPts(points)+strings.TrimPrefix(pts(points), minus(points)))
+	}
+	switch {
+	case pence > 0:
+		parts = append(parts, "+"+s.Locale.FormatMoney(pence))
+	case pence < 0:
+		parts = append(parts, "−"+s.Locale.FormatMoney(-pence))
+	}
+	return strings.Join(parts, " ")
 }
 
 // dict builds a map from alternating keys and values, for passing several
