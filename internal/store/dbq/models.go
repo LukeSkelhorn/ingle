@@ -164,6 +164,16 @@ type Person struct {
 	PictureCards int64   `json:"picture_cards"`
 }
 
+type PersonBank struct {
+	PersonID    int64  `json:"person_id"`
+	HouseholdID int64  `json:"household_id"`
+	Label       string `json:"label"`
+	Pence       int64  `json:"pence"`
+	Source      string `json:"source"`
+	UpdatedAt   int64  `json:"updated_at"`
+	UpdatedBy   *int64 `json:"updated_by"`
+}
+
 type Photo struct {
 	ID          int64  `json:"id"`
 	HouseholdID int64  `json:"household_id"`

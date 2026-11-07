@@ -30,6 +30,7 @@ type myMoneyView struct {
 	chores.Summary
 	Waiting []chores.HistoryItem // reward claims waiting for a grown-up
 	Bank    chores.BankStatus    // their bank request waiting, or just declined
+	InBank  *chores.Bank         // what's in their real bank, nil if not set up
 	Page    moneyHistoryView     // the first page of history
 	Admin   bool                 // on Admin › People, not in the board's sheet
 }
@@ -368,6 +369,9 @@ func (s *Server) myMoney(r *http.Request, p dbq.Person, base, token string) (myM
 		v.Goal = nil
 	}
 	if v.Bank, err = s.Chores.BankStatus(ctx, s.HouseholdID, p.ID, s.now().Add(-declinedShown)); err != nil {
+		return myMoneyView{}, err
+	}
+	if v.InBank, err = s.Chores.PersonBank(ctx, s.HouseholdID, p.ID); err != nil {
 		return myMoneyView{}, err
 	}
 	v.Page.History, v.Page.Next, err = s.Chores.History(ctx, s.HouseholdID, p.ID, s.now().AddDate(0, 0, -moneyHistoryDays), 0)

@@ -71,6 +71,9 @@
   <p class="person__balance">{{pts .Points}}{{if .Pence}} <span class="person__money">{{money .Pence}}</span>{{end}}
     {{- with worth .HeldPoints .HeldPence}} <span class="person__held">({{.}} held)</span>{{end}}</p>
   <p class="person__week">This week: {{with net .WeekPoints .WeekPence}}{{.}}{{else}}nothing yet{{end}}</p>
+  {{with .InBank}}
+  <p class="money-inbank" title="{{.Label}}">🏦 In my bank: <strong>{{money .Pence}}</strong> <small class="muted">· {{.Label}} · updated {{updatedAgo .UpdatedAt}}</small></p>
+  {{end}}
 
   {{with .Bank.Waiting}}
   <div class="money-bank money-bank--waiting">

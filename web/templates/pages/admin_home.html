@@ -18,6 +18,15 @@
     {{if and .Data.Bank (moduleOn "money")}}<li><a class="tile tile--alert" href="/admin/bank"><strong>{{.Data.Bank}}</strong><span>Bank {{if eq .Data.Bank 1}}request{{else}}requests{{end}}</span></a></li>{{end}}
   </ul>
 
+  {{if and .Data.StaleBanks (moduleOn "money")}}
+  <ul class="nudges">
+    {{range .Data.StaleBanks}}
+    <li><a href="/admin/people/{{.PersonID}}#bank-balance">🏦 Check {{.Name}}'s bank balance ›</a>
+      <small class="muted">updated {{updatedAgo .UpdatedAt}}</small></li>
+    {{end}}
+  </ul>
+  {{end}}
+
   <section class="card lockcard">
     <h2>Displays</h2>
     {{if .Data.Lock.Locked}}

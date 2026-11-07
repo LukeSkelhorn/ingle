@@ -124,6 +124,8 @@ func (s *Server) funcs() template.FuncMap {
 	return template.FuncMap{
 		"money":      func(pence int64) string { return s.Locale.FormatMoney(pence) },
 		"moneyInput": locale.FormatMoneyInput,
+		// updatedAgo says how long since a bank balance was checked.
+		"updatedAgo": func(t time.Time) string { return updatedAgo(s.now(), t) },
 		"avatar":     avatarOf,
 		// moduleOn "rewards" reports whether a module is switched on, so
 		// pages and partials can hide its pieces.

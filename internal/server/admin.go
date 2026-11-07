@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/lukeskelhorn/ingle/internal/auth"
+	"github.com/lukeskelhorn/ingle/internal/chores"
 	"github.com/lukeskelhorn/ingle/internal/settings"
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
@@ -19,6 +20,8 @@ type adminHome struct {
 	Rewards int
 	Pending int
 	Bank    int // bank requests waiting
+	// StaleBanks are children whose bank balance wants checking.
+	StaleBanks []chores.StaleBank
 	// ModulesChosen is false until Admin › Modules has been saved once.
 	ModulesChosen bool
 	Lock          lockView
@@ -71,14 +74,19 @@ func (s *Server) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var bank int
+	var stale []chores.StaleBank
 	if s.moduleOn(ctx, modMoney) {
 		if bank, err = s.Chores.PendingTransferCount(ctx, s.HouseholdID); err != nil {
 			s.serverError(w, r, err)
 			return
 		}
+		if stale, err = s.Chores.StaleBanks(ctx, s.HouseholdID); err != nil {
+			s.serverError(w, r, err)
+			return
+		}
 	}
 	v := s.view(r, "Admin", adminHome{
-		People: len(people), Chores: len(chs), Rewards: len(rewards), Pending: len(pending) + len(claims), Bank: bank,
+		People: len(people), Chores: len(chs), Rewards: len(rewards), Pending: len(pending) + len(claims), Bank: bank, StaleBanks: stale,
 		ModulesChosen: mods.Chosen, Lock: lv, Activity: act,
 	})
 	v.Nav = "home"
@@ -98,6 +106,14 @@ func activityActor(verb string) string {
 // £5.00 to their bank", "approved moving £5.00 to Thomas's bank", or
 // "claimed Lego set".
 func (s *Server) activityLine(a dbq.ListRecentActivityWithActorRow) string {
+	if a.SubjectPence == nil && a.SubjectPerson != nil {
+		switch a.Verb {
+		case "bank.updated":
+			return "updated " + *a.SubjectPerson + "'s bank balance"
+		case "bank.removed":
+			return "removed " + *a.SubjectPerson + "'s bank balance"
+		}
+	}
 	if a.SubjectPence != nil && a.SubjectPerson != nil {
 		amount, whose := s.Locale.FormatMoney(*a.SubjectPence), *a.SubjectPerson+"'s"
 		switch a.Verb {
@@ -170,6 +186,8 @@ var activityText = map[string]string{
 	"transfer.approved":       "approved moving money to a bank",
 	"transfer.declined":       "declined moving money to a bank",
 	"transfer.paid":           "moved money to a bank",
+	"bank.updated":            "updated a bank balance",
+	"bank.removed":            "removed a bank balance",
 	"photo.added":             "added a photo",
 	"photo.removed":           "removed a photo",
 	"calendar.added":          "added a calendar",

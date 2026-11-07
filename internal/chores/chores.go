@@ -52,6 +52,7 @@ var (
 	ErrNotAdult            = errors.New("only adults can do this")
 	ErrInsufficientBalance = errors.New("not enough points or money")
 	ErrInvalidRRule        = errors.New("invalid recurrence rule")
+	ErrNotChild            = errors.New("only children can do this")
 )
 
 // Window is how many days ahead occurrences are materialised.
@@ -487,6 +488,8 @@ func (s *Service) activity(ctx context.Context, q *dbq.Queries, householdID, act
 		"transfer.approved":  "transfer",
 		"transfer.declined":  "transfer",
 		"transfer.paid":      "transfer",
+		"bank.updated":       "person",
+		"bank.removed":       "person",
 	}[verb]
 	if err := q.InsertActivity(ctx, dbq.InsertActivityParams{
 		HouseholdID: householdID,
