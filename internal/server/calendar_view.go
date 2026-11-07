@@ -194,7 +194,7 @@ func (s *Server) handleCalendarView(w http.ResponseWriter, r *http.Request) {
 	} else {
 		v.Title = weekTitle(cr.gridFrom, cr.gridTo)
 	}
-	if s.Calendars != nil {
+	if s.Calendars != nil && s.moduleOn(r.Context(), modCalendar) {
 		feeds, err := s.Calendars.Feeds(r.Context(), s.HouseholdID)
 		if err != nil {
 			s.serverError(w, r, err)
@@ -235,7 +235,7 @@ func (s *Server) calendarDays(r *http.Request, loc locale.Locale, first, last, t
 		byID[people[i].ID] = &people[i]
 	}
 	var events []calendar.Event
-	if s.Calendars != nil {
+	if s.Calendars != nil && s.moduleOn(ctx, modCalendar) {
 		events = s.Calendars.Upcoming(s.HouseholdID, first, last.AddDate(0, 0, 1))
 	}
 

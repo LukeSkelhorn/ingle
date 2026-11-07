@@ -120,12 +120,15 @@ func (s *Server) renderPerson(w http.ResponseWriter, r *http.Request, status int
 		title = f.Name
 	}
 	if f.ID != 0 && !f.Archived {
-		rewards, err := s.Household.Rewards(r.Context(), s.HouseholdID)
-		if err != nil {
-			s.serverError(w, r, err)
-			return
+		// No rewards, no "Saving for" picker.
+		if s.moduleOn(r.Context(), modRewards) {
+			rewards, err := s.Household.Rewards(r.Context(), s.HouseholdID)
+			if err != nil {
+				s.serverError(w, r, err)
+				return
+			}
+			f.Rewards = rewards
 		}
-		f.Rewards = rewards
 		if err := s.loadPointsPanel(r, &f); err != nil {
 			s.serverError(w, r, err)
 			return
@@ -281,7 +284,7 @@ func (s *Server) handlePersonUpdate(w http.ResponseWriter, r *http.Request) {
 		_ = s.Avatars.Remove(name)
 	}
 	flash := "Saved."
-	if r.Form.Has("goal") {
+	if r.Form.Has("goal") && s.moduleOn(r.Context(), modRewards) {
 		if p, err = s.savePersonGoal(r, p, newForm(r).optID("goal")); errors.Is(err, chores.ErrNotFound) {
 			flash = "Saved, but that reward has gone, so their goal wasn't changed."
 		} else if err != nil {

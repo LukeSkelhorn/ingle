@@ -82,6 +82,14 @@ The board has a column for each family member, adults included. Each column show
 
 Every open board (the wall iPad, a second display, an adult's phone) updates live when anything changes.
 
+### Modules
+
+Not every family wants everything. In **Admin › Modules**, switch off what you don't use: **Calendar**, **Photos** or **Rewards**. A module that's off disappears everywhere: its admin pages and links, its parts of the board and its background jobs. Its data is kept, so switching it back on brings everything back. Some modules need another (they say so on the page); turning off one that another needs asks first and turns both off.
+
+- **Calendar off:** no feeds, and no events on the screensaver. The board calendar still shows chores.
+- **Photos off:** the screensaver and the locked screen show the clock, events and chores without the slideshow.
+- **Rewards off:** no rewards, claims or goals on the board or in admin. Points still work, and claims that were waiting stay waiting until Rewards is back on.
+
 ### Calendar
 
 Swipe left across the board (or tap **Calendar** under the household name) to see the week ahead: the family's calendar events and everyone's chores together, coloured by person, with their emoji. All-day events sit at the top of each day; timed events and chores follow in order. Shared chores are marked **Up for grabs**. Past days show what was done (✓ and who did it) and what was missed.
@@ -174,6 +182,7 @@ internal/household/ people, credentials and rewards admin
 internal/avatar/    emoji picker and photo uploads
 internal/picture/   safe image decoding and JPEG writing, shared by avatars and photos
 internal/lock/      locking the displays: state, schedule and idle lock
+internal/module/    modules: the Module interface, registry and each household's on/off state
 internal/photos/    screensaver slideshow: uploaded photos plus the read-only photos folder
 internal/calendar/  ICS feeds: fetch, parse and expand recurring events for the screensaver and board calendar
 internal/chores/    chore lifecycle: recurrence presets, admin edits, board, claim, complete, undo, approve, reverse, redeem
@@ -199,6 +208,7 @@ Every table has a `household_id`, so one database can hold several households. A
 - **household_lock** says whether the displays are locked, why, and which schedule window was last applied. The unlock code (hashed), lock schedule and idle hours live in **household_settings**.
 - **photos** are the screensaver photos uploaded in admin. Folder photos are indexed in memory and never stored.
 - **calendar_feeds** are the ICS addresses for the screensaver and the board calendar. Events are fetched into memory and not stored.
+- **household_modules** says which modules a household has on. No rows means it hasn't chosen yet, and every module is on.
 - **activity** is an append-only feed and audit log.
 
 Timestamps are stored as unix seconds (UTC), local dates as `YYYY-MM-DD`, and money as integer pence.

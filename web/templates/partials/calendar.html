@@ -51,7 +51,7 @@
     {{end}}
   </div>
   {{end}}
-  {{if not .HasCalendars}}<p class="cal__hint muted">Add calendar feeds in Admin › Calendars to see the family's events here too.</p>{{end}}
+  {{if and (not .HasCalendars) (moduleOn "calendar")}}<p class="cal__hint muted">Add calendar feeds in Admin › Calendars to see the family's events here too.</p>{{end}}
 </div>
 {{end}}
 

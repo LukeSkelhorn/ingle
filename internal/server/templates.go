@@ -14,6 +14,7 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/auth"
 	"github.com/lukeskelhorn/ingle/internal/avatar"
 	"github.com/lukeskelhorn/ingle/internal/locale"
+	"github.com/lukeskelhorn/ingle/internal/module"
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 	"github.com/lukeskelhorn/ingle/internal/valid"
 	"github.com/lukeskelhorn/ingle/web"
@@ -124,6 +125,11 @@ func (s *Server) funcs() template.FuncMap {
 		"money":      func(pence int64) string { return s.Locale.FormatMoney(pence) },
 		"moneyInput": locale.FormatMoneyInput,
 		"avatar":     avatarOf,
+		// moduleOn "rewards" reports whether a module is switched on, so
+		// pages and partials can hide its pieces.
+		"moduleOn": func(id string) bool { return s.moduleOn(context.Background(), id) },
+		// moduleNav is the admin bar links of the modules that are on.
+		"moduleNav": func() []module.NavItem { return s.moduleNav(context.Background()) },
 		// plainAvatar is an avatar without its photo (initial or emoji),
 		// for the locked display, where /avatars/ isn't served.
 		"plainAvatar": func(p dbq.Person, size string) avatarView {

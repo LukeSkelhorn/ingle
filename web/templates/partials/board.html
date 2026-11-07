@@ -30,11 +30,11 @@
           <span class="column__who">
             <span class="column__name">{{.Person.Name}}</span>
             <span class="column__balance">{{pts .Points}}{{if .Pence}} · {{money .Pence}}{{end}}</span>
-            {{if .Waiting}}<span class="tag tag--wait column__waiting">🎁 {{.Waiting}} waiting</span>{{end}}
+            {{if and .Waiting (moduleOn "rewards")}}<span class="tag tag--wait column__waiting">🎁 {{.Waiting}} waiting</span>{{end}}
           </span>
         </button>
       </h2>
-      {{with .Goal}}{{template "goal" (dict "Goal" . "PersonID" $col.Person.ID)}}{{end}}
+      {{if moduleOn "rewards"}}{{with .Goal}}{{template "goal" (dict "Goal" . "PersonID" $col.Person.ID)}}{{end}}{{end}}
       {{if .TotalToday}}
       <div class="progress" role="img" aria-label="{{.DoneToday}} of {{.TotalToday}} done today">
         <div class="progress__bar"><span style="width: {{percent .DoneToday .TotalToday}}%"></span></div>
@@ -189,13 +189,14 @@
   <p class="person__balance">{{pts .Points}}{{if .Pence}} <span class="person__money">{{money .Pence}}</span>{{end}}
     {{- with worth .HeldPoints .HeldPence}} <span class="person__held">({{.}} held)</span>{{end}}</p>
   <p class="person__week">This week: {{with net .WeekPoints .WeekPence}}{{.}}{{else}}nothing yet{{end}}</p>
-  {{with .Goal}}
+  {{$rewards := moduleOn "rewards"}}
+  {{if $rewards}}{{with .Goal}}
   <h3 class="person__sub">Saving for</h3>
   {{template "goal" (dict "Goal" . "PersonID" $.Person.ID)}}
   <button class="btn btn--ghost person__stop" type="button" hx-disabled-elt="this"
           hx-post="/board/people/{{$.Person.ID}}/goal/clear" hx-target="#board" hx-swap="outerHTML">Stop saving</button>
-  {{end}}
-  {{if .Waiting}}
+  {{end}}{{end}}
+  {{if and $rewards .Waiting}}
   <h3 class="person__sub">Waiting for a grown-up</h3>
   <ul class="rewards" hx-target="#board" hx-swap="outerHTML">
     {{range .Waiting}}
@@ -232,6 +233,7 @@
     {{end}}
   </ul>
   {{end}}
+  {{if $rewards}}
   <h3 class="person__sub">Rewards</h3>
   {{if .Rewards}}
   <ul class="rewards" hx-target="#board" hx-swap="outerHTML">
@@ -258,6 +260,7 @@
   </ul>
   {{else}}
   <p class="muted">No rewards yet. A grown-up can add some in Admin.</p>
+  {{end}}
   {{end}}
   <div class="picker__actions">
     <button class="btn btn--ghost btn--block" type="button" data-close>Close</button>

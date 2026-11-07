@@ -108,6 +108,13 @@ type HouseholdLock struct {
 	ScheduleApplied int64  `json:"schedule_applied"`
 }
 
+type HouseholdModule struct {
+	HouseholdID int64  `json:"household_id"`
+	ModuleID    string `json:"module_id"`
+	Enabled     int64  `json:"enabled"`
+	ChangedAt   int64  `json:"changed_at"`
+}
+
 type HouseholdSetting struct {
 	HouseholdID            int64   `json:"household_id"`
 	Timezone               string  `json:"timezone"`
