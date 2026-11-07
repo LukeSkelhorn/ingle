@@ -69,7 +69,7 @@ func (s *Server) screensaver(r *http.Request) (screensaverView, error) {
 		v.People = append(v.People, p)
 	}
 
-	if s.Calendars == nil {
+	if s.Calendars == nil || !s.moduleOn(ctx, modCalendar) {
 		return v, nil
 	}
 	feeds, err := s.Calendars.Feeds(ctx, s.HouseholdID)

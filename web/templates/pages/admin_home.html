@@ -3,10 +3,17 @@
 {{template "admin_nav" .}}
 <main class="admin__main">
   <h1>Hello{{with .Viewer.Adult}} {{.Name}}{{end}}</h1>
+  {{if not .Data.ModulesChosen}}
+  <section class="card modules-prompt">
+    <h2>Choose what your household uses</h2>
+    <p>Ingle now lets you switch whole features off: calendar, photos and rewards. Everything stays on until you choose.</p>
+    <p><a class="btn btn--primary" href="/admin/modules">Choose modules</a></p>
+  </section>
+  {{end}}
   <ul class="tiles">
     <li><a class="tile" href="/admin/people"><strong>{{.Data.People}}</strong><span>People</span></a></li>
     <li><a class="tile" href="/admin/chores"><strong>{{.Data.Chores}}</strong><span>Chores</span></a></li>
-    <li><a class="tile" href="/admin/rewards"><strong>{{.Data.Rewards}}</strong><span>Rewards</span></a></li>
+    {{if moduleOn "rewards"}}<li><a class="tile" href="/admin/rewards"><strong>{{.Data.Rewards}}</strong><span>Rewards</span></a></li>{{end}}
     <li><a class="tile" href="/admin/completions"><strong>{{.Data.Pending}}</strong><span>Waiting for approval</span></a></li>
   </ul>
 

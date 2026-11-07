@@ -6,6 +6,14 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ## [Unreleased]
 
+### Added
+
+- **Modules:** switch whole features off in the new **Admin › Modules**: **Calendar** (feeds and their events), **Photos** (the screensaver slideshow) and **Rewards** (rewards, claims and savings goals). A module that's off disappears everywhere: its admin pages and links, its parts of the board and its background jobs. Its data is kept, so switching it back on brings everything back, waiting reward claims included. With Calendar off, the board calendar still shows chores; with Photos off, the screensaver and locked screen show the clock, events and chores without photos; with Rewards off, points still work. A new household starts with all three on. ([DOM-26](https://linear.app/skeltech/issue/DOM-26))
+
+### Upgrade notes
+
+- This release has a database migration (a new table for modules). Ingle takes care of it on start. Nothing changes after upgrading: every module stays on, and **Admin** asks you to choose your modules until you save **Admin › Modules** once.
+
 ## [v0.2.2] - 2026-11-07
 
 Give a bonus, or take points away.

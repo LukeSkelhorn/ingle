@@ -26,6 +26,7 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/household"
 	"github.com/lukeskelhorn/ingle/internal/locale"
 	"github.com/lukeskelhorn/ingle/internal/lock"
+	"github.com/lukeskelhorn/ingle/internal/module"
 	"github.com/lukeskelhorn/ingle/internal/photos"
 	"github.com/lukeskelhorn/ingle/internal/settings"
 	"github.com/lukeskelhorn/ingle/internal/store"
@@ -45,6 +46,7 @@ type harness struct {
 	lock     *lock.Service
 	// ics serves calendar feeds: icsBody at any path.
 	ics *httptest.Server
+	srv *Server
 
 	mu      sync.Mutex
 	now     time.Time
@@ -70,6 +72,12 @@ func (h *harness) advance(d time.Duration) {
 }
 
 func newHarness(t *testing.T) *harness {
+	t.Helper()
+	return newHarnessWith(t)
+}
+
+// newHarnessWith also registers extra modules after Ingle's own.
+func newHarnessWith(t *testing.T, extra ...module.Module) *harness {
 	t.Helper()
 	ctx := t.Context()
 	dir := t.TempDir()
@@ -135,6 +143,10 @@ func newHarness(t *testing.T) *harness {
 		t.Fatalf("New: %v", err)
 	}
 	srv.SetClock(h.clock)
+	for _, m := range extra {
+		srv.Modules.Registry().Register(m)
+	}
+	h.srv = srv
 	h.ts = httptest.NewServer(srv.Handler())
 	t.Cleanup(h.ts.Close)
 	return h

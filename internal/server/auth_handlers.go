@@ -2,6 +2,7 @@ package server
 
 import (
 	"errors"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/netip"
@@ -110,6 +111,11 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 	}
 	s.setupDone.Store(true)
 	s.Settings.Invalidate(s.HouseholdID)
+	// A new household starts with each module's default, so it isn't asked
+	// to choose. If this fails it is asked in Admin instead.
+	if err := s.Modules.SetDefaults(ctx, s.HouseholdID, &p.ID); err != nil {
+		s.Log.ErrorContext(ctx, "set default modules", slog.Any("err", err))
+	}
 
 	if data.UseAsDisplay {
 		devToken, dev, err := s.Auth.RegisterDisplay(ctx, s.HouseholdID, data.DisplayName, p.ID)

@@ -14,12 +14,14 @@ import (
 )
 
 type adminHome struct {
-	People   int
-	Chores   int
-	Rewards  int
-	Pending  int
-	Lock     lockView
-	Activity []dbq.ListRecentActivityWithActorRow
+	People  int
+	Chores  int
+	Rewards int
+	Pending int
+	// ModulesChosen is false until Admin › Modules has been saved once.
+	ModulesChosen bool
+	Lock          lockView
+	Activity      []dbq.ListRecentActivityWithActorRow
 }
 
 func (s *Server) handleAdminHome(w http.ResponseWriter, r *http.Request) {
@@ -59,8 +61,17 @@ func (s *Server) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
+	if !s.moduleOn(ctx, modRewards) {
+		claims = nil // they wait, unseen, until Rewards is back on
+	}
+	mods, err := s.Modules.State(ctx, s.HouseholdID)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
 	v := s.view(r, "Admin", adminHome{
-		People: len(people), Chores: len(chs), Rewards: len(rewards), Pending: len(pending) + len(claims), Lock: lv, Activity: act,
+		People: len(people), Chores: len(chs), Rewards: len(rewards), Pending: len(pending) + len(claims),
+		ModulesChosen: mods.Chosen, Lock: lv, Activity: act,
 	})
 	v.Nav = "home"
 	s.render(w, r, http.StatusOK, "admin_home", v)
@@ -86,6 +97,7 @@ func describeActivity(verb string) string {
 var activityText = map[string]string{
 	"household.setup":         "set up the household",
 	"settings.updated":        "changed settings",
+	"modules.updated":         "changed the modules",
 	"admin.unlocked":          "unlocked admin on a display",
 	"admin.signed_in":         "signed in",
 	"device.registered":       "registered a household display",

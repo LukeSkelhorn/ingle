@@ -1,0 +1,28 @@
+{{define "bodyclass"}}admin{{end}}
+{{define "content"}}
+{{template "admin_nav" .}}
+<main class="admin__main">
+  <h1>Modules</h1>
+  {{template "flash" .}}
+  <p class="muted">Switch off what your household doesn't use, to keep the board simple. Turning a module off hides its pages and its parts of the board; its data is kept, so turning it back on brings everything back.</p>
+  {{if not .Data.Chosen}}<p>Everything is on until you save this page.</p>{{end}}
+  <form class="card stack" method="post" action="/admin/modules">
+    {{range .Data.Modules}}
+    <label class="check">
+      <input type="checkbox" name="module" value="{{.ID}}"{{if .On}} checked{{end}}>
+      <span><strong>{{.Name}}</strong>
+        <small class="muted">{{.Description}}{{with .Needs}} Needs {{.}}.{{end}}</small></span>
+    </label>
+    {{end}}
+    {{if .Data.Confirm}}
+    <div class="flash" role="alert">
+      <p>{{.Data.Confirm}} needs a module you're turning off, so it will go off too. Its data is kept.</p>
+      <button class="btn btn--primary" type="submit" name="confirm" value="1">Turn off {{.Data.Confirm}} too</button>
+      <a class="btn btn--ghost" href="/admin/modules">Cancel</a>
+    </div>
+    {{else}}
+    <button class="btn btn--primary" type="submit">Save</button>
+    {{end}}
+  </form>
+</main>
+{{end}}

@@ -19,6 +19,7 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/household"
 	"github.com/lukeskelhorn/ingle/internal/locale"
 	"github.com/lukeskelhorn/ingle/internal/lock"
+	"github.com/lukeskelhorn/ingle/internal/module"
 	"github.com/lukeskelhorn/ingle/internal/photos"
 	"github.com/lukeskelhorn/ingle/internal/settings"
 	"github.com/lukeskelhorn/ingle/internal/store"
@@ -37,8 +38,11 @@ type Deps struct {
 	Photos      *photos.Library
 	Calendars   *calendar.Service
 	Lock        *lock.Service
-	Locale      locale.Locale
-	Log         *slog.Logger
+	// Modules is which features each household has on. New fills in an
+	// empty one if it is nil, and registers Ingle's modules in it.
+	Modules *module.Service
+	Locale  locale.Locale
+	Log     *slog.Logger
 	// TrustedProxies are reverse proxies whose X-Forwarded-For is believed.
 	TrustedProxies []netip.Prefix
 	// Version is the build's version ("dev" when not built for a release).
@@ -55,6 +59,10 @@ type Server struct {
 	// lockEvents tells every open page the displays locked or unlocked.
 	lockEvents *hub
 
+	// loopKicks wake the module loops when the modules change.
+	loopKicks    []chan struct{}
+	loopsStarted atomic.Bool
+
 	// setupDone latches once an adult can sign in; it never goes back
 	// because the last such adult can't be archived or stripped.
 	setupDone atomic.Bool
@@ -70,6 +78,15 @@ func New(d Deps) (*Server, error) {
 	if d.Store != nil {
 		s.db = d.Store.DB
 	}
+	if s.Modules == nil {
+		s.Modules = module.NewService(d.Store, module.NewRegistry())
+	}
+	s.registerModules(s.Modules.Registry())
+	// Switching a module on or off changes every page; displays reload.
+	s.Modules.OnChange(func(householdID int64) {
+		s.lockEvents.publish(householdID, "")
+		s.kickLoops()
+	})
 	p, err := loadPages(s.funcs())
 	if err != nil {
 		return nil, err
@@ -112,9 +129,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /{$}", viewer(s.handleIndex))
 	mux.Handle("GET /clock", viewer(s.handleClock))
 	mux.Handle("GET /avatars/{name}", viewer(s.handleAvatar))
-	mux.Handle("GET /photos/{kind}/{name}", viewer(s.handlePhoto))
 	mux.Handle("GET /screensaver", viewer(s.handleScreensaver))
-	mux.Handle("GET /screensaver/photos", viewer(s.handleSlides))
 	mux.Handle("POST /lock", viewer(s.handleLock))
 	mux.Handle("POST /unlock", viewer(s.handleUnlock))
 	mux.Handle("POST /activity", viewer(s.handleActivity))
@@ -133,13 +148,6 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /board/completions/{id}/approve", viewer(s.boardReview(s.Chores.Approve, "Approved. Points added.")))
 	mux.Handle("POST /board/completions/{id}/reject", viewer(s.boardReview(s.Chores.Reject, "Not counted. It's back on the board.")))
 	mux.Handle("POST /board/completions/{id}/reverse", viewer(s.boardReview(s.Chores.Reverse, "Reversed. Points taken back.")))
-	mux.Handle("POST /board/rewards/{id}/claim", viewer(s.handleRewardClaim))
-	mux.Handle("POST /board/people/{id}/goal", viewer(s.handleGoalSet))
-	mux.Handle("POST /board/people/{id}/goal/clear", viewer(s.handleGoalClear))
-	mux.Handle("GET /board/redemptions/{id}/review", viewer(s.handleClaimReviewSheet))
-	mux.Handle("POST /board/redemptions/{id}/approve", viewer(s.boardReview(s.Chores.ApproveRedemption, "Approved. Enjoy! 🎁")))
-	mux.Handle("POST /board/redemptions/{id}/decline", viewer(s.boardReview(s.Chores.DeclineRedemption, "Declined. Points are free again.")))
-	mux.Handle("POST /board/redemptions/{id}/cancel", viewer(s.handleClaimCancel))
 
 	// Admin routes: a signed-in adult (PIN on a display, password elsewhere).
 	// Any admin write may change what the board shows, so open boards are
@@ -168,14 +176,6 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /admin/chores/{id}", admin(s.handleChoreUpdate))
 	mux.Handle("POST /admin/chores/{id}/archive", admin(s.handleChoreArchive))
 
-	mux.Handle("GET /admin/rewards", admin(s.handleRewards))
-	mux.Handle("GET /admin/rewards/new", admin(s.handleRewardNew))
-	mux.Handle("POST /admin/rewards", admin(s.handleRewardCreate))
-	mux.Handle("GET /admin/rewards/{id}", admin(s.handleRewardEdit))
-	mux.Handle("POST /admin/rewards/{id}", admin(s.handleRewardUpdate))
-	mux.Handle("POST /admin/rewards/{id}/archive", admin(s.handleRewardArchive))
-	mux.Handle("POST /admin/rewards/{id}/restore", admin(s.handleRewardRestore))
-
 	mux.Handle("GET /admin/completions", admin(s.handleCompletions))
 	mux.Handle("POST /admin/completions/{id}/approve", admin(s.adminReview(s.Chores.Approve, "Approved.")))
 	mux.Handle("POST /admin/completions/{id}/reject", admin(s.adminReview(s.Chores.Reject, "Not counted; the chore is back on the board.")))
@@ -185,28 +185,24 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /admin/completions/missed/restore", admin(s.handleRestoreMissed))
 	mux.Handle("POST /admin/completions/{id}/reverse", admin(s.adminReview(s.Chores.Reverse, "Reversed; points taken back and the chore is back on the board.")))
 
-	mux.Handle("POST /admin/rewards/claims/{id}/approve", admin(s.adminReview(s.Chores.ApproveRedemption, "Reward approved.")))
-	mux.Handle("POST /admin/rewards/claims/{id}/decline", admin(s.adminReview(s.Chores.DeclineRedemption, "Reward declined; the points are free again.")))
-
-	mux.Handle("GET /admin/photos", admin(s.handlePhotos))
-	mux.Handle("POST /admin/photos", admin(s.handlePhotoUpload))
-	mux.Handle("POST /admin/photos/{id}/delete", admin(s.handlePhotoDelete))
-
-	mux.Handle("GET /admin/calendars", admin(s.handleCalendars))
-	mux.Handle("POST /admin/calendars", admin(s.handleCalendarAdd))
-	mux.Handle("POST /admin/calendars/refresh", admin(s.handleCalendarRefresh))
-	mux.Handle("POST /admin/calendars/{id}/delete", admin(s.handleCalendarDelete))
-
 	mux.Handle("GET /admin/devices", admin(s.handleDevices))
 	mux.Handle("POST /admin/devices/register", admin(s.handleDeviceRegister))
 	mux.Handle("POST /admin/devices/{id}/revoke", admin(s.handleDeviceRevoke))
 	mux.Handle("POST /admin/sessions/revoke", admin(s.handleSessionRevoke))
 	mux.Handle("POST /admin/sessions/others", admin(s.handleSignOutOthers))
 
+	mux.Handle("GET /admin/modules", admin(s.handleModules))
+	mux.Handle("POST /admin/modules", admin(s.handleModulesUpdate))
+
 	mux.Handle("GET /admin/settings", admin(s.handleSettings))
 	mux.Handle("POST /admin/settings", admin(s.handleSettingsUpdate))
 	mux.Handle("POST /admin/settings/unlock-code", admin(s.handleUnlockCodeSet))
 	mux.Handle("POST /admin/settings/unlock-code/clear", admin(s.handleUnlockCodeClear))
+
+	// Modules mount their own routes, hidden while they're off.
+	for _, m := range s.Modules.Registry().All() {
+		m.Routes(moduleRouter{s: s, mux: mux, id: m.ID()})
+	}
 
 	// Outermost first: reject cross-origin writes, identify the caller, then
 	// send everything to /setup until the household is set up.
