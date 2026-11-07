@@ -18,6 +18,7 @@ type adminHome struct {
 	Chores  int
 	Rewards int
 	Pending int
+	Bank    int // bank requests waiting
 	// ModulesChosen is false until Admin › Modules has been saved once.
 	ModulesChosen bool
 	Lock          lockView
@@ -69,8 +70,15 @@ func (s *Server) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
+	var bank int
+	if s.moduleOn(ctx, modMoney) {
+		if bank, err = s.Chores.PendingTransferCount(ctx, s.HouseholdID); err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+	}
 	v := s.view(r, "Admin", adminHome{
-		People: len(people), Chores: len(chs), Rewards: len(rewards), Pending: len(pending) + len(claims),
+		People: len(people), Chores: len(chs), Rewards: len(rewards), Pending: len(pending) + len(claims), Bank: bank,
 		ModulesChosen: mods.Chosen, Lock: lv, Activity: act,
 	})
 	v.Nav = "home"
@@ -84,6 +92,32 @@ func activityActor(verb string) string {
 		return "Ingle"
 	}
 	return "Someone"
+}
+
+// activityLine is what the feed says after who did it: "asked to move
+// £5.00 to their bank", "approved moving £5.00 to Thomas's bank", or
+// "claimed Lego set".
+func (s *Server) activityLine(a dbq.ListRecentActivityWithActorRow) string {
+	if a.SubjectPence != nil && a.SubjectPerson != nil {
+		amount, whose := s.Locale.FormatMoney(*a.SubjectPence), *a.SubjectPerson+"'s"
+		switch a.Verb {
+		case "transfer.requested":
+			return "asked to move " + amount + " to their bank"
+		case "transfer.cancelled":
+			return "cancelled moving " + amount + " to their bank"
+		case "transfer.approved":
+			return "approved moving " + amount + " to " + whose + " bank"
+		case "transfer.declined":
+			return "declined moving " + amount + " to " + whose + " bank"
+		case "transfer.paid":
+			return "moved " + amount + " to " + whose + " bank"
+		}
+	}
+	d := describeActivity(a.Verb)
+	if a.SubjectTitle != nil {
+		d += " " + *a.SubjectTitle
+	}
+	return d
 }
 
 // describeActivity turns an activity verb into a short phrase for the feed.
@@ -131,6 +165,11 @@ var activityText = map[string]string{
 	"reward.cancelled":        "cancelled a claim for",
 	"points.adjusted":         "changed someone's points",
 	"points.undone":           "undid a points change",
+	"transfer.requested":      "asked to move money to their bank",
+	"transfer.cancelled":      "cancelled moving money to their bank",
+	"transfer.approved":       "approved moving money to a bank",
+	"transfer.declined":       "declined moving money to a bank",
+	"transfer.paid":           "moved money to a bank",
 	"photo.added":             "added a photo",
 	"photo.removed":           "removed a photo",
 	"calendar.added":          "added a calendar",

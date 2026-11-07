@@ -216,9 +216,14 @@ SELECT
     person_id,
     CAST(COALESCE(SUM(points), 0) AS INTEGER) AS points,
     CAST(COALESCE(SUM(pence), 0) AS INTEGER) AS pence,
-    CAST(COUNT(*) AS INTEGER) AS waiting
-FROM redemptions
-WHERE household_id = ? AND status = 'pending'
+    CAST(COALESCE(SUM(claim), 0) AS INTEGER) AS waiting
+FROM (
+    SELECT d.person_id, d.points, d.pence, 1 AS claim FROM redemptions d
+    WHERE d.household_id = ?1 AND d.status = 'pending'
+    UNION ALL
+    SELECT t.person_id, 0, t.pence, 0 FROM transfer_requests t
+    WHERE t.household_id = ?1 AND t.status = 'pending'
+)
 GROUP BY person_id
 `
 
@@ -229,6 +234,7 @@ type HeldForHouseholdRow struct {
 	Waiting  int64 `json:"waiting"`
 }
 
+// HeldForPerson for everyone.
 func (q *Queries) HeldForHousehold(ctx context.Context, householdID int64) ([]HeldForHouseholdRow, error) {
 	rows, err := q.db.QueryContext(ctx, heldForHousehold, householdID)
 	if err != nil {
@@ -261,9 +267,14 @@ const heldForPerson = `-- name: HeldForPerson :one
 SELECT
     CAST(COALESCE(SUM(points), 0) AS INTEGER) AS points,
     CAST(COALESCE(SUM(pence), 0) AS INTEGER) AS pence,
-    CAST(COUNT(*) AS INTEGER) AS waiting
-FROM redemptions
-WHERE household_id = ? AND person_id = ? AND status = 'pending'
+    CAST(COALESCE(SUM(claim), 0) AS INTEGER) AS waiting
+FROM (
+    SELECT d.points, d.pence, 1 AS claim FROM redemptions d
+    WHERE d.household_id = ?1 AND d.person_id = ?2 AND d.status = 'pending'
+    UNION ALL
+    SELECT 0, t.pence, 0 FROM transfer_requests t
+    WHERE t.household_id = ?1 AND t.person_id = ?2 AND t.status = 'pending'
+)
 `
 
 type HeldForPersonParams struct {
@@ -277,7 +288,8 @@ type HeldForPersonRow struct {
 	Waiting int64 `json:"waiting"`
 }
 
-// What a person's waiting claims hold back from their balance.
+// What a person's waiting reward claims and bank requests hold back from
+// their balance. waiting counts the reward claims only.
 func (q *Queries) HeldForPerson(ctx context.Context, arg HeldForPersonParams) (HeldForPersonRow, error) {
 	row := q.db.QueryRowContext(ctx, heldForPerson, arg.HouseholdID, arg.PersonID)
 	var i HeldForPersonRow

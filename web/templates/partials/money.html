@@ -72,6 +72,25 @@
     {{- with worth .HeldPoints .HeldPence}} <span class="person__held">({{.}} held)</span>{{end}}</p>
   <p class="person__week">This week: {{with net .WeekPoints .WeekPence}}{{.}}{{else}}nothing yet{{end}}</p>
 
+  {{with .Bank.Waiting}}
+  <div class="money-bank money-bank--waiting">
+    <p><strong>{{money .Pence}}</strong> to your bank · <span class="tag tag--wait">Waiting for a grown-up</span></p>
+    {{if $.Asking}}
+    <button class="btn btn--ghost" type="button" data-keep-open hx-disabled-elt="this"
+            hx-post="{{$.Page.Base}}/bank/{{.ID}}/cancel" hx-vals='{"t": "{{$.Page.Token}}"}'
+            hx-target="#sheet-body" hx-swap="innerHTML">Cancel</button>
+    {{end}}
+  </div>
+  {{else}}
+  {{with .Bank.Declined}}
+  <p class="money-bank money-bank--declined">{{money .Pence}} wasn't sent to your bank: “{{.Reason}}”</p>
+  {{end}}
+  {{if .CanAsk}}
+  <button class="btn btn--block money-bank__ask" type="button"
+          hx-get="{{.BankURL}}" hx-target="#sheet-body" hx-swap="innerHTML">🏦 Ask to move to my bank</button>
+  {{end}}
+  {{end}}
+
   {{with .Goal}}
   <h3 class="person__sub">Saving for</h3>
   <div class="goal{{if .Reached}} goal--reached{{end}}{{if .Waiting}} goal--waiting{{end}}">
@@ -136,4 +155,42 @@
     <small class="muted">{{when .At}}</small></span>
   <span class="money-line__amount{{if or (gt .Points 0) (gt .Pence 0)}} money-line__amount--plus{{end}}">{{change .Points .Pence}}</span>
 </li>
+{{end}}
+
+{{/* Ask to move to my bank (moneyBankView): − and + in 50p steps, All of
+     it, then a check before it's sent. The board's sheet script runs the
+     stepper ([data-bank-stepper]). */}}
+{{define "money_bank"}}{{$p := .Person}}
+<div class="picker money-bank-ask" style="--person: {{$p.Colour}}"
+     data-bank-stepper data-max="{{.Available}}" data-step="{{.Step}}" data-symbol="{{.Symbol}}">
+  <div class="person__head">
+    {{template "avatar" (avatar $p "lg")}}
+    <h2 class="picker__title" tabindex="-1" autofocus>Move to my bank</h2>
+  </div>
+  <form hx-post="{{.Base}}/bank" hx-target="#sheet-body" hx-swap="innerHTML" data-keep-open>
+    <input type="hidden" name="t" value="{{.Token}}">
+    <input type="hidden" name="pence" value="{{.Start}}" data-bank-pence>
+    <div data-bank-pick>
+      <p class="muted">How much? You have {{money .Available}}.</p>
+      <div class="stepper">
+        <button class="btn stepper__btn" type="button" data-bank-step="-1" aria-label="{{money .Step}} less">−</button>
+        <output class="stepper__value" data-bank-amount aria-live="polite">{{money .Start}}</output>
+        <button class="btn stepper__btn" type="button" data-bank-step="1" aria-label="{{money .Step}} more">+</button>
+      </div>
+      <button class="btn btn--ghost btn--block" type="button" data-bank-all>All of it ({{money .Available}})</button>
+      <div class="picker__actions">
+        <button class="btn btn--primary btn--block" type="button" data-bank-next>Next</button>
+        <button class="btn btn--ghost btn--block" type="button" hx-get="{{.BackURL}}" hx-target="#sheet-body" hx-swap="innerHTML">Back</button>
+      </div>
+    </div>
+    <div data-bank-confirm hidden>
+      <p class="money-bank__confirm">Ask a grown-up to move <strong data-bank-amount>{{money .Start}}</strong> to your bank?</p>
+      <p class="muted">It's held until they do, so you can't spend it on a reward.</p>
+      <div class="picker__actions">
+        <button class="btn btn--primary btn--block" type="submit" hx-disabled-elt="this">Yes, ask</button>
+        <button class="btn btn--ghost btn--block" type="button" data-bank-change>Change it</button>
+      </div>
+    </div>
+  </form>
+</div>
 {{end}}

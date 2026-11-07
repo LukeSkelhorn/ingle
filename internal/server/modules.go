@@ -147,12 +147,14 @@ type moneyModule struct{ s *Server }
 func (moneyModule) ID() string   { return modMoney }
 func (moneyModule) Name() string { return "My money" }
 func (moneyModule) Description() string {
-	return "Kids open their own balance on the wall display with their own PIN."
+	return "Kids open their own balance on the wall display with their own PIN, and ask for money to go to their bank."
 }
-func (moneyModule) Requires() []string         { return nil }
-func (moneyModule) DefaultOn() bool            { return true }
-func (moneyModule) AdminNav() []module.NavItem { return nil }
-func (moneyModule) Loops() []module.Loop       { return nil }
+func (moneyModule) Requires() []string { return nil }
+func (moneyModule) DefaultOn() bool    { return true }
+func (moneyModule) AdminNav() []module.NavItem {
+	return []module.NavItem{{Key: "bank", Label: "Bank", Path: "/admin/bank"}}
+}
+func (moneyModule) Loops() []module.Loop { return nil }
 
 func (m moneyModule) Routes(r module.Router) {
 	s := m.s
@@ -160,8 +162,15 @@ func (m moneyModule) Routes(r module.Router) {
 	r.Viewer("POST /board/money/{id}/pin", s.handleMoneyCheck)
 	r.Viewer("GET /board/money/{id}/view", s.handleMyMoney)
 	r.Viewer("GET /board/money/{id}/history", s.handleMoneyHistory)
+	r.Viewer("GET /board/money/{id}/bank", s.handleBankAsk)
+	r.Viewer("POST /board/money/{id}/bank", s.handleBankRequest)
+	r.Viewer("POST /board/money/{id}/bank/{req}/cancel", s.handleBankCancel)
 	r.Admin("GET /admin/people/{id}/money", s.handleAdminMoney)
 	r.Admin("GET /admin/people/{id}/money/history", s.handleAdminMoneyHistory)
+	r.Admin("POST /admin/people/{id}/bank", s.handlePayOut)
+	r.Admin("GET /admin/bank", s.handleBank)
+	r.Admin("POST /admin/bank/{id}/approve", s.handleBankApprove)
+	r.Admin("POST /admin/bank/{id}/decline", s.handleBankDecline)
 }
 
 // Rewards: rewards, claiming them and savings goals. Points themselves are

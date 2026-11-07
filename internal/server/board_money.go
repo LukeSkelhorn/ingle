@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/lukeskelhorn/ingle/internal/auth"
@@ -28,8 +29,47 @@ type moneyPinView struct {
 type myMoneyView struct {
 	chores.Summary
 	Waiting []chores.HistoryItem // reward claims waiting for a grown-up
+	Bank    chores.BankStatus    // their bank request waiting, or just declined
 	Page    moneyHistoryView     // the first page of history
 	Admin   bool                 // on Admin › People, not in the board's sheet
+}
+
+// minTransfer is the least a child can ask to move to their bank, and the
+// step the amount moves in.
+const minTransfer = 50
+
+// declinedShown is how long My money says why a bank request was declined.
+const declinedShown = 7 * 24 * time.Hour
+
+// Asking reports a child in their own My money on a display, who can ask
+// for money to go to their bank and cancel the request. An adult pays out
+// from Admin › People instead.
+func (v myMoneyView) Asking() bool { return !v.Admin && v.Page.Token != "" }
+
+// CanAsk reports whether the Ask to move to my bank button shows.
+func (v myMoneyView) CanAsk() bool {
+	return v.Asking() && v.Bank.Waiting == nil && v.Pence >= minTransfer
+}
+
+// BankURL opens the ask panel.
+func (v myMoneyView) BankURL() string {
+	return v.Page.Base + "/bank?" + url.Values{"t": {v.Page.Token}}.Encode()
+}
+
+// moneyBankView is the panel where a child picks how much to ask for.
+type moneyBankView struct {
+	Person    dbq.Person
+	Available int64 // what they can ask for, in pence
+	Start     int64 // the amount it starts at
+	Step      int64
+	Symbol    string // the currency symbol, for the stepper's script
+	Base      string
+	Token     string
+}
+
+// BackURL goes back to My money.
+func (v moneyBankView) BackURL() string {
+	return moneyHistoryView{Base: v.Base, Token: v.Token}.RefreshURL()
 }
 
 // moneyHistoryView is a page of someone's money history. Next is where Show
@@ -138,14 +178,120 @@ func (s *Server) handleMoneyHistory(w http.ResponseWriter, r *http.Request) {
 	s.renderMoneyHistory(w, r, p, boardMoneyBase(p.ID), token)
 }
 
+// childMoney is a bank request handler's person and PIN check: refused for
+// an adult (they pay out from Admin › People), and back to the keypad once
+// the check runs out.
+func (s *Server) childMoney(w http.ResponseWriter, r *http.Request) (dbq.Person, string, bool) {
+	p, ok := s.moneyPerson(w, r)
+	if !ok {
+		return p, "", false
+	}
+	if moneyAdult(r) {
+		http.Error(w, "adults move money from Admin › People", http.StatusForbidden)
+		return p, "", false
+	}
+	if r.Method == http.MethodPost {
+		if err := parseForm(w, r); err != nil {
+			http.Error(w, "bad form", http.StatusBadRequest)
+			return p, "", false
+		}
+	}
+	token, ok := s.moneyAccess(r, p)
+	if !ok {
+		w.Header().Set("HX-Retarget", "#sheet-body")
+		w.Header().Set("HX-Reswap", "innerHTML")
+		s.renderMoneyPin(w, r, p, true)
+		return p, "", false
+	}
+	return p, token, true
+}
+
+// handleBankAsk is the panel where a child picks how much to ask for.
+func (s *Server) handleBankAsk(w http.ResponseWriter, r *http.Request) {
+	p, token, ok := s.childMoney(w, r)
+	if !ok {
+		return
+	}
+	v, err := s.myMoney(r, p, boardMoneyBase(p.ID), token)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	if !v.CanAsk() {
+		// Already asked, or not enough: My money says which.
+		s.renderMyMoney(w, r, p, token)
+		return
+	}
+	avail := v.Pence / minTransfer * minTransfer
+	w.Header().Set("Cache-Control", "no-store")
+	s.renderPartial(w, r, "money_bank", moneyBankView{
+		Person: p, Available: avail, Start: min(100, avail), Step: minTransfer,
+		Symbol: strings.TrimSuffix(s.Locale.FormatMoney(0), "0.00"),
+		Base:   boardMoneyBase(p.ID), Token: token,
+	})
+}
+
+// handleBankRequest sends a child's request, then shows My money with it
+// waiting.
+func (s *Server) handleBankRequest(w http.ResponseWriter, r *http.Request) {
+	p, token, ok := s.childMoney(w, r)
+	if !ok {
+		return
+	}
+	pence, err := strconv.ParseInt(r.PostFormValue("pence"), 10, 64)
+	if err != nil || pence < minTransfer || pence%minTransfer != 0 {
+		http.Error(w, "bad amount", http.StatusBadRequest)
+		return
+	}
+	if _, err := s.Chores.RequestTransfer(r.Context(), s.HouseholdID, p.ID, pence); err != nil {
+		msg, known := boardErrorText(err)
+		if !known {
+			s.serverError(w, r, err)
+			return
+		}
+		setToast(w, toast{Message: msg, Error: true})
+	} else {
+		s.events.publish(s.HouseholdID, boardClient(r.Header.Get(boardClientHeader)))
+		setToast(w, toast{Message: "Asked. A grown-up will move it to your bank."})
+	}
+	s.renderMyMoney(w, r, p, token)
+}
+
+// handleBankCancel is a child cancelling their waiting request.
+func (s *Server) handleBankCancel(w http.ResponseWriter, r *http.Request) {
+	p, token, ok := s.childMoney(w, r)
+	if !ok {
+		return
+	}
+	id, err := strconv.ParseInt(r.PathValue("req"), 10, 64)
+	if err != nil || id <= 0 {
+		http.NotFound(w, r)
+		return
+	}
+	switch err := s.Chores.CancelTransfer(r.Context(), s.HouseholdID, p.ID, id); {
+	case errors.Is(err, chores.ErrNotFound):
+		http.NotFound(w, r)
+		return
+	case errors.Is(err, chores.ErrNotPending):
+		setToast(w, toast{Message: "A grown-up has already decided.", Error: true})
+	case err != nil:
+		s.serverError(w, r, err)
+		return
+	default:
+		s.events.publish(s.HouseholdID, boardClient(r.Header.Get(boardClientHeader)))
+		setToast(w, toast{Message: "Cancelled. The money's yours to spend again."})
+	}
+	s.renderMyMoney(w, r, p, token)
+}
+
 // moneyAccess reports whether this request may see p's money: a signed-in
-// adult on a phone always can, and a display can with a good token for p.
-// A good token is extended.
+// adult on a phone always can, and a display can with a good token for p
+// (in the query, or a posted form). A good token is extended.
 func (s *Server) moneyAccess(r *http.Request, p dbq.Person) (token string, ok bool) {
 	if moneyAdult(r) {
 		return "", true
 	}
-	token = r.URL.Query().Get("t")
+	token = r.FormValue("t")
 	who, ok := s.Auth.MoneyToken(identityFrom(r.Context()).Device, token)
 	return token, ok && who == p.ID
 }
@@ -220,6 +366,9 @@ func (s *Server) myMoney(r *http.Request, p dbq.Person, base, token string) (myM
 		}
 	} else {
 		v.Goal = nil
+	}
+	if v.Bank, err = s.Chores.BankStatus(ctx, s.HouseholdID, p.ID, s.now().Add(-declinedShown)); err != nil {
+		return myMoneyView{}, err
 	}
 	v.Page.History, v.Page.Next, err = s.Chores.History(ctx, s.HouseholdID, p.ID, s.now().AddDate(0, 0, -moneyHistoryDays), 0)
 	return v, err

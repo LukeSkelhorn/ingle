@@ -15,6 +15,7 @@
     <li><a class="tile" href="/admin/chores"><strong>{{.Data.Chores}}</strong><span>Chores</span></a></li>
     {{if moduleOn "rewards"}}<li><a class="tile" href="/admin/rewards"><strong>{{.Data.Rewards}}</strong><span>Rewards</span></a></li>{{end}}
     <li><a class="tile" href="/admin/completions"><strong>{{.Data.Pending}}</strong><span>Waiting for approval</span></a></li>
+    {{if and .Data.Bank (moduleOn "money")}}<li><a class="tile tile--alert" href="/admin/bank"><strong>{{.Data.Bank}}</strong><span>Bank {{if eq .Data.Bank 1}}request{{else}}requests{{end}}</span></a></li>{{end}}
   </ul>
 
   <section class="card lockcard">
@@ -35,7 +36,7 @@
     {{if .Data.Activity}}
     <ul class="feed">
       {{range .Data.Activity}}
-      <li><span><strong>{{if .ActorName}}{{deref .ActorName}}{{else}}{{activityActor .Verb}}{{end}}</strong> {{activity .Verb}}{{with .SubjectTitle}} {{.}}{{end}}</span>
+      <li><span><strong>{{if .ActorName}}{{deref .ActorName}}{{else}}{{activityActor .Verb}}{{end}}</strong> {{activityLine .}}</span>
           <time class="muted">{{when .CreatedAt}}</time></li>
       {{end}}
     </ul>

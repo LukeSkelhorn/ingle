@@ -209,3 +209,17 @@ type Session struct {
 	CreatedAt   int64  `json:"created_at"`
 	LastSeenAt  int64  `json:"last_seen_at"`
 }
+
+type TransferRequest struct {
+	ID            int64  `json:"id"`
+	HouseholdID   int64  `json:"household_id"`
+	PersonID      int64  `json:"person_id"`
+	Pence         int64  `json:"pence"`
+	Status        string `json:"status"`
+	Reason        string `json:"reason"`
+	RequestedBy   *int64 `json:"requested_by"`
+	RequestedAt   int64  `json:"requested_at"`
+	ReviewedBy    *int64 `json:"reviewed_by"`
+	ReviewedAt    *int64 `json:"reviewed_at"`
+	LedgerEntryID *int64 `json:"ledger_entry_id"`
+}

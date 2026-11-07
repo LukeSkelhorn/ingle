@@ -67,6 +67,9 @@ type personForm struct {
 // suggest, their recent adjustments, and the one just made, for Undo.
 type pointsPanel struct {
 	Points, HeldPoints int64
+	Pence, HeldPence   int64  // money they can spend, and what's held
+	PayOut             string // Move to bank's amount, as typed
+	PayAll             bool   // Move to bank's All of it
 	Direction          string // take or give
 	Amount             string // 1, 2, 5, 10 or custom
 	Custom             string
