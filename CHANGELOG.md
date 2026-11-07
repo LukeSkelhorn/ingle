@@ -6,6 +6,10 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ## [Unreleased]
 
+## [v0.2.4] - 2026-11-07
+
+One chore for everyone: each person ticks off their own.
+
 ### Added
 
 - **Each of these people:** for chores everyone does, like **Brush teeth**, **Make bed** or **Exercise**. In **Admin › Chores**, **Who does it?** has a new option, **Each of these people**: choose **Everyone** (anyone added to the household later gets it too) or tick who. Each of them gets their own card in their column and ticks it off themselves; one person doing theirs doesn't tick it off for anyone else. Kids earn the chore's points and pocket money; adults earn its **Adults' points** and no money. Times, Show it, Only on the day, approval, the calendar and Admin › Completions all work per person. One chore replaces the separate copies you had for each person: set it up, then archive the old ones. ([DOM-50](https://linear.app/skeltech/issue/DOM-50))
@@ -114,7 +118,8 @@ The first release: a family chores board for a wall tablet, ready to run on a ho
 
 - First release: nothing to upgrade from. New installs start at the setup page.
 
-[Unreleased]: https://github.com/lukeskelhorn/ingle/compare/v0.2.3...HEAD
+[Unreleased]: https://github.com/lukeskelhorn/ingle/compare/v0.2.4...HEAD
+[v0.2.4]: https://github.com/lukeskelhorn/ingle/compare/v0.2.3...v0.2.4
 [v0.2.3]: https://github.com/lukeskelhorn/ingle/compare/v0.2.2...v0.2.3
 [v0.2.2]: https://github.com/lukeskelhorn/ingle/compare/v0.2.1...v0.2.2
 [v0.2.1]: https://github.com/lukeskelhorn/ingle/compare/v0.2.0...v0.2.1
