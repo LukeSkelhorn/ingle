@@ -89,6 +89,22 @@
     });
     sheet.addEventListener("close", function () { sheetBody.innerHTML = ""; });
 
+    // My money closes itself after a minute without a tap, which also drops
+    // its PIN check. Only taps count: the live refresh doesn't keep it open.
+    var moneyTimer = null;
+    function moneyIdle(tapped) {
+      var open = sheet.open && sheetBody.querySelector("[data-my-money]");
+      if (!open) { clearTimeout(moneyTimer); moneyTimer = null; return; }
+      if (moneyTimer && !tapped) return;
+      clearTimeout(moneyTimer);
+      moneyTimer = setTimeout(function () { moneyTimer = null; sheet.close(); }, 60000);
+    }
+    new MutationObserver(function () { moneyIdle(false); }).observe(sheetBody, { childList: true, subtree: true });
+    ["pointerdown", "keydown", "scroll", "wheel"].forEach(function (e) {
+      sheet.addEventListener(e, function () { moneyIdle(true); }, { passive: true, capture: true });
+    });
+    sheet.addEventListener("close", function () { moneyIdle(false); });
+
     // Toasts come from the HX-Trigger response header.
     document.body.addEventListener("toast", function (e) {
       var t = e.detail || {};

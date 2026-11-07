@@ -11,8 +11,13 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
-// MoneyTokenTTL is how long a My money PIN check lasts.
+// MoneyTokenTTL is how long a My money PIN check lasts without being used.
+// Each use extends it by this much, up to MoneyTokenMax after the PIN.
 const MoneyTokenTTL = 60 * time.Second
+
+// MoneyTokenMax is the longest a My money PIN check lasts, however much it's
+// used: after this it asks for the PIN again.
+const MoneyTokenMax = 10 * time.Minute
 
 // moneyGrant is what a My money token opens: one person's money, on one
 // display, for a short while.
@@ -20,6 +25,7 @@ type moneyGrant struct {
 	householdID int64
 	personID    int64
 	deviceID    int64
+	issued      time.Time
 	expires     time.Time
 }
 
@@ -33,9 +39,10 @@ type moneyTokens struct {
 
 // CheckMoneyPIN checks the PIN of personID, a child or an adult, picked on a
 // registered household display. It opens only that person's My money: the
-// token it returns lasts MoneyTokenTTL and is for that person on that
-// display. It never opens admin or unlocks the displays. Wrong PINs count
-// against the person (as for admin) and, more loosely, the client address.
+// token it returns is for that person on that display, and lasts
+// MoneyTokenTTL after each use, up to MoneyTokenMax after the PIN. It never
+// opens admin or unlocks the displays. Wrong PINs count against the person
+// (as for admin) and, more loosely, the client address.
 func (s *Service) CheckMoneyPIN(ctx context.Context, device *dbq.Device, personID int64, pin, clientAddr string) (string, error) {
 	if device == nil {
 		return "", ErrNotDisplay
@@ -81,12 +88,14 @@ func (s *Service) CheckMoneyPIN(ctx context.Context, device *dbq.Device, personI
 		}
 	}
 	s.money.grants[string(HashToken(token))] = moneyGrant{
-		householdID: device.HouseholdID, personID: personID, deviceID: device.ID, expires: now.Add(MoneyTokenTTL),
+		householdID: device.HouseholdID, personID: personID, deviceID: device.ID, issued: now, expires: now.Add(MoneyTokenTTL),
 	}
 	return token, nil
 }
 
 // MoneyToken reports whose My money token is, if it's still good on device.
+// A good token is extended by MoneyTokenTTL, up to MoneyTokenMax after the
+// PIN.
 func (s *Service) MoneyToken(device *dbq.Device, token string) (int64, bool) {
 	if device == nil || token == "" {
 		return 0, false
@@ -105,5 +114,10 @@ func (s *Service) MoneyToken(device *dbq.Device, token string) (int64, bool) {
 	if g.deviceID != device.ID || g.householdID != device.HouseholdID {
 		return 0, false
 	}
+	g.expires = s.now().Add(MoneyTokenTTL)
+	if limit := g.issued.Add(MoneyTokenMax); g.expires.After(limit) {
+		g.expires = limit
+	}
+	s.money.grants[key] = g
 	return g.personID, true
 }

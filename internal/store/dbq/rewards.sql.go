@@ -487,6 +487,59 @@ func (q *Queries) ListPendingRedemptions(ctx context.Context, householdID int64)
 	return items, nil
 }
 
+const listPendingRedemptionsForPerson = `-- name: ListPendingRedemptionsForPerson :many
+SELECT d.id, d.points, d.pence, d.requested_at, r.title, r.emoji
+FROM redemptions d
+JOIN rewards r ON r.id = d.reward_id
+WHERE d.household_id = ?1 AND d.person_id = ?2 AND d.status = 'pending'
+ORDER BY d.requested_at DESC, d.id DESC
+`
+
+type ListPendingRedemptionsForPersonParams struct {
+	HouseholdID int64 `json:"household_id"`
+	PersonID    int64 `json:"person_id"`
+}
+
+type ListPendingRedemptionsForPersonRow struct {
+	ID          int64  `json:"id"`
+	Points      int64  `json:"points"`
+	Pence       int64  `json:"pence"`
+	RequestedAt int64  `json:"requested_at"`
+	Title       string `json:"title"`
+	Emoji       string `json:"emoji"`
+}
+
+// A person's waiting claims, newest first, with what they're for.
+func (q *Queries) ListPendingRedemptionsForPerson(ctx context.Context, arg ListPendingRedemptionsForPersonParams) ([]ListPendingRedemptionsForPersonRow, error) {
+	rows, err := q.db.QueryContext(ctx, listPendingRedemptionsForPerson, arg.HouseholdID, arg.PersonID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPendingRedemptionsForPersonRow{}
+	for rows.Next() {
+		var i ListPendingRedemptionsForPersonRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Points,
+			&i.Pence,
+			&i.RequestedAt,
+			&i.Title,
+			&i.Emoji,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRewards = `-- name: ListRewards :many
 SELECT id, household_id, title, description, cost_points, cost_pence, archived_at, created_at, emoji FROM rewards
 WHERE household_id = ? AND archived_at IS NULL

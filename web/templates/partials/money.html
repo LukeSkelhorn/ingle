@@ -55,19 +55,85 @@
 </div>
 {{end}}
 
-{{/* Someone's My money (myMoneyView), after their PIN. data-refresh keeps
-     it up to date while the PIN check lasts; after that it asks again. */}}
+{{/* Someone's My money (myMoneyView): balance, goal, waiting claims and
+     history. In the board's sheet, data-refresh keeps it up to date while
+     the PIN check lasts (after that it asks again) and data-my-money closes
+     it after a minute without a tap. On Admin it's part of the page. */}}
 {{define "my_money"}}
-<div class="person my-money" style="--person: {{.Person.Colour}}" data-refresh="/board/money/{{.Person.ID}}/view?t={{.Token}}">
+<div class="person my-money" style="--person: {{.Person.Colour}}"
+     {{- if not .Admin}} data-my-money data-refresh="{{.Page.RefreshURL}}"{{end}}>
+  {{if not .Admin}}
   <div class="person__head">
     {{template "avatar" (avatar .Person "lg")}}
     <h2 class="picker__title" tabindex="-1" autofocus>{{.Person.Name}}'s money</h2>
   </div>
+  {{end}}
   <p class="person__balance">{{pts .Points}}{{if .Pence}} <span class="person__money">{{money .Pence}}</span>{{end}}
     {{- with worth .HeldPoints .HeldPence}} <span class="person__held">({{.}} held)</span>{{end}}</p>
   <p class="person__week">This week: {{with net .WeekPoints .WeekPence}}{{.}}{{else}}nothing yet{{end}}</p>
+
+  {{with .Goal}}
+  <h3 class="person__sub">Saving for</h3>
+  <div class="goal{{if .Reached}} goal--reached{{end}}{{if .Waiting}} goal--waiting{{end}}">
+    <p class="goal__line">
+      <span class="goal__emoji" aria-hidden="true">{{.Emoji}}</span>
+      <span class="goal__title">{{.Title}}</span>
+      <span class="goal__have">
+        {{- if .CostPoints}}{{.HavePoints}} of {{pts .CostPoints}}{{end}}
+        {{- if and .CostPoints .CostPence}} · {{end}}
+        {{- if .CostPence}}{{money .HavePence}} of {{money .CostPence}}{{end -}}
+      </span>
+    </p>
+    <div class="goal__bar" role="img" aria-label="Saving for {{.Title}}: {{.Percent}}%"><span style="width: {{.Percent}}%"></span></div>
+    <p class="goal__status">
+      {{- if .Waiting}}<span class="tag tag--wait">Waiting for a grown-up</span>
+      {{- else if .Reached}}<span class="goal__ready">You've saved enough!</span>
+      {{- else}}<span class="muted">{{worth .NeedPoints .NeedPence}} to go</span>{{end -}}
+    </p>
+  </div>
+  {{end}}
+
+  <h3 class="person__sub">History</h3>
+  {{if or .Waiting .Page.History .Page.Next}}
+  <ul class="money-history">
+    {{range .Waiting}}{{template "money_line" .}}{{end}}
+    {{template "money_history" .Page}}
+  </ul>
+  {{else}}
+  <p class="muted">Nothing yet. Do a chore to start earning!</p>
+  {{end}}
+
+  {{if not .Admin}}
   <div class="picker__actions">
     <button class="btn btn--ghost btn--block" type="button" data-close>Close</button>
   </div>
+  {{end}}
 </div>
+{{end}}
+
+{{/* A page of money history (moneyHistoryView): its lines, then Show more,
+     which swaps itself for the next page. */}}
+{{define "money_history"}}
+{{range .History}}{{template "money_line" .}}{{end}}
+{{if .Next}}
+<li class="money-history__more">
+  <button class="btn btn--ghost btn--block" type="button" hx-disabled-elt="this"
+          hx-get="{{.MoreURL}}" hx-target="closest li" hx-swap="outerHTML">Show more</button>
+</li>
+{{end}}
+{{end}}
+
+{{/* One line of money history (chores.HistoryItem). */}}
+{{define "money_line"}}
+<li class="money-line{{if eq .Kind "waiting"}} money-line--waiting{{end}}">
+  <span class="money-line__text">
+    {{- with .Emoji}}<span aria-hidden="true">{{.}}</span> {{end}}
+    {{- if eq .Kind "completion"}}{{or .Title "A chore"}}
+    {{- else if eq .Kind "redemption"}}{{or .Title .Note "A reward"}}
+    {{- else if eq .Kind "waiting"}}{{or .Title "A reward"}} <span class="tag tag--wait">waiting</span>
+    {{- else if eq .Kind "payout"}}{{money (neg .Pence)}} moved to your bank
+    {{- else}}{{or .Note "Adjustment"}}{{end}}
+    <small class="muted">{{when .At}}</small></span>
+  <span class="money-line__amount{{if or (gt .Points 0) (gt .Pence 0)}} money-line__amount--plus{{end}}">{{change .Points .Pence}}</span>
+</li>
 {{end}}

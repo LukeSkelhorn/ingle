@@ -102,3 +102,11 @@ SELECT
 FROM people p
 JOIN rewards r ON r.id = p.goal_reward_id AND r.household_id = p.household_id
 WHERE p.household_id = ? AND p.archived_at IS NULL AND r.archived_at IS NULL;
+
+-- name: ListPendingRedemptionsForPerson :many
+-- A person's waiting claims, newest first, with what they're for.
+SELECT d.id, d.points, d.pence, d.requested_at, r.title, r.emoji
+FROM redemptions d
+JOIN rewards r ON r.id = d.reward_id
+WHERE d.household_id = sqlc.arg(household_id) AND d.person_id = sqlc.arg(person_id) AND d.status = 'pending'
+ORDER BY d.requested_at DESC, d.id DESC;
