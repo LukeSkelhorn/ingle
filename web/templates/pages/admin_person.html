@@ -120,6 +120,35 @@
     </ul>
     {{end}}
   </section>
+  {{if and (moduleOn "money") (not $.Data.IsAdult)}}{{with $.Data.Bank}}
+  <section class="card stack" id="bank-balance">
+    <h2>Bank balance</h2>
+    {{with .Current}}
+    <p class="muted">{{.Label}}: <strong>{{money .Pence}}</strong> · updated {{updatedAgo .UpdatedAt}}.
+      Money moved from Ingle is added on; check the real bank now and then.</p>
+    {{else}}
+    <p class="muted">What's in {{$.Data.Name}}'s real bank, so they can see it in My money. Only they and adults see it.</p>
+    {{end}}
+    <form class="stack" method="post" action="/admin/people/{{$.Data.ID}}/bank-balance">
+      <label class="field">
+        <span>Account name</span>
+        <input name="bank_label" value="{{.Label}}" maxlength="40" autocomplete="off" placeholder="Monzo">
+        {{template "err" index $.Errors "bank_label"}}
+      </label>
+      <label class="field field--short">
+        <span>Balance</span>
+        <input name="bank_amount" value="{{.Amount}}" inputmode="decimal" autocomplete="off" placeholder="23.40">
+        {{template "err" index $.Errors "bank_pence"}}
+      </label>
+      <button class="btn" type="submit">Update</button>
+    </form>
+    {{if .Current}}
+    <form method="post" action="/admin/people/{{$.Data.ID}}/bank-balance/remove">
+      <button class="btn btn--ghost" type="submit">Remove bank balance</button>
+    </form>
+    {{end}}
+  </section>
+  {{end}}{{end}}
   {{if moduleOn "money"}}
   <section class="card stack" id="bank">
     <h2>Move to bank</h2>

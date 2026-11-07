@@ -166,6 +166,8 @@ func (m moneyModule) Routes(r module.Router) {
 	r.Viewer("POST /board/money/{id}/bank", s.handleBankRequest)
 	r.Viewer("POST /board/money/{id}/bank/{req}/cancel", s.handleBankCancel)
 	r.Admin("GET /admin/people/{id}/money", s.handleAdminMoney)
+	r.Admin("POST /admin/people/{id}/bank-balance", s.handleSetBankBalance)
+	r.Admin("POST /admin/people/{id}/bank-balance/remove", s.handleRemoveBankBalance)
 	r.Admin("GET /admin/people/{id}/money/history", s.handleAdminMoneyHistory)
 	r.Admin("POST /admin/people/{id}/bank", s.handlePayOut)
 	r.Admin("GET /admin/bank", s.handleBank)

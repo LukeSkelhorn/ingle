@@ -60,6 +60,7 @@ type personForm struct {
 	Rewards []dbq.Reward // to pick a goal from (editing only)
 
 	Points pointsPanel // the Adjust points section (editing only)
+	Bank   bankPanel   // a child's Bank balance section (editing only)
 }
 
 // pointsPanel is the person page's Points section: their balance, the
@@ -133,6 +134,10 @@ func (s *Server) renderPerson(w http.ResponseWriter, r *http.Request, status int
 			f.Rewards = rewards
 		}
 		if err := s.loadPointsPanel(r, &f); err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+		if err := s.loadBankPanel(r, &f); err != nil {
 			s.serverError(w, r, err)
 			return
 		}

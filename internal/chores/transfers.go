@@ -186,7 +186,8 @@ func (s *Service) PayOut(ctx context.Context, householdID, personID, pence, adul
 	return out, err
 }
 
-// payout writes t's payout to the ledger and links it.
+// payout writes t's payout to the ledger, links it, and adds it to their
+// bank balance if they have one.
 func (s *Service) payout(ctx context.Context, q *dbq.Queries, t dbq.TransferRequest, adultID int64) error {
 	e, err := q.InsertLedgerEntry(ctx, dbq.InsertLedgerEntryParams{
 		HouseholdID: t.HouseholdID,
@@ -204,6 +205,12 @@ func (s *Service) payout(ctx context.Context, q *dbq.Queries, t dbq.TransferRequ
 		LedgerEntryID: &e.ID, HouseholdID: t.HouseholdID, ID: t.ID,
 	}); err != nil {
 		return fmt.Errorf("link payout: %w", err)
+	}
+	// It's in their bank now, as far as Ingle knows.
+	if err := q.AddToPersonBank(ctx, dbq.AddToPersonBankParams{
+		Pence: t.Pence, HouseholdID: t.HouseholdID, PersonID: t.PersonID,
+	}); err != nil {
+		return fmt.Errorf("add to bank: %w", err)
 	}
 	return nil
 }
