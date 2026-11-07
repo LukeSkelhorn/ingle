@@ -23,6 +23,7 @@
       <legend>Who does it?</legend>
       <div class="segmented">
         <label><input type="radio" name="mode" value="assigned"{{if eq .Data.Mode "assigned"}} checked{{end}}> <span>Someone specific</span></label>
+        <label><input type="radio" name="mode" value="each"{{if eq .Data.Mode "each"}} checked{{end}}> <span>Each of these people</span></label>
         <label><input type="radio" name="mode" value="shared"{{if eq .Data.Mode "shared"}} checked{{end}}> <span>Any of these people</span></label>
         <label><input type="radio" name="mode" value="pool"{{if eq .Data.Mode "pool"}} checked{{end}}> <span>Anyone can claim it</span></label>
       </div>
@@ -52,6 +53,24 @@
         {{end}}
       </div>
       {{template "err" index .Errors "people_ids"}}
+    </fieldset>
+    <fieldset class="field" data-show-when="mode=each">
+      <legend>Each of</legend>
+      <p class="muted field__hint">Like brushing teeth: each of them gets their own in their column and ticks it off themselves.</p>
+      <div class="segmented">
+        <label><input type="radio" name="each_who" value="everyone"{{if .Data.Everyone}} checked{{end}}> <span>Everyone</span></label>
+        <label><input type="radio" name="each_who" value="chosen"{{if not .Data.Everyone}} checked{{end}}> <span>Choose people</span></label>
+      </div>
+      <p class="muted field__hint" data-show-when="each_who=everyone">Including anyone you add later.</p>
+      <div class="people-pick" data-show-when="each_who=chosen">
+        {{range .Data.People}}
+        <label class="people-pick__item">
+          <input type="checkbox" name="each_ids" value="{{.ID}}"{{if $.Data.HasPerson .ID}} checked{{end}}>
+          {{template "avatar" (avatar . "md")}}<span>{{.Name}}</span>
+        </label>
+        {{end}}
+      </div>
+      {{template "err" index .Errors "each_ids"}}
     </fieldset>
 
     <label class="field">
@@ -111,12 +130,22 @@
         <input type="date" name="starts_on" value="{{.Data.StartsOn}}" required>
         {{template "err" index .Errors "starts_on"}}
       </label>
-      <label class="field">
-        <span>Done by (optional)</span>
-        <input type="time" name="due_time" value="{{.Data.DueTime}}">
+      <fieldset class="field times" data-times data-max="{{.Data.MaxTimes}}">
+        <legend>Done by (optional)</legend>
+        {{range $i, $t := .Data.TimeInputs}}<input type="time" name="due_time" value="{{$t}}" aria-label="Time {{inc $i}}"{{if $i}} data-show-when="day_mode=each"{{end}}>{{end}}
+        <button class="btn btn--ghost times__add" type="button" data-add-time data-show-when="day_mode=each">+ Another time</button>
         {{template "err" index .Errors "due_time"}}
-      </label>
+      </fieldset>
     </div>
+    <label class="field">
+      <span>Show it on the board</span>
+      <select name="show_before">
+        <option value=""{{if not .Data.ShowBefore}} selected{{end}}>All day</option>
+        {{range .Data.ShowBeforeOptions}}<option value="{{.Value}}"{{if eq .Value $.Data.ShowBefore}} selected{{end}}>{{.Label}}</option>{{end}}
+      </select>
+      <small class="muted">For chores with a time. Until then it's not on the board, so a 19:30 chore set to 1 hour before appears at 18:30.</small>
+      {{template "err" index .Errors "show_before"}}
+    </label>
     <label class="check">
       <input type="checkbox" name="on_the_day" value="1"{{if .Data.OnTheDay}} checked{{end}}>
       <span>Only on the day
@@ -136,6 +165,12 @@
         {{template "err" index .Errors "pence"}}
       </label>
     </div>
+    <label class="field" data-show-when="mode=each">
+      <span>Adults' points</span>
+      <input type="number" name="adult_points" value="{{.Data.AdultPoints}}" min="0" max="100000" inputmode="numeric">
+      <small class="muted field__hint">Kids get the points and pocket money above. Adults get these points and no money.</small>
+      {{template "err" index .Errors "adult_points"}}
+    </label>
 
     <label class="check">
       <input type="checkbox" name="requires_approval" value="1"{{if .Data.RequiresApproval}} checked{{end}}>

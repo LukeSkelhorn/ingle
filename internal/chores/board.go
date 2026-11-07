@@ -144,13 +144,16 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 	for _, c := range comps {
 		byOcc[c.OccurrenceID] = c
 	}
-	// latest is when each chore's newest occurrence on the board came up:
-	// its due date, or the first day of a flexible-day window. An overdue
-	// occurrence older than that has been superseded.
-	latest := map[int64]string{}
+	// latest is when each chore's newest occurrence on the board came up
+	// (per person, for an "each" chore): its due date, or the first day of a
+	// flexible-day window. An overdue occurrence older than that has been
+	// superseded.
+	type copyOf struct{ chore, person int64 }
+	latest := map[copyOf]string{}
 	for _, r := range rows {
-		if start := availableFrom(r); start > latest[r.ChoreID] {
-			latest[r.ChoreID] = start
+		k := copyOf{r.ChoreID, r.ForPerson}
+		if start := availableFrom(r); start > latest[k] {
+			latest[k] = start
 		}
 	}
 	loc, dayStart, now := s.loc(ctx, householdID), s.dayStart(ctx, householdID), s.now()
@@ -195,13 +198,25 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 		}
 		comp, done := byOcc[r.ID]
 		flex := r.AvailableFrom != nil
-		if r.DueOn < today && latest[r.ChoreID] > r.DueOn {
+		if r.DueOn < today && latest[copyOf{r.ChoreID, r.ForPerson}] > r.DueOn {
 			continue // superseded by a newer occurrence
 		}
 		if (r.DueOn < today || flex) && done && comp.CompletedAt < boardDay.Unix() {
 			continue // caught up on an earlier day, or done earlier in its window
 		}
-		at, onTheDay := onTheDayCutoff(r.OnTheDay, r.DueOn, r.DueTime, loc, dayStart)
+		dueTime := optTime(r.DueTime)
+		// A timed chore set to show shortly before its time stays off
+		// today's board until then (not counted in today's progress), and
+		// the board refreshes itself when it's due to appear.
+		if !done && !flex && r.DueOn == today {
+			if show, ok := appearsAt(r.DueOn, r.DueTime, r.ShowBefore, loc, dayStart); ok && now.Before(show) {
+				if b.NextChange.IsZero() || show.Before(b.NextChange) {
+					b.NextChange = show
+				}
+				continue
+			}
+		}
+		at, onTheDay := onTheDayCutoff(r.OnTheDay, r.DueOn, dueTime, loc, dayStart)
 		onTheDay = onTheDay && !done
 		if onTheDay {
 			if !now.Before(at) {
@@ -216,7 +231,7 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 			Title:        r.Title,
 			Emoji:        r.Emoji,
 			DueOn:        r.DueOn,
-			DueTime:      r.DueTime,
+			DueTime:      dueTime,
 			Points:       r.Points,
 			Pence:        r.Pence,
 			Pool:         r.Mode == ModePool,
@@ -226,8 +241,8 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 			SortOn:       min(r.DueOn, today),
 			OnTheDay:     onTheDay,
 		}
-		if onTheDay && r.DueTime != nil {
-			card.Until = *r.DueTime
+		if onTheDay && dueTime != nil {
+			card.Until = *dueTime
 		}
 		if flex && !done && r.DueOn >= today {
 			days := windowDays(r.Rrule, r.StartsOn, today, r.DueOn, loc)
@@ -278,6 +293,7 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 			continue // owner archived since
 		}
 		card.Claimed = card.Pool && !done
+		card.Points, card.Pence = Earns(r.Mode, col.Person.Kind, r.Points, r.Pence, r.AdultPoints)
 		col.Cards = append(col.Cards, card)
 		col.TotalToday++
 		if done {

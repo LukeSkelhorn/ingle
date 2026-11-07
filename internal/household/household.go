@@ -611,6 +611,10 @@ func leaveSharedChores(ctx context.Context, q *dbq.Queries, householdID, personI
 	if err := q.RemovePersonFromSharedChores(ctx, dbq.RemovePersonFromSharedChoresParams{HouseholdID: householdID, PersonID: personID}); err != nil {
 		return fmt.Errorf("leave shared chores: %w", err)
 	}
+	// Their copies of "each" chores still to do go too.
+	if err := q.DeleteOpenEachOccurrencesForPerson(ctx, dbq.DeleteOpenEachOccurrencesForPersonParams{HouseholdID: householdID, PersonID: personID}); err != nil {
+		return fmt.Errorf("leave each chores: %w", err)
+	}
 	solo, err := q.ListSharedChoresWithOnePerson(ctx, householdID)
 	if err != nil {
 		return fmt.Errorf("shared chores: %w", err)

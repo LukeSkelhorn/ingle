@@ -20,8 +20,11 @@ import (
 type choreRow struct {
 	Chore    dbq.Chore
 	Assignee *dbq.Person
-	People   []dbq.Person // a shared chore's chosen people
+	People   []dbq.Person // a shared or "each" chore's chosen people (everyone for an Everyone chore)
+	Each     string       // an "each" chore's people: "Everyone" or "Each: Mum and Thomas"
 	Schedule string
+	Times    string // "07:30 and 19:30", "" for an untimed chore
+	Shows    string // "1 hour before", "" when it shows all day
 }
 
 // Admin chores list sorts.
@@ -168,6 +171,12 @@ func (s *Server) handleChores(w http.ResponseWriter, r *http.Request) {
 	page.Rows = make([]choreRow, 0, len(list))
 	for _, c := range list {
 		row := choreRow{Chore: c, Schedule: describeSchedule(chores.ParseRecurrence(c.Rrule), c.DayMode, c.StartsOn)}
+		if ts := chores.Times(c); ts != nil {
+			row.Times = joinWords(ts, "and")
+			if c.ShowBefore != nil {
+				row.Shows = showBeforeLabel(*c.ShowBefore) + " before"
+			}
+		}
 		if c.AssigneeID != nil {
 			row.Assignee = byID[*c.AssigneeID]
 		}
@@ -176,10 +185,23 @@ func (s *Server) handleChores(w http.ResponseWriter, r *http.Request) {
 				row.People = append(row.People, *p)
 			}
 		}
-		// A person's chores include the shared ones they're chosen for; Up
-		// for grabs is only the chores anyone can claim.
+		everyone := c.Mode == chores.ModeEach && c.ForEveryone == 1
+		if everyone {
+			row.People = people
+		}
+		if c.Mode == chores.ModeEach {
+			row.Each = "Everyone"
+			if !everyone {
+				row.Each = "Each: " + joinNames(row.People, "and")
+				if len(row.People) == 0 {
+					row.Each = "Each: nobody yet"
+				}
+			}
+		}
+		// A person's chores include the shared and "each" ones they're
+		// chosen for; Up for grabs is only the chores anyone can claim.
 		mine := func(id int64) bool {
-			return (c.AssigneeID != nil && *c.AssigneeID == id) || slices.Contains(shared[c.ID], id)
+			return (c.AssigneeID != nil && *c.AssigneeID == id) || slices.Contains(shared[c.ID], id) || everyone
 		}
 		switch {
 		case page.Pool && c.Mode != chores.ModePool,
@@ -223,14 +245,17 @@ type choreForm struct {
 	Description      string
 	Mode             string
 	AssigneeID       int64
-	PeopleIDs        []int64 // a shared chore's chosen people
+	PeopleIDs        []int64 // a shared or "each" chore's chosen people
+	Everyone         bool    // an "each" chore for everyone
+	AdultPoints      int64   // an "each" chore's adults' points
 	Repeat           string
 	Days             []time.Weekday
 	DayMode          string // chores.DayEach or chores.DayAny
 	MonthDay         int
 	Custom           string // read-only RRULE for RepeatCustom
 	StartsOn         string
-	DueTime          string
+	DueTimes         []string
+	ShowBefore       string // "" for all day, else minutes ("60")
 	Points           int64
 	Money            string
 	RequiresApproval bool
@@ -244,6 +269,41 @@ type choreForm struct {
 }
 
 // HasPerson is used by the shared chore's people checkboxes.
+// TimeInputs are the Done by inputs to show: each time, then a blank one
+// for adding another (while there's room).
+func (f choreForm) TimeInputs() []string {
+	out := slices.Clone(f.DueTimes)
+	if len(out) < chores.MaxTimes {
+		out = append(out, "")
+	}
+	return out
+}
+
+// MaxTimes is how many Done by inputs the form allows.
+func (choreForm) MaxTimes() int { return chores.MaxTimes }
+
+// ShowBeforeOptions are the "Show it on the board" choices after All day.
+func (choreForm) ShowBeforeOptions() []showBeforeOption {
+	out := make([]showBeforeOption, len(chores.ShowBeforeOptions))
+	for i, m := range chores.ShowBeforeOptions {
+		out[i] = showBeforeOption{Value: strconv.FormatInt(m, 10), Label: showBeforeLabel(m) + " before"}
+	}
+	return out
+}
+
+type showBeforeOption struct{ Value, Label string }
+
+// showBeforeLabel is "1 hour", "2 hours" or "30 minutes".
+func showBeforeLabel(m int64) string {
+	switch {
+	case m == 60:
+		return "1 hour"
+	case m%60 == 0:
+		return strconv.FormatInt(m/60, 10) + " hours"
+	}
+	return strconv.FormatInt(m, 10) + " minutes"
+}
+
 func (f choreForm) HasPerson(id int64) bool { return slices.Contains(f.PeopleIDs, id) }
 
 // HasDay is used by the template's day checkboxes.
@@ -268,7 +328,9 @@ func (s *Server) newChoreForm(r *http.Request) (choreForm, error) {
 		Mode: chores.ModeAssigned, Repeat: chores.RepeatWeekly, DayMode: chores.DayEach,
 		Days: []time.Weekday{today.Weekday()}, MonthDay: today.Day(),
 		StartsOn: today.Format(chores.DateLayout), Money: "0.00", Emoji: newEmojiField(emoji.Chore, ""),
-		People: people, WeekOrder: chores.WeekOrder, MonthDays: monthDays,
+		ShowBefore: strconv.FormatInt(chores.DefaultShowBefore, 10),
+		Everyone:   true, // for Each of these people, until they choose
+		People:     people, WeekOrder: chores.WeekOrder, MonthDays: monthDays,
 	}, nil
 }
 
@@ -283,18 +345,21 @@ func (s *Server) choreFormFor(r *http.Request, c dbq.Chore) (choreForm, error) {
 	if c.AssigneeID != nil {
 		f.AssigneeID = *c.AssigneeID
 	}
-	if c.Mode == chores.ModeShared {
+	if c.Mode == chores.ModeShared || c.Mode == chores.ModeEach {
 		if f.PeopleIDs, err = s.Chores.ChorePeople(r.Context(), s.HouseholdID, c.ID); err != nil {
 			return f, err
 		}
 	}
+	f.Everyone, f.AdultPoints = c.ForEveryone == 1, c.AdultPoints
 	f.Repeat, f.Days, f.Custom, f.DayMode = rec.Kind, rec.Days, rec.Raw, c.DayMode
 	if rec.Kind == chores.RepeatMonthly {
 		f.MonthDay = rec.MonthDay
 	}
 	f.StartsOn, f.Points, f.Money = c.StartsOn, c.Points, formatMoneyInput(c.Pence)
-	if c.DueTime != nil {
-		f.DueTime = *c.DueTime
+	f.DueTimes = chores.Times(c)
+	f.ShowBefore = ""
+	if c.ShowBefore != nil {
+		f.ShowBefore = strconv.FormatInt(*c.ShowBefore, 10)
 	}
 	f.RequiresApproval = c.RequiresApproval == 1
 	f.OnTheDay = c.OnTheDay == 1
@@ -379,7 +444,21 @@ func (s *Server) readChoreForm(w http.ResponseWriter, r *http.Request, f *choreF
 		f.DayMode = chores.DayEach
 	}
 	f.StartsOn = fm.str("starts_on")
-	f.DueTime = fm.str("due_time")
+	f.DueTimes = nil
+	for _, v := range r.Form["due_time"] {
+		if v = strings.TrimSpace(v); v != "" {
+			f.DueTimes = append(f.DueTimes, v)
+		}
+	}
+	f.ShowBefore = fm.str("show_before")
+	var showBefore *int64
+	if f.ShowBefore != "" {
+		n, err := strconv.ParseInt(f.ShowBefore, 10, 64)
+		if err != nil {
+			fm.errs.Add("show_before", "Choose when it shows on the board.")
+		}
+		showBefore = &n
+	}
 	f.Points = fm.int("points", "Enter a whole number of points.")
 	f.Money = fm.str("money")
 	f.RequiresApproval = fm.checked("requires_approval")
@@ -395,7 +474,16 @@ func (s *Server) readChoreForm(w http.ResponseWriter, r *http.Request, f *choreF
 	}
 	f.Back = choreBack(fm.str("back"), f.People)
 	f.PeopleIDs = nil
-	for _, v := range r.Form["people_ids"] {
+	pick := "people_ids"
+	if f.Mode == chores.ModeEach {
+		pick = "each_ids"
+	}
+	f.Everyone = fm.str("each_who") == "everyone"
+	f.AdultPoints = 0
+	if f.Mode == chores.ModeEach {
+		f.AdultPoints = fm.int("adult_points", "Enter a whole number of points.")
+	}
+	for _, v := range r.Form[pick] {
 		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
 			f.PeopleIDs = append(f.PeopleIDs, n)
 		}
@@ -413,11 +501,14 @@ func (s *Server) readChoreForm(w http.ResponseWriter, r *http.Request, f *choreF
 		Title: f.Title, Emoji: f.Emoji.Value, Description: f.Description, Mode: f.Mode,
 		Repeat:   chores.Recurrence{Kind: f.Repeat, Days: f.Days, MonthDay: f.MonthDay},
 		DayMode:  f.DayMode,
-		StartsOn: f.StartsOn, DueTime: fm.optStr("due_time"),
+		StartsOn: f.StartsOn, DueTimes: f.DueTimes, ShowBefore: showBefore,
 		Points: f.Points, Pence: pence, RequiresApproval: f.RequiresApproval, OnTheDay: f.OnTheDay,
 	}
-	if f.Mode == chores.ModeShared {
+	if f.Mode == chores.ModeShared || f.Mode == chores.ModeEach {
 		in.PeopleIDs = f.PeopleIDs
+	}
+	if f.Mode == chores.ModeEach {
+		in.Everyone, in.AdultPoints = f.Everyone, f.AdultPoints
 	}
 	if f.Mode == chores.ModeAssigned && f.AssigneeID != 0 {
 		id := f.AssigneeID

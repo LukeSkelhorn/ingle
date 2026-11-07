@@ -16,7 +16,7 @@ func TestCreateChoreValidation(t *testing.T) {
 	bad := "25:00"
 	_, err := f.svc.CreateChore(t.Context(), f.hh, f.adult.ID, Input{
 		Title: "", Mode: ModeAssigned, AssigneeID: &ghost,
-		Repeat: Recurrence{Kind: RepeatWeekly}, StartsOn: "02/11/2026", DueTime: &bad, Points: -1, Pence: -1,
+		Repeat: Recurrence{Kind: RepeatWeekly}, StartsOn: "02/11/2026", DueTimes: []string{bad}, Points: -1, Pence: -1,
 	}, day)
 	var ve valid.Errors
 	if !errors.As(err, &ve) {
