@@ -174,6 +174,7 @@ func (s *Server) funcs() template.FuncMap {
 		"shortDate": shortDate,
 		"worth":     s.worth,
 		"pts":       pts,
+		"inc":       func(i int) int { return i + 1 },
 		"signedPts": signedPts,
 		"net":       s.net,
 		"percent": func(done, total int) int {
@@ -276,8 +277,13 @@ func joinNames(ps []dbq.Person, last string) string {
 	for i, p := range ps {
 		names[i] = p.Name
 	}
-	if len(names) < 2 {
-		return strings.Join(names, "")
+	return joinWords(names, last)
+}
+
+// joinWords lists words as "A, B and C" (or "A, B or C").
+func joinWords(words []string, last string) string {
+	if len(words) < 2 {
+		return strings.Join(words, "")
 	}
-	return strings.Join(names[:len(names)-1], ", ") + " " + last + " " + names[len(names)-1]
+	return strings.Join(words[:len(words)-1], ", ") + " " + last + " " + words[len(words)-1]
 }

@@ -6,6 +6,19 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ## [Unreleased]
 
+## [v0.2.3] - 2026-11-07
+
+Timed chores: several times a day, and only on the board when they're near.
+
+### Added
+
+- **Several times a day:** a chore's **Done by** can have up to 6 times (**+ Another time** in **Admin › Chores**), e.g. **Brush teeth** at 07:30 and 19:30. Each time is its own card on the board and its own entry in the calendar, done, claimed, missed and checked separately, and each earns the chore's points. Admin › Completions and done cards show which one it was ("Brush teeth · 19:30"). A chore done on any one of its days keeps a single time. ([DOM-45](https://linear.app/skeltech/issue/DOM-45))
+- **Show it on the board:** a timed chore can stay off the board until **2 hours**, **1 hour** or **30 minutes** before each of its times, so the evening one isn't there at breakfast. New chores start at 1 hour before; **All day** works as before. Displays update by themselves when it appears. After its time it stays on as late as before (or comes off, with **Only on the day**). ([DOM-45](https://linear.app/skeltech/issue/DOM-45))
+
+### Upgrade notes
+
+- This release has a database migration (chore times move to a list, and each day's chores get their own time). Ingle takes care of it on start, and existing chores keep their time and still show all day. To go back to v0.2.2 afterwards, restore the backup taken before upgrading.
+
 ## [v0.2.2] - 2026-11-07
 
 Give a bonus, or take points away.
@@ -93,7 +106,8 @@ The first release: a family chores board for a wall tablet, ready to run on a ho
 
 - First release: nothing to upgrade from. New installs start at the setup page.
 
-[Unreleased]: https://github.com/lukeskelhorn/ingle/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/lukeskelhorn/ingle/compare/v0.2.3...HEAD
+[v0.2.3]: https://github.com/lukeskelhorn/ingle/compare/v0.2.2...v0.2.3
 [v0.2.2]: https://github.com/lukeskelhorn/ingle/compare/v0.2.1...v0.2.2
 [v0.2.1]: https://github.com/lukeskelhorn/ingle/compare/v0.2.0...v0.2.1
 [v0.2.0]: https://github.com/lukeskelhorn/ingle/compare/v0.1.1...v0.2.0

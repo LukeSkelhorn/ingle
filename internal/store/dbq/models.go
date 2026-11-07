@@ -39,7 +39,6 @@ type Chore struct {
 	AssigneeID       *int64  `json:"assignee_id"`
 	Rrule            *string `json:"rrule"`
 	StartsOn         string  `json:"starts_on"`
-	DueTime          *string `json:"due_time"`
 	Points           int64   `json:"points"`
 	Pence            int64   `json:"pence"`
 	RequiresApproval int64   `json:"requires_approval"`
@@ -49,6 +48,8 @@ type Chore struct {
 	Emoji            string  `json:"emoji"`
 	DayMode          string  `json:"day_mode"`
 	OnTheDay         int64   `json:"on_the_day"`
+	DueTimes         string  `json:"due_times"`
+	ShowBefore       *int64  `json:"show_before"`
 }
 
 type ChoreOccurrence struct {
@@ -61,6 +62,7 @@ type ChoreOccurrence struct {
 	ClaimedAt     *int64  `json:"claimed_at"`
 	Status        string  `json:"status"`
 	AvailableFrom *string `json:"available_from"`
+	DueTime       string  `json:"due_time"`
 }
 
 type ChorePerson struct {

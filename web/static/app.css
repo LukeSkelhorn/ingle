@@ -376,6 +376,10 @@ input, select, textarea { -webkit-user-select: text; user-select: text; }
 .list__actions select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 .row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .row > .field + .field { margin-top: 0; }
+.times { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.times legend { width: 100%; }
+.times input[type="time"] { width: auto; min-width: 8.5em; }
+.times > .field__err { width: 100%; }
 [hidden] { display: none !important; }
 
 .btn {

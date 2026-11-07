@@ -68,15 +68,16 @@ func (f *fixture) person(name, kind string) dbq.Person {
 }
 
 type choreOpts struct {
-	assignee *int64
-	rrule    *string
-	startsOn string
-	points   int64
-	pence    int64
-	approval bool
-	anyDay   bool // a flexible-day chore
-	dueTime  *string
-	onTheDay bool // Only on the day
+	showBefore *int64
+	assignee   *int64
+	rrule      *string
+	startsOn   string
+	points     int64
+	pence      int64
+	approval   bool
+	anyDay     bool // a flexible-day chore
+	dueTime    *string
+	onTheDay   bool // Only on the day
 }
 
 func (f *fixture) chore(title string, o choreOpts) dbq.Chore {
@@ -94,7 +95,7 @@ func (f *fixture) chore(title string, o choreOpts) dbq.Chore {
 	}
 	c, err := f.st.Q.CreateChore(f.t.Context(), dbq.CreateChoreParams{
 		HouseholdID: f.hh, Title: title, Mode: mode, AssigneeID: o.assignee, Rrule: o.rrule,
-		StartsOn: o.startsOn, DueTime: o.dueTime, Points: o.points, Pence: o.pence, RequiresApproval: approval,
+		StartsOn: o.startsOn, DueTimes: deref(o.dueTime), ShowBefore: o.showBefore, Points: o.points, Pence: o.pence, RequiresApproval: approval,
 		CreatedAt: 1, UpdatedAt: 1,
 	})
 	if err != nil {
@@ -353,4 +354,11 @@ func TestCrossHouseholdPersonRejected(t *testing.T) {
 
 func dbqActivityParams(hh int64) dbq.ListRecentActivityParams {
 	return dbq.ListRecentActivityParams{HouseholdID: hh, Limit: 50}
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }

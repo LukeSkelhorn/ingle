@@ -106,7 +106,7 @@ func (q *Queries) DismissOccurrence(ctx context.Context, arg DismissOccurrencePa
 }
 
 const getOccurrence = `-- name: GetOccurrence :one
-SELECT id, household_id, chore_id, due_on, assignee_id, claimed_by, claimed_at, status, available_from FROM chore_occurrences WHERE household_id = ? AND id = ?
+SELECT id, household_id, chore_id, due_on, assignee_id, claimed_by, claimed_at, status, available_from, due_time FROM chore_occurrences WHERE household_id = ? AND id = ?
 `
 
 type GetOccurrenceParams struct {
@@ -127,20 +127,22 @@ func (q *Queries) GetOccurrence(ctx context.Context, arg GetOccurrenceParams) (C
 		&i.ClaimedAt,
 		&i.Status,
 		&i.AvailableFrom,
+		&i.DueTime,
 	)
 	return i, err
 }
 
 const insertOccurrence = `-- name: InsertOccurrence :execrows
-INSERT INTO chore_occurrences (household_id, chore_id, due_on, assignee_id, available_from)
-VALUES (?, ?, ?, ?, ?)
-ON CONFLICT (chore_id, due_on) DO NOTHING
+INSERT INTO chore_occurrences (household_id, chore_id, due_on, due_time, assignee_id, available_from)
+VALUES (?, ?, ?, ?, ?, ?)
+ON CONFLICT (chore_id, due_on, due_time) DO NOTHING
 `
 
 type InsertOccurrenceParams struct {
 	HouseholdID   int64   `json:"household_id"`
 	ChoreID       int64   `json:"chore_id"`
 	DueOn         string  `json:"due_on"`
+	DueTime       string  `json:"due_time"`
 	AssigneeID    *int64  `json:"assignee_id"`
 	AvailableFrom *string `json:"available_from"`
 }
@@ -150,6 +152,7 @@ func (q *Queries) InsertOccurrence(ctx context.Context, arg InsertOccurrencePara
 		arg.HouseholdID,
 		arg.ChoreID,
 		arg.DueOn,
+		arg.DueTime,
 		arg.AssigneeID,
 		arg.AvailableFrom,
 	)
@@ -162,7 +165,8 @@ func (q *Queries) InsertOccurrence(ctx context.Context, arg InsertOccurrencePara
 const listBoard = `-- name: ListBoard :many
 SELECT
     o.id, o.chore_id, o.due_on, o.available_from, o.assignee_id, o.claimed_by, o.claimed_at, o.status,
-    c.title, c.emoji, c.description, c.mode, c.due_time, c.points, c.pence, c.requires_approval,
+    o.due_time, c.show_before,
+    c.title, c.emoji, c.description, c.mode, c.points, c.pence, c.requires_approval,
     c.rrule, c.starts_on, c.day_mode, c.on_the_day
 FROM chore_occurrences o
 JOIN chores c ON c.id = o.chore_id
@@ -170,7 +174,7 @@ WHERE o.household_id = ?1
   AND o.due_on >= ?2
   AND (o.due_on <= ?3 OR o.available_from <= ?3)
   AND c.archived_at IS NULL
-ORDER BY o.due_on, c.due_time, c.title
+ORDER BY o.due_on, o.due_time = '', o.due_time, c.title
 `
 
 type ListBoardParams struct {
@@ -188,11 +192,12 @@ type ListBoardRow struct {
 	ClaimedBy        *int64  `json:"claimed_by"`
 	ClaimedAt        *int64  `json:"claimed_at"`
 	Status           string  `json:"status"`
+	DueTime          string  `json:"due_time"`
+	ShowBefore       *int64  `json:"show_before"`
 	Title            string  `json:"title"`
 	Emoji            string  `json:"emoji"`
 	Description      string  `json:"description"`
 	Mode             string  `json:"mode"`
-	DueTime          *string `json:"due_time"`
 	Points           int64   `json:"points"`
 	Pence            int64   `json:"pence"`
 	RequiresApproval int64   `json:"requires_approval"`
@@ -222,11 +227,12 @@ func (q *Queries) ListBoard(ctx context.Context, arg ListBoardParams) ([]ListBoa
 			&i.ClaimedBy,
 			&i.ClaimedAt,
 			&i.Status,
+			&i.DueTime,
+			&i.ShowBefore,
 			&i.Title,
 			&i.Emoji,
 			&i.Description,
 			&i.Mode,
-			&i.DueTime,
 			&i.Points,
 			&i.Pence,
 			&i.RequiresApproval,

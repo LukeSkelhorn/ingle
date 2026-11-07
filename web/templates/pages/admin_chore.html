@@ -111,12 +111,22 @@
         <input type="date" name="starts_on" value="{{.Data.StartsOn}}" required>
         {{template "err" index .Errors "starts_on"}}
       </label>
-      <label class="field">
-        <span>Done by (optional)</span>
-        <input type="time" name="due_time" value="{{.Data.DueTime}}">
+      <fieldset class="field times" data-times data-max="{{.Data.MaxTimes}}">
+        <legend>Done by (optional)</legend>
+        {{range $i, $t := .Data.TimeInputs}}<input type="time" name="due_time" value="{{$t}}" aria-label="Time {{inc $i}}"{{if $i}} data-show-when="day_mode=each"{{end}}>{{end}}
+        <button class="btn btn--ghost times__add" type="button" data-add-time data-show-when="day_mode=each">+ Another time</button>
         {{template "err" index .Errors "due_time"}}
-      </label>
+      </fieldset>
     </div>
+    <label class="field">
+      <span>Show it on the board</span>
+      <select name="show_before">
+        <option value=""{{if not .Data.ShowBefore}} selected{{end}}>All day</option>
+        {{range .Data.ShowBeforeOptions}}<option value="{{.Value}}"{{if eq .Value $.Data.ShowBefore}} selected{{end}}>{{.Label}}</option>{{end}}
+      </select>
+      <small class="muted">For chores with a time. Until then it's not on the board, so a 19:30 chore set to 1 hour before appears at 18:30.</small>
+      {{template "err" index .Errors "show_before"}}
+    </label>
     <label class="check">
       <input type="checkbox" name="on_the_day" value="1"{{if .Data.OnTheDay}} checked{{end}}>
       <span>Only on the day
