@@ -1,7 +1,7 @@
 -- name: InsertOccurrence :execrows
-INSERT INTO chore_occurrences (household_id, chore_id, due_on, assignee_id, available_from)
-VALUES (?, ?, ?, ?, ?)
-ON CONFLICT (chore_id, due_on) DO NOTHING;
+INSERT INTO chore_occurrences (household_id, chore_id, due_on, due_time, assignee_id, available_from)
+VALUES (?, ?, ?, ?, ?, ?)
+ON CONFLICT (chore_id, due_on, due_time) DO NOTHING;
 
 -- name: GetOccurrence :one
 SELECT * FROM chore_occurrences WHERE household_id = ? AND id = ?;
@@ -11,7 +11,8 @@ SELECT * FROM chore_occurrences WHERE household_id = ? AND id = ?;
 -- range, or (flexible-day chores) with their window overlapping it.
 SELECT
     o.id, o.chore_id, o.due_on, o.available_from, o.assignee_id, o.claimed_by, o.claimed_at, o.status,
-    c.title, c.emoji, c.description, c.mode, c.due_time, c.points, c.pence, c.requires_approval,
+    o.due_time, c.show_before,
+    c.title, c.emoji, c.description, c.mode, c.points, c.pence, c.requires_approval,
     c.rrule, c.starts_on, c.day_mode, c.on_the_day
 FROM chore_occurrences o
 JOIN chores c ON c.id = o.chore_id
@@ -19,7 +20,7 @@ WHERE o.household_id = sqlc.arg(household_id)
   AND o.due_on >= sqlc.arg(from_date)
   AND (o.due_on <= sqlc.arg(to_date) OR o.available_from <= sqlc.arg(to_date))
   AND c.archived_at IS NULL
-ORDER BY o.due_on, c.due_time, c.title;
+ORDER BY o.due_on, o.due_time = '', o.due_time, c.title;
 
 -- name: ClaimOccurrence :execrows
 UPDATE chore_occurrences

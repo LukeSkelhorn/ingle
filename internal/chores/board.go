@@ -201,7 +201,19 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 		if (r.DueOn < today || flex) && done && comp.CompletedAt < boardDay.Unix() {
 			continue // caught up on an earlier day, or done earlier in its window
 		}
-		at, onTheDay := onTheDayCutoff(r.OnTheDay, r.DueOn, r.DueTime, loc, dayStart)
+		dueTime := optTime(r.DueTime)
+		// A timed chore set to show shortly before its time stays off
+		// today's board until then (not counted in today's progress), and
+		// the board refreshes itself when it's due to appear.
+		if !done && !flex && r.DueOn == today {
+			if show, ok := appearsAt(r.DueOn, r.DueTime, r.ShowBefore, loc, dayStart); ok && now.Before(show) {
+				if b.NextChange.IsZero() || show.Before(b.NextChange) {
+					b.NextChange = show
+				}
+				continue
+			}
+		}
+		at, onTheDay := onTheDayCutoff(r.OnTheDay, r.DueOn, dueTime, loc, dayStart)
 		onTheDay = onTheDay && !done
 		if onTheDay {
 			if !now.Before(at) {
@@ -216,7 +228,7 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 			Title:        r.Title,
 			Emoji:        r.Emoji,
 			DueOn:        r.DueOn,
-			DueTime:      r.DueTime,
+			DueTime:      dueTime,
 			Points:       r.Points,
 			Pence:        r.Pence,
 			Pool:         r.Mode == ModePool,
@@ -226,8 +238,8 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 			SortOn:       min(r.DueOn, today),
 			OnTheDay:     onTheDay,
 		}
-		if onTheDay && r.DueTime != nil {
-			card.Until = *r.DueTime
+		if onTheDay && dueTime != nil {
+			card.Until = *dueTime
 		}
 		if flex && !done && r.DueOn >= today {
 			days := windowDays(r.Rrule, r.StartsOn, today, r.DueOn, loc)

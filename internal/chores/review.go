@@ -35,6 +35,7 @@ type CompletionDetail struct {
 	Title        string
 	Emoji        string // the chore's, "" for none
 	DueOn        string
+	DueTime      *string // the occurrence's time, nil for none
 	// CanReverse is set for approved completions inside ReverseWindow.
 	CanReverse bool
 }
@@ -84,6 +85,7 @@ func (s *Service) detail(now time.Time, r dbq.GetCompletionDetailRow) Completion
 		Title:        r.Title,
 		Emoji:        r.Emoji,
 		DueOn:        r.DueOn,
+		DueTime:      optTime(r.DueTime),
 	}
 	if r.ReviewerName != nil {
 		d.ReviewerName = *r.ReviewerName

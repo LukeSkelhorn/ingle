@@ -146,16 +146,19 @@ func materialiseChore(ctx context.Context, q *dbq.Queries, c dbq.Chore, start, e
 	}
 	created := 0
 	for _, d := range dates {
-		n, err := q.InsertOccurrence(ctx, dbq.InsertOccurrenceParams{
-			HouseholdID: c.HouseholdID,
-			ChoreID:     c.ID,
-			DueOn:       d,
-			AssigneeID:  c.AssigneeID,
-		})
-		if err != nil {
-			return 0, fmt.Errorf("insert occurrence: %w", err)
+		for _, t := range times(c) {
+			n, err := q.InsertOccurrence(ctx, dbq.InsertOccurrenceParams{
+				HouseholdID: c.HouseholdID,
+				ChoreID:     c.ID,
+				DueOn:       d,
+				DueTime:     t,
+				AssigneeID:  c.AssigneeID,
+			})
+			if err != nil {
+				return 0, fmt.Errorf("insert occurrence: %w", err)
+			}
+			created += int(n)
 		}
-		created += int(n)
 	}
 	return created, nil
 }
@@ -174,6 +177,7 @@ func materialiseFlex(ctx context.Context, q *dbq.Queries, c dbq.Chore, start, en
 			HouseholdID:   c.HouseholdID,
 			ChoreID:       c.ID,
 			DueOn:         w.Due(),
+			DueTime:       times(c)[0], // flexible chores have one time
 			AssigneeID:    c.AssigneeID,
 			AvailableFrom: &from,
 		})

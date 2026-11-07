@@ -991,3 +991,56 @@ func TestPointsFormatting(t *testing.T) {
 		}
 	}
 }
+
+func TestChoreTimes(t *testing.T) {
+	h, wall, phone := boardHousehold(t)
+	alfie := h.person("Alfie")
+	form := url.Values{
+		"title": {"Brush teeth"}, "mode": {"assigned"}, "assignee_id": {itoa(alfie.ID)}, "repeat": {"daily"},
+		"starts_on": {"2026-07-01"}, "points": {"1"}, "due_time": {"19:30", "07:30", ""}, "show_before": {"60"},
+	}
+	// The new-chore form starts at an hour before.
+	expect(t, phone.get("/admin/chores/new"), http.StatusOK, `<option value="60" selected>1 hour before</option>`, "+ Another time")
+	expectRedirect(t, phone.post("/admin/chores", form), "/admin/chores")
+	teeth := h.chore("Brush teeth")
+	if teeth.DueTimes != "07:30,19:30" || teeth.ShowBefore == nil || *teeth.ShowBefore != 60 {
+		t.Fatalf("saved %q / %v", teeth.DueTimes, teeth.ShowBefore)
+	}
+	expect(t, phone.get("/admin/chores"), http.StatusOK, "by 07:30 and 19:30 · shows 1 hour before")
+	expect(t, phone.get("/admin/chores/"+itoa(teeth.ID)), http.StatusOK,
+		`name="due_time" value="07:30"`, `name="due_time" value="19:30"`, `<option value="60" selected>`)
+
+	// A flexible chore can only have one time.
+	bad := url.Values{
+		"title": {"Wash the car"}, "mode": {"assigned"}, "assignee_id": {itoa(alfie.ID)}, "repeat": {"weekly"},
+		"days": {"2", "4"}, "day_mode": {"any"}, "starts_on": {"2026-07-01"}, "due_time": {"10:00", "15:00"},
+	}
+	expect(t, phone.post("/admin/chores", bad), http.StatusUnprocessableEntity, "can have one time")
+
+	// 00:30 local: neither is on the board yet, and the board knows when to
+	// look again (06:30, six hours away).
+	r := wall.get("/board")
+	if col := section(r.body, "Alfie"); strings.Contains(col, "Brush teeth") {
+		t.Errorf("00:30 column shows Brush teeth: %s", col)
+	}
+	expect(t, r, http.StatusOK, `data-next-in="21601"`)
+
+	h.advance(6 * time.Hour) // 06:30
+	col := section(wall.get("/board").body, "Alfie")
+	if !strings.Contains(col, "by 07:30") || strings.Contains(col, "by 19:30") {
+		t.Errorf("06:30 column: %s", col)
+	}
+	var morning int64
+	if err := h.st.DB.QueryRowContext(t.Context(),
+		"SELECT id FROM chore_occurrences WHERE chore_id = ? AND due_on = '2026-07-01' AND due_time = '07:30'", teeth.ID).Scan(&morning); err != nil {
+		t.Fatal(err)
+	}
+	expect(t, wall.post("/board/occurrences/"+itoa(morning)+"/complete", nil), http.StatusOK)
+
+	h.advance(12 * time.Hour) // 18:30
+	col = section(wall.get("/board").body, "Alfie")
+	if !strings.Contains(col, "by 19:30") {
+		t.Errorf("18:30 column: %s", col)
+	}
+	expect(t, phone.get("/admin/completions"), http.StatusOK, "Brush teeth · 07:30")
+}

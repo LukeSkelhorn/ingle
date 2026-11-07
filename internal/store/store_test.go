@@ -107,10 +107,10 @@ func TestSchemaConstraints(t *testing.T) {
 		"pool with assignee":        chore("pool", &kid.ID, "2026-11-03", 1),
 		"bad date":                  chore("pool", nil, "03/11/2026", 1),
 		"negative points":           chore("pool", nil, "2026-11-03", -1),
-		"bad due time": func() dbq.CreateChoreParams {
+		"bad show before": func() dbq.CreateChoreParams {
 			c := chore("pool", nil, "2026-11-03", 1)
-			bad := "25:00"
-			c.DueTime = &bad
+			bad := int64(45)
+			c.ShowBefore = &bad
 			return c
 		}(),
 	}
@@ -270,6 +270,84 @@ func TestManualPointsMigrationKeepsLedger(t *testing.T) {
 	}
 	if got := sum(); got != "3/3/50" || kinds != "completion,adjustment,adjustment" {
 		t.Errorf("after down = %s %s", got, kinds)
+	}
+	var on int
+	if err := st.DB.QueryRowContext(ctx, `PRAGMA foreign_keys`).Scan(&on); err != nil || on != 1 {
+		t.Errorf("foreign_keys = %d (%v), want 1", on, err)
+	}
+}
+
+// The chore times migration rebuilds chore_occurrences and moves a chore's
+// time to due_times. Occurrences keep their ids (completions point at them)
+// and take their chore's time; going back keeps one occurrence a day.
+func TestChoreTimesMigration(t *testing.T) {
+	st := openTest(t)
+	ctx := t.Context()
+	sub, err := fs.Sub(migrations, "migrations")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := goose.NewProvider(goose.DialectSQLite3, st.DB, sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.DownTo(ctx, 13); err != nil {
+		t.Fatalf("DownTo(13): %v", err)
+	}
+	exec := func(qs ...string) {
+		t.Helper()
+		for _, q := range qs {
+			if _, err := st.DB.ExecContext(ctx, q); err != nil {
+				t.Fatalf("%s: %v", q, err)
+			}
+		}
+	}
+	exec(
+		`INSERT INTO households (id, name, created_at) VALUES (1, 'Home', 1)`,
+		`INSERT INTO people (id, household_id, name, kind, colour, created_at) VALUES (1, 1, 'Alfie', 'child', '#46A758', 1)`,
+		`INSERT INTO chores (id, household_id, title, mode, assignee_id, starts_on, due_time, created_at, updated_at) VALUES (1, 1, 'Teeth', 'assigned', 1, '2026-11-02', '07:30', 1, 1)`,
+		`INSERT INTO chores (id, household_id, title, mode, starts_on, created_at, updated_at) VALUES (2, 1, 'Hoover', 'pool', '2026-11-02', 1, 1)`,
+		`INSERT INTO chore_occurrences (id, household_id, chore_id, due_on, assignee_id, status) VALUES (7, 1, 1, '2026-11-02', 1, 'done')`,
+		`INSERT INTO chore_occurrences (id, household_id, chore_id, due_on) VALUES (8, 1, 2, '2026-11-02')`,
+		`INSERT INTO completions (id, household_id, occurrence_id, person_id, completed_at, status, points, pence) VALUES (1, 1, 7, 1, 1, 'approved', 5, 0)`,
+	)
+	if _, err := p.Up(ctx); err != nil {
+		t.Fatalf("Up: %v", err)
+	}
+	var occs, times string
+	if err := st.DB.QueryRowContext(ctx, `SELECT group_concat(id || '@' || due_time, ' ') FROM (SELECT * FROM chore_occurrences ORDER BY id)`).Scan(&occs); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.DB.QueryRowContext(ctx, `SELECT group_concat(due_times || '/' || ifnull(show_before, 'all'), ' ') FROM (SELECT * FROM chores ORDER BY id)`).Scan(&times); err != nil {
+		t.Fatal(err)
+	}
+	if occs != "7@07:30 8@" || times != "07:30/all /all" {
+		t.Errorf("after up: occurrences %q, chores %q", occs, times)
+	}
+
+	// A second time the same day, done; then back down.
+	exec(
+		`INSERT INTO chore_occurrences (id, household_id, chore_id, due_on, due_time, assignee_id, status) VALUES (9, 1, 1, '2026-11-02', '19:30', 1, 'done')`,
+		`INSERT INTO completions (id, household_id, occurrence_id, person_id, completed_at, status, points, pence) VALUES (2, 1, 9, 1, 2, 'approved', 5, 0)`,
+		`INSERT INTO ledger_entries (household_id, person_id, points, pence, kind, completion_id, created_at) VALUES (1, 1, 5, 0, 'completion', 2, 2)`,
+	)
+	if _, err := st.DB.ExecContext(ctx, `INSERT INTO chore_occurrences (household_id, chore_id, due_on, due_time) VALUES (1, 1, '2026-11-02', '19:30')`); err == nil {
+		t.Error("duplicate time accepted")
+	}
+	if _, err := p.DownTo(ctx, 13); err != nil {
+		t.Fatalf("DownTo(13) again: %v", err)
+	}
+	var n, linked int
+	var due string
+	if err := st.DB.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM chore_occurrences), (SELECT count(*) FROM completions), (SELECT due_time FROM chores WHERE id = 1)`).Scan(&n, &linked, &due); err != nil {
+		t.Fatal(err)
+	}
+	var points int
+	if err := st.DB.QueryRowContext(ctx, `SELECT sum(points) FROM ledger_entries WHERE completion_id IS NULL`).Scan(&points); err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 || linked != 1 || due != "07:30" || points != 5 {
+		t.Errorf("after down: %d occurrences, %d completions, due %q, unlinked points %d; want 2, 1, 07:30, 5", n, linked, due, points)
 	}
 	var on int
 	if err := st.DB.QueryRowContext(ctx, `PRAGMA foreign_keys`).Scan(&on); err != nil || on != 1 {

@@ -98,7 +98,7 @@ func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time
 		}
 		c := CalChore{
 			OccurrenceID: r.ID, ChoreID: r.ChoreID, Date: r.DueOn, Title: r.Title, Emoji: r.Emoji,
-			DueTime: r.DueTime, Points: r.Points, Pence: r.Pence, Pool: r.Mode == ModePool,
+			DueTime: optTime(r.DueTime), Points: r.Points, Pence: r.Pence, Pool: r.Mode == ModePool,
 			PersonID: r.AssigneeID, Status: statusOn(r.DueOn, today),
 		}
 		if c.PersonID == nil {
@@ -109,7 +109,7 @@ func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time
 		}
 		comp, done := byOcc[r.ID]
 		// An Only on the day chore past its time is missed, even today.
-		at, onTheDay := onTheDayCutoff(r.OnTheDay, r.DueOn, r.DueTime, loc, dayStart)
+		at, onTheDay := onTheDayCutoff(r.OnTheDay, r.DueOn, optTime(r.DueTime), loc, dayStart)
 		tooLate := onTheDay && !done && !now.Before(at)
 		if tooLate && c.Status == CalToday {
 			c.Status = CalMissed
@@ -183,7 +183,7 @@ func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time
 							continue
 						}
 						add(CalChore{
-							ChoreID: ch.ID, Date: d, Title: ch.Title, Emoji: ch.Emoji, DueTime: ch.DueTime,
+							ChoreID: ch.ID, Date: d, Title: ch.Title, Emoji: ch.Emoji, DueTime: optTime(times(ch)[0]),
 							Points: ch.Points, Pence: ch.Pence, Pool: ch.Mode == ModePool,
 							PersonID: ch.AssigneeID, Status: statusOn(d, today), Or: or, People: shared[ch.ID],
 						})
@@ -199,11 +199,13 @@ func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time
 				if d < start || d > to || seen[key{ch.ID, d}] {
 					continue
 				}
-				out[d] = append(out[d], CalChore{
-					ChoreID: ch.ID, Date: d, Title: ch.Title, Emoji: ch.Emoji, DueTime: ch.DueTime,
-					Points: ch.Points, Pence: ch.Pence, Pool: ch.Mode == ModePool,
-					PersonID: ch.AssigneeID, Status: statusOn(d, today), People: shared[ch.ID],
-				})
+				for _, t := range times(ch) {
+					out[d] = append(out[d], CalChore{
+						ChoreID: ch.ID, Date: d, Title: ch.Title, Emoji: ch.Emoji, DueTime: optTime(t),
+						Points: ch.Points, Pence: ch.Pence, Pool: ch.Mode == ModePool,
+						PersonID: ch.AssigneeID, Status: statusOn(d, today), People: shared[ch.ID],
+					})
+				}
 			}
 		}
 	}

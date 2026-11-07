@@ -48,9 +48,9 @@ func (q *Queries) ArchiveChore(ctx context.Context, arg ArchiveChoreParams) erro
 const createChore = `-- name: CreateChore :one
 INSERT INTO chores (
     household_id, title, emoji, description, mode, assignee_id, rrule, starts_on,
-    due_time, points, pence, requires_approval, created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-RETURNING id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at, emoji, day_mode, on_the_day
+    due_times, show_before, points, pence, requires_approval, created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING id, household_id, title, description, mode, assignee_id, rrule, starts_on, points, pence, requires_approval, archived_at, created_at, updated_at, emoji, day_mode, on_the_day, due_times, show_before
 `
 
 type CreateChoreParams struct {
@@ -62,7 +62,8 @@ type CreateChoreParams struct {
 	AssigneeID       *int64  `json:"assignee_id"`
 	Rrule            *string `json:"rrule"`
 	StartsOn         string  `json:"starts_on"`
-	DueTime          *string `json:"due_time"`
+	DueTimes         string  `json:"due_times"`
+	ShowBefore       *int64  `json:"show_before"`
 	Points           int64   `json:"points"`
 	Pence            int64   `json:"pence"`
 	RequiresApproval int64   `json:"requires_approval"`
@@ -80,7 +81,8 @@ func (q *Queries) CreateChore(ctx context.Context, arg CreateChoreParams) (Chore
 		arg.AssigneeID,
 		arg.Rrule,
 		arg.StartsOn,
-		arg.DueTime,
+		arg.DueTimes,
+		arg.ShowBefore,
 		arg.Points,
 		arg.Pence,
 		arg.RequiresApproval,
@@ -97,7 +99,6 @@ func (q *Queries) CreateChore(ctx context.Context, arg CreateChoreParams) (Chore
 		&i.AssigneeID,
 		&i.Rrule,
 		&i.StartsOn,
-		&i.DueTime,
 		&i.Points,
 		&i.Pence,
 		&i.RequiresApproval,
@@ -107,6 +108,8 @@ func (q *Queries) CreateChore(ctx context.Context, arg CreateChoreParams) (Chore
 		&i.Emoji,
 		&i.DayMode,
 		&i.OnTheDay,
+		&i.DueTimes,
+		&i.ShowBefore,
 	)
 	return i, err
 }
@@ -126,7 +129,7 @@ func (q *Queries) DeleteChorePeople(ctx context.Context, arg DeleteChorePeoplePa
 }
 
 const getChore = `-- name: GetChore :one
-SELECT id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at, emoji, day_mode, on_the_day FROM chores WHERE household_id = ? AND id = ?
+SELECT id, household_id, title, description, mode, assignee_id, rrule, starts_on, points, pence, requires_approval, archived_at, created_at, updated_at, emoji, day_mode, on_the_day, due_times, show_before FROM chores WHERE household_id = ? AND id = ?
 `
 
 type GetChoreParams struct {
@@ -146,7 +149,6 @@ func (q *Queries) GetChore(ctx context.Context, arg GetChoreParams) (Chore, erro
 		&i.AssigneeID,
 		&i.Rrule,
 		&i.StartsOn,
-		&i.DueTime,
 		&i.Points,
 		&i.Pence,
 		&i.RequiresApproval,
@@ -156,6 +158,8 @@ func (q *Queries) GetChore(ctx context.Context, arg GetChoreParams) (Chore, erro
 		&i.Emoji,
 		&i.DayMode,
 		&i.OnTheDay,
+		&i.DueTimes,
+		&i.ShowBefore,
 	)
 	return i, err
 }
@@ -200,7 +204,7 @@ func (q *Queries) ListChorePeople(ctx context.Context, householdID int64) ([]Lis
 }
 
 const listChores = `-- name: ListChores :many
-SELECT id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at, emoji, day_mode, on_the_day FROM chores
+SELECT id, household_id, title, description, mode, assignee_id, rrule, starts_on, points, pence, requires_approval, archived_at, created_at, updated_at, emoji, day_mode, on_the_day, due_times, show_before FROM chores
 WHERE household_id = ? AND archived_at IS NULL
 ORDER BY title
 `
@@ -223,7 +227,6 @@ func (q *Queries) ListChores(ctx context.Context, householdID int64) ([]Chore, e
 			&i.AssigneeID,
 			&i.Rrule,
 			&i.StartsOn,
-			&i.DueTime,
 			&i.Points,
 			&i.Pence,
 			&i.RequiresApproval,
@@ -233,6 +236,8 @@ func (q *Queries) ListChores(ctx context.Context, householdID int64) ([]Chore, e
 			&i.Emoji,
 			&i.DayMode,
 			&i.OnTheDay,
+			&i.DueTimes,
+			&i.ShowBefore,
 		); err != nil {
 			return nil, err
 		}
@@ -358,7 +363,7 @@ func (q *Queries) RemovePersonFromSharedChores(ctx context.Context, arg RemovePe
 
 const setChoreDayMode = `-- name: SetChoreDayMode :one
 UPDATE chores SET day_mode = ? WHERE household_id = ? AND id = ?
-RETURNING id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at, emoji, day_mode, on_the_day
+RETURNING id, household_id, title, description, mode, assignee_id, rrule, starts_on, points, pence, requires_approval, archived_at, created_at, updated_at, emoji, day_mode, on_the_day, due_times, show_before
 `
 
 type SetChoreDayModeParams struct {
@@ -379,7 +384,6 @@ func (q *Queries) SetChoreDayMode(ctx context.Context, arg SetChoreDayModeParams
 		&i.AssigneeID,
 		&i.Rrule,
 		&i.StartsOn,
-		&i.DueTime,
 		&i.Points,
 		&i.Pence,
 		&i.RequiresApproval,
@@ -389,13 +393,15 @@ func (q *Queries) SetChoreDayMode(ctx context.Context, arg SetChoreDayModeParams
 		&i.Emoji,
 		&i.DayMode,
 		&i.OnTheDay,
+		&i.DueTimes,
+		&i.ShowBefore,
 	)
 	return i, err
 }
 
 const setChoreOnTheDay = `-- name: SetChoreOnTheDay :one
 UPDATE chores SET on_the_day = ? WHERE household_id = ? AND id = ?
-RETURNING id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at, emoji, day_mode, on_the_day
+RETURNING id, household_id, title, description, mode, assignee_id, rrule, starts_on, points, pence, requires_approval, archived_at, created_at, updated_at, emoji, day_mode, on_the_day, due_times, show_before
 `
 
 type SetChoreOnTheDayParams struct {
@@ -416,7 +422,6 @@ func (q *Queries) SetChoreOnTheDay(ctx context.Context, arg SetChoreOnTheDayPara
 		&i.AssigneeID,
 		&i.Rrule,
 		&i.StartsOn,
-		&i.DueTime,
 		&i.Points,
 		&i.Pence,
 		&i.RequiresApproval,
@@ -426,6 +431,8 @@ func (q *Queries) SetChoreOnTheDay(ctx context.Context, arg SetChoreOnTheDayPara
 		&i.Emoji,
 		&i.DayMode,
 		&i.OnTheDay,
+		&i.DueTimes,
+		&i.ShowBefore,
 	)
 	return i, err
 }
@@ -433,9 +440,9 @@ func (q *Queries) SetChoreOnTheDay(ctx context.Context, arg SetChoreOnTheDayPara
 const updateChore = `-- name: UpdateChore :one
 UPDATE chores SET
     title = ?, emoji = ?, description = ?, mode = ?, assignee_id = ?, rrule = ?, starts_on = ?,
-    due_time = ?, points = ?, pence = ?, requires_approval = ?, updated_at = ?
+    due_times = ?, show_before = ?, points = ?, pence = ?, requires_approval = ?, updated_at = ?
 WHERE household_id = ? AND id = ?
-RETURNING id, household_id, title, description, mode, assignee_id, rrule, starts_on, due_time, points, pence, requires_approval, archived_at, created_at, updated_at, emoji, day_mode, on_the_day
+RETURNING id, household_id, title, description, mode, assignee_id, rrule, starts_on, points, pence, requires_approval, archived_at, created_at, updated_at, emoji, day_mode, on_the_day, due_times, show_before
 `
 
 type UpdateChoreParams struct {
@@ -446,7 +453,8 @@ type UpdateChoreParams struct {
 	AssigneeID       *int64  `json:"assignee_id"`
 	Rrule            *string `json:"rrule"`
 	StartsOn         string  `json:"starts_on"`
-	DueTime          *string `json:"due_time"`
+	DueTimes         string  `json:"due_times"`
+	ShowBefore       *int64  `json:"show_before"`
 	Points           int64   `json:"points"`
 	Pence            int64   `json:"pence"`
 	RequiresApproval int64   `json:"requires_approval"`
@@ -464,7 +472,8 @@ func (q *Queries) UpdateChore(ctx context.Context, arg UpdateChoreParams) (Chore
 		arg.AssigneeID,
 		arg.Rrule,
 		arg.StartsOn,
-		arg.DueTime,
+		arg.DueTimes,
+		arg.ShowBefore,
 		arg.Points,
 		arg.Pence,
 		arg.RequiresApproval,
@@ -482,7 +491,6 @@ func (q *Queries) UpdateChore(ctx context.Context, arg UpdateChoreParams) (Chore
 		&i.AssigneeID,
 		&i.Rrule,
 		&i.StartsOn,
-		&i.DueTime,
 		&i.Points,
 		&i.Pence,
 		&i.RequiresApproval,
@@ -492,6 +500,8 @@ func (q *Queries) UpdateChore(ctx context.Context, arg UpdateChoreParams) (Chore
 		&i.Emoji,
 		&i.DayMode,
 		&i.OnTheDay,
+		&i.DueTimes,
+		&i.ShowBefore,
 	)
 	return i, err
 }

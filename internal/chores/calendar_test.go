@@ -39,7 +39,6 @@ func TestCalendar(t *testing.T) {
 	ctx := t.Context()
 	daily := "FREQ=DAILY"
 	weekly := "FREQ=WEEKLY;BYDAY=MO"
-	at := func(s string) *string { return &s }
 	teeth := f.chore("Teeth", choreOpts{assignee: &f.kid.ID, rrule: &daily, startsOn: "2026-10-26"})
 	f.chore("Bins", choreOpts{rrule: &weekly, startsOn: "2026-10-26"})
 	f.chore("Car", choreOpts{startsOn: "2026-11-20"}) // one-off, past the window
@@ -47,7 +46,7 @@ func TestCalendar(t *testing.T) {
 	later := f.chore("Later", choreOpts{assignee: &f.kid2.ID, rrule: &daily, startsOn: "2026-12-01"})
 	if _, err := f.st.Q.UpdateChore(ctx, dbq.UpdateChoreParams{
 		HouseholdID: f.hh, ID: later.ID, Title: "Later", Mode: ModeAssigned, AssigneeID: &f.kid2.ID,
-		Rrule: &daily, StartsOn: "2026-12-01", DueTime: at("07:30"), UpdatedAt: 2,
+		Rrule: &daily, StartsOn: "2026-12-01", DueTimes: "07:30", UpdatedAt: 2,
 	}); err != nil {
 		t.Fatal(err)
 	}

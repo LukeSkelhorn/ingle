@@ -23,9 +23,10 @@ type Input struct {
 	AssigneeID       *int64  // required for ModeAssigned, ignored otherwise
 	PeopleIDs        []int64 // ModeShared: who it's for (two or more)
 	Repeat           Recurrence
-	DayMode          string  // DayEach or DayAny; "" means DayEach
-	StartsOn         string  // YYYY-MM-DD
-	DueTime          *string // HH:MM, optional
+	DayMode          string   // DayEach or DayAny; "" means DayEach
+	StartsOn         string   // YYYY-MM-DD
+	DueTimes         []string // HH:MM, any order; blanks are ignored. Empty for an untimed chore
+	ShowBefore       *int64   // minutes before each time it appears on the board; nil for all day
 	Points           int64
 	Pence            int64
 	RequiresApproval bool
@@ -56,7 +57,7 @@ func (s *Service) CreateChore(ctx context.Context, householdID, actorID int64, i
 		c, err = q.CreateChore(ctx, dbq.CreateChoreParams{
 			HouseholdID: householdID, Title: p.Title, Emoji: p.Emoji, Description: p.Description,
 			Mode: p.Mode, AssigneeID: p.AssigneeID, Rrule: p.Rrule, StartsOn: p.StartsOn,
-			DueTime: p.DueTime, Points: p.Points, Pence: p.Pence, RequiresApproval: p.RequiresApproval,
+			DueTimes: p.DueTimes, ShowBefore: p.ShowBefore, Points: p.Points, Pence: p.Pence, RequiresApproval: p.RequiresApproval,
 			CreatedAt: now.Unix(), UpdatedAt: now.Unix(),
 		})
 		if err != nil {
@@ -99,7 +100,7 @@ func (s *Service) UpdateChore(ctx context.Context, householdID, actorID, id int6
 		}
 		c, err = q.UpdateChore(ctx, dbq.UpdateChoreParams{
 			Title: p.Title, Emoji: p.Emoji, Description: p.Description, Mode: p.Mode, AssigneeID: p.AssigneeID,
-			Rrule: p.Rrule, StartsOn: p.StartsOn, DueTime: p.DueTime, Points: p.Points,
+			Rrule: p.Rrule, StartsOn: p.StartsOn, DueTimes: p.DueTimes, ShowBefore: p.ShowBefore, Points: p.Points,
 			Pence: p.Pence, RequiresApproval: p.RequiresApproval, UpdatedAt: now.Unix(),
 			HouseholdID: householdID, ID: id,
 		})
@@ -229,7 +230,9 @@ type validated struct {
 	DayMode                                   string
 	AssigneeID                                *int64
 	PeopleIDs                                 []int64
-	Rrule, DueTime                            *string
+	Rrule                                     *string
+	DueTimes                                  string
+	ShowBefore                                *int64
 	Points, Pence, RequiresApproval           int64
 }
 
@@ -241,7 +244,7 @@ func (s *Service) validate(ctx context.Context, q *dbq.Queries, householdID int6
 		Description: strings.TrimSpace(in.Description),
 		Mode:        in.Mode,
 		StartsOn:    in.StartsOn,
-		DueTime:     in.DueTime,
+		ShowBefore:  in.ShowBefore,
 		Points:      in.Points,
 		Pence:       in.Pence,
 	}
@@ -318,10 +321,28 @@ func (s *Service) validate(ctx context.Context, q *dbq.Queries, householdID int6
 	if _, err := time.Parse(DateLayout, in.StartsOn); err != nil {
 		errs.Add("starts_on", "Choose a start date.")
 	}
-	if in.DueTime != nil {
-		if _, err := time.Parse("15:04", *in.DueTime); err != nil || len(*in.DueTime) != 5 {
-			errs.Add("due_time", "Enter a time like 17:30, or leave it blank.")
+	var ts []string
+	for _, t := range in.DueTimes {
+		t = strings.TrimSpace(t)
+		if t == "" || slices.Contains(ts, t) {
+			continue
 		}
+		if _, err := time.Parse("15:04", t); err != nil || len(t) != 5 {
+			errs.Add("due_time", "Enter times like 17:30, or leave them blank.")
+			continue
+		}
+		ts = append(ts, t)
+	}
+	slices.Sort(ts)
+	switch {
+	case len(ts) > MaxTimes:
+		errs.Add("due_time", fmt.Sprintf("Use up to %d times a day.", MaxTimes))
+	case len(ts) > 1 && out.DayMode == DayAny:
+		errs.Add("due_time", "A chore done on any one of its days can have one time.")
+	}
+	out.DueTimes = strings.Join(ts, ",")
+	if in.ShowBefore != nil && !slices.Contains(ShowBeforeOptions, *in.ShowBefore) {
+		errs.Add("show_before", "Choose when it shows on the board.")
 	}
 	if in.Points < 0 || in.Points > 100000 {
 		errs.Add("points", "Use 0 to 100,000 points.")

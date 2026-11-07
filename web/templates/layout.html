@@ -45,6 +45,21 @@
       var q = e.target.dataset && e.target.dataset.confirm;
       if (q && !confirm(q)) e.preventDefault();
     });
+    // "Another time" on the chore form adds a Done by input, up to data-max.
+    document.addEventListener("click", function (e) {
+      var btn = e.target.closest && e.target.closest("[data-add-time]");
+      if (!btn) return;
+      var box = btn.closest("[data-times]"),
+          inputs = box.querySelectorAll('input[name="due_time"]');
+      if (inputs.length >= +box.dataset.max) return;
+      var input = inputs[inputs.length - 1].cloneNode();
+      input.value = "";
+      input.setAttribute("aria-label", "Time " + (inputs.length + 1));
+      input.setAttribute("data-show-when", "day_mode=each");
+      btn.before(input);
+      input.focus();
+      if (inputs.length + 1 >= +box.dataset.max) btn.hidden = true;
+    });
   </script>
   <script>
     // Fields marked data-show-when="name=a,b" are shown only while the form

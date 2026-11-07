@@ -20,7 +20,7 @@
       {{range .Data.Pending}}
       <li class="list__row list__row--review">
         {{template "avatar" (avatar .Person "sm")}}
-        <span class="list__main"><strong>{{with .Emoji}}{{.}} {{end}}{{.Title}}</strong>
+        <span class="list__main"><strong>{{with .Emoji}}{{.}} {{end}}{{.Title}}{{with .DueTime}} · {{.}}{{end}}</strong>
           <small class="muted">{{.Person.Name}} · {{when .CompletedAt}}{{with worth .Points .Pence}} · {{.}}{{end}}</small></span>
         <span class="list__actions">
           <form method="post" action="/admin/completions/{{.ID}}/reject"><button class="btn btn--ghost" type="submit">Not done yet</button></form>
@@ -96,7 +96,7 @@
       {{range .Data.Recent}}
       <li class="list__row list__row--review">
         {{template "avatar" (avatar .Person "sm")}}
-        <span class="list__main"><strong>{{with .Emoji}}{{.}} {{end}}{{.Title}}</strong>
+        <span class="list__main"><strong>{{with .Emoji}}{{.}} {{end}}{{.Title}}{{with .DueTime}} · {{.}}{{end}}</strong>
           <small class="muted">{{.Person.Name}} · {{when .CompletedAt}}{{with worth .Points .Pence}} · {{.}}{{end}}</small></span>
         <span class="list__actions">
           {{if .Counted}}

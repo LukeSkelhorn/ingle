@@ -22,6 +22,8 @@ type choreRow struct {
 	Assignee *dbq.Person
 	People   []dbq.Person // a shared chore's chosen people
 	Schedule string
+	Times    string // "07:30 and 19:30", "" for an untimed chore
+	Shows    string // "1 hour before", "" when it shows all day
 }
 
 // Admin chores list sorts.
@@ -168,6 +170,12 @@ func (s *Server) handleChores(w http.ResponseWriter, r *http.Request) {
 	page.Rows = make([]choreRow, 0, len(list))
 	for _, c := range list {
 		row := choreRow{Chore: c, Schedule: describeSchedule(chores.ParseRecurrence(c.Rrule), c.DayMode, c.StartsOn)}
+		if ts := chores.Times(c); ts != nil {
+			row.Times = joinWords(ts, "and")
+			if c.ShowBefore != nil {
+				row.Shows = showBeforeLabel(*c.ShowBefore) + " before"
+			}
+		}
 		if c.AssigneeID != nil {
 			row.Assignee = byID[*c.AssigneeID]
 		}
@@ -230,7 +238,8 @@ type choreForm struct {
 	MonthDay         int
 	Custom           string // read-only RRULE for RepeatCustom
 	StartsOn         string
-	DueTime          string
+	DueTimes         []string
+	ShowBefore       string // "" for all day, else minutes ("60")
 	Points           int64
 	Money            string
 	RequiresApproval bool
@@ -244,6 +253,41 @@ type choreForm struct {
 }
 
 // HasPerson is used by the shared chore's people checkboxes.
+// TimeInputs are the Done by inputs to show: each time, then a blank one
+// for adding another (while there's room).
+func (f choreForm) TimeInputs() []string {
+	out := slices.Clone(f.DueTimes)
+	if len(out) < chores.MaxTimes {
+		out = append(out, "")
+	}
+	return out
+}
+
+// MaxTimes is how many Done by inputs the form allows.
+func (choreForm) MaxTimes() int { return chores.MaxTimes }
+
+// ShowBeforeOptions are the "Show it on the board" choices after All day.
+func (choreForm) ShowBeforeOptions() []showBeforeOption {
+	out := make([]showBeforeOption, len(chores.ShowBeforeOptions))
+	for i, m := range chores.ShowBeforeOptions {
+		out[i] = showBeforeOption{Value: strconv.FormatInt(m, 10), Label: showBeforeLabel(m) + " before"}
+	}
+	return out
+}
+
+type showBeforeOption struct{ Value, Label string }
+
+// showBeforeLabel is "1 hour", "2 hours" or "30 minutes".
+func showBeforeLabel(m int64) string {
+	switch {
+	case m == 60:
+		return "1 hour"
+	case m%60 == 0:
+		return strconv.FormatInt(m/60, 10) + " hours"
+	}
+	return strconv.FormatInt(m, 10) + " minutes"
+}
+
 func (f choreForm) HasPerson(id int64) bool { return slices.Contains(f.PeopleIDs, id) }
 
 // HasDay is used by the template's day checkboxes.
@@ -268,7 +312,8 @@ func (s *Server) newChoreForm(r *http.Request) (choreForm, error) {
 		Mode: chores.ModeAssigned, Repeat: chores.RepeatWeekly, DayMode: chores.DayEach,
 		Days: []time.Weekday{today.Weekday()}, MonthDay: today.Day(),
 		StartsOn: today.Format(chores.DateLayout), Money: "0.00", Emoji: newEmojiField(emoji.Chore, ""),
-		People: people, WeekOrder: chores.WeekOrder, MonthDays: monthDays,
+		ShowBefore: strconv.FormatInt(chores.DefaultShowBefore, 10),
+		People:     people, WeekOrder: chores.WeekOrder, MonthDays: monthDays,
 	}, nil
 }
 
@@ -293,8 +338,10 @@ func (s *Server) choreFormFor(r *http.Request, c dbq.Chore) (choreForm, error) {
 		f.MonthDay = rec.MonthDay
 	}
 	f.StartsOn, f.Points, f.Money = c.StartsOn, c.Points, formatMoneyInput(c.Pence)
-	if c.DueTime != nil {
-		f.DueTime = *c.DueTime
+	f.DueTimes = chores.Times(c)
+	f.ShowBefore = ""
+	if c.ShowBefore != nil {
+		f.ShowBefore = strconv.FormatInt(*c.ShowBefore, 10)
 	}
 	f.RequiresApproval = c.RequiresApproval == 1
 	f.OnTheDay = c.OnTheDay == 1
@@ -379,7 +426,21 @@ func (s *Server) readChoreForm(w http.ResponseWriter, r *http.Request, f *choreF
 		f.DayMode = chores.DayEach
 	}
 	f.StartsOn = fm.str("starts_on")
-	f.DueTime = fm.str("due_time")
+	f.DueTimes = nil
+	for _, v := range r.Form["due_time"] {
+		if v = strings.TrimSpace(v); v != "" {
+			f.DueTimes = append(f.DueTimes, v)
+		}
+	}
+	f.ShowBefore = fm.str("show_before")
+	var showBefore *int64
+	if f.ShowBefore != "" {
+		n, err := strconv.ParseInt(f.ShowBefore, 10, 64)
+		if err != nil {
+			fm.errs.Add("show_before", "Choose when it shows on the board.")
+		}
+		showBefore = &n
+	}
 	f.Points = fm.int("points", "Enter a whole number of points.")
 	f.Money = fm.str("money")
 	f.RequiresApproval = fm.checked("requires_approval")
@@ -413,7 +474,7 @@ func (s *Server) readChoreForm(w http.ResponseWriter, r *http.Request, f *choreF
 		Title: f.Title, Emoji: f.Emoji.Value, Description: f.Description, Mode: f.Mode,
 		Repeat:   chores.Recurrence{Kind: f.Repeat, Days: f.Days, MonthDay: f.MonthDay},
 		DayMode:  f.DayMode,
-		StartsOn: f.StartsOn, DueTime: fm.optStr("due_time"),
+		StartsOn: f.StartsOn, DueTimes: f.DueTimes, ShowBefore: showBefore,
 		Points: f.Points, Pence: pence, RequiresApproval: f.RequiresApproval, OnTheDay: f.OnTheDay,
 	}
 	if f.Mode == chores.ModeShared {
