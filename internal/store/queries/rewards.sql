@@ -57,22 +57,34 @@ JOIN rewards r ON r.id = d.reward_id
 WHERE d.household_id = sqlc.arg(household_id) AND d.id = sqlc.arg(id);
 
 -- name: HeldForPerson :one
--- What a person's waiting claims hold back from their balance.
+-- What a person's waiting reward claims and bank requests hold back from
+-- their balance. waiting counts the reward claims only.
 SELECT
     CAST(COALESCE(SUM(points), 0) AS INTEGER) AS points,
     CAST(COALESCE(SUM(pence), 0) AS INTEGER) AS pence,
-    CAST(COUNT(*) AS INTEGER) AS waiting
-FROM redemptions
-WHERE household_id = ? AND person_id = ? AND status = 'pending';
+    CAST(COALESCE(SUM(claim), 0) AS INTEGER) AS waiting
+FROM (
+    SELECT d.points, d.pence, 1 AS claim FROM redemptions d
+    WHERE d.household_id = sqlc.arg(household_id) AND d.person_id = sqlc.arg(person_id) AND d.status = 'pending'
+    UNION ALL
+    SELECT 0, t.pence, 0 FROM transfer_requests t
+    WHERE t.household_id = sqlc.arg(household_id) AND t.person_id = sqlc.arg(person_id) AND t.status = 'pending'
+);
 
 -- name: HeldForHousehold :many
+-- HeldForPerson for everyone.
 SELECT
     person_id,
     CAST(COALESCE(SUM(points), 0) AS INTEGER) AS points,
     CAST(COALESCE(SUM(pence), 0) AS INTEGER) AS pence,
-    CAST(COUNT(*) AS INTEGER) AS waiting
-FROM redemptions
-WHERE household_id = ? AND status = 'pending'
+    CAST(COALESCE(SUM(claim), 0) AS INTEGER) AS waiting
+FROM (
+    SELECT d.person_id, d.points, d.pence, 1 AS claim FROM redemptions d
+    WHERE d.household_id = sqlc.arg(household_id) AND d.status = 'pending'
+    UNION ALL
+    SELECT t.person_id, 0, t.pence, 0 FROM transfer_requests t
+    WHERE t.household_id = sqlc.arg(household_id) AND t.status = 'pending'
+)
 GROUP BY person_id;
 
 -- name: UpdateReward :one

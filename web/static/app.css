@@ -750,3 +750,16 @@ details.card .list { margin: 8px -20px -20px; }
   -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 56px), transparent);
   mask-image: linear-gradient(to bottom, #000 calc(100% - 56px), transparent);
 }
+
+/* My money: asking to move money to the bank. */
+.money-bank { margin: 8px 0; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; }
+.money-bank p { margin: 0; }
+.money-bank--declined { display: block; color: var(--muted); }
+.money-bank__ask { margin: 8px 0 4px; }
+.money-bank__confirm { font-size: 1.25rem; text-align: center; }
+.stepper { display: flex; align-items: center; justify-content: center; gap: 16px; margin: 12px 0; }
+.stepper__btn { min-width: 64px; min-height: 64px; font-size: 2rem; line-height: 1; border-radius: 50%; }
+.stepper__value { min-width: 6ch; text-align: center; font-size: 2.4rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.bank-request { flex-wrap: wrap; }
+.bank-request__decline { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+.bank-request__decline .field { flex: 1 1 220px; margin: 0; }

@@ -332,6 +332,8 @@ func boardErrorText(err error) (string, bool) {
 		return "That chore isn't up for grabs.", true
 	case errors.Is(err, chores.ErrNotClaimedByYou):
 		return "That's not claimed any more.", true
+	case errors.Is(err, chores.ErrTransferPending):
+		return "You've already asked. Wait for a grown-up.", true
 	case errors.Is(err, chores.ErrUndoExpired):
 		return "Too late to undo. Ask a grown-up.", true
 	case errors.Is(err, chores.ErrTooOld):

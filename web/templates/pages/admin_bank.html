@@ -1,0 +1,58 @@
+{{define "bodyclass"}}admin{{end}}
+{{define "content"}}
+{{template "admin_nav" .}}
+<main class="admin__main">
+  <h1>Bank</h1>
+  {{template "flash" .}}
+  <p class="muted">Requests to move money from Ingle to someone's real bank. Ingle never moves real money: send it in your banking app first, then approve it here and it comes off their balance in Ingle.</p>
+
+  <section>
+    <h2>Waiting</h2>
+    {{if .Data.Waiting}}
+    <ul class="list card">
+      {{range .Data.Waiting}}
+      <li class="list__row list__row--review bank-request">
+        {{template "avatar" (avatar .Person "sm")}}
+        <span class="list__main"><strong>{{money .Pence}} to {{.Person.Name}}'s bank</strong>
+          <small class="muted">Asked {{when .RequestedAt}}</small></span>
+        <span class="list__actions">
+          <form method="post" action="/admin/bank/{{.ID}}/approve"><button class="btn btn--primary" type="submit">I've sent it</button></form>
+        </span>
+        <form class="bank-request__decline" method="post" action="/admin/bank/{{.ID}}/decline">
+          <label class="field">
+            <span>Or decline, saying why</span>
+            <input name="reason" required maxlength="200" autocomplete="off" placeholder="e.g. Let's talk about it"
+                   {{- if eq $.Data.Declining .ID}} value="{{$.Data.Reason}}" autofocus{{end}}>
+            <small class="muted">{{.Person.Name}} sees this in My money.</small>
+            {{if eq $.Data.Declining .ID}}{{template "err" index $.Errors "reason"}}{{end}}
+          </label>
+          <button class="btn btn--ghost" type="submit">Decline</button>
+        </form>
+      </li>
+      {{end}}
+    </ul>
+    {{else}}
+    <p class="muted">Nothing waiting. Kids ask from My money on the board.</p>
+    {{end}}
+  </section>
+
+  {{if .Data.Recent}}
+  <section>
+    <h2>Last 30 days</h2>
+    <ul class="list card">
+      {{range .Data.Recent}}
+      <li class="list__row">
+        {{template "avatar" (avatar .Person "sm")}}
+        <span class="list__main"><strong>{{money .Pence}} to {{.Person.Name}}'s bank</strong>
+          <small class="muted">
+            {{- if eq .Status "approved"}}{{if eq .RequestedBy .ReviewedBy}}Moved by {{.ReviewedBy}}{{else}}Sent by {{.ReviewedBy}}{{end}}
+            {{- else if eq .Status "declined"}}Declined by {{.ReviewedBy}}: {{.Reason}}
+            {{- else}}Cancelled{{end}} · {{when .ReviewedAt}}</small></span>
+        <span class="tag{{if eq .Status "approved"}} tag--wait{{end}}">{{.Status}}</span>
+      </li>
+      {{end}}
+    </ul>
+  </section>
+  {{end}}
+</main>
+{{end}}

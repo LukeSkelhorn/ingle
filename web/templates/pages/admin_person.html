@@ -120,6 +120,28 @@
     </ul>
     {{end}}
   </section>
+  {{if moduleOn "money"}}
+  <section class="card stack" id="bank">
+    <h2>Move to bank</h2>
+    <p class="muted">{{$.Data.Name}} has <strong>{{money .Pence}}</strong> to spend{{if .HeldPence}} ({{money .HeldPence}} held){{end}}.
+      Send it in your banking app first, then record it here. It comes off their balance straight away.
+      {{- if not $.Data.IsAdult}} {{$.Data.Name}} can also ask from My money on the board; requests wait in <a href="/admin/bank">Bank</a>.{{end}}</p>
+    {{if gt .Pence 0}}
+    <form class="stack" method="post" action="/admin/people/{{$.Data.ID}}/bank">
+      <label class="check">
+        <input type="checkbox" name="all" value="1"{{if .PayAll}} checked{{end}}>
+        <span>All of it ({{money .Pence}})</span>
+      </label>
+      <label class="field field--short" data-show-when="all=">
+        <span>Amount</span>
+        <input name="amount" value="{{.PayOut}}" inputmode="decimal" autocomplete="off" placeholder="5.00">
+      </label>
+      {{template "err" index $.Errors "payout"}}
+      <button class="btn" type="submit">Record the move</button>
+    </form>
+    {{end}}
+  </section>
+  {{end}}
   {{end}}
   {{end}}
 

@@ -193,6 +193,9 @@ func (s *Server) funcs() template.FuncMap {
 		"dict":     dict,
 		"list":     func(v ...string) []string { return v },
 		"activity": describeActivity,
+		// activityLine is the feed's phrase for an activity row, with
+		// the amount and who for bank transfers.
+		"activityLine": s.activityLine,
 		// asset is a static file's URL with the build's asset hash, so a new
 		// build's CSS and JS are never served from an old cache.
 		"asset":         func(name string) string { return "/static/" + name + "?v=" + web.StaticVersion() },
