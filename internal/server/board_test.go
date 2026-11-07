@@ -923,3 +923,71 @@ func TestMissedDismiss(t *testing.T) {
 		t.Errorf("points = %d, want 0", b.Points)
 	}
 }
+
+func TestAdjustPointsAdmin(t *testing.T) {
+	h, wall, phone := boardHousehold(t)
+	alfie := h.person("Alfie")
+	page := "/admin/people/" + itoa(alfie.ID)
+	balance := func() int64 {
+		t.Helper()
+		return must(h.st.Q.BalanceForPerson(t.Context(), dbq.BalanceForPersonParams{HouseholdID: h.hh, PersonID: alfie.ID})).Points
+	}
+	expect(t, phone.get(page), http.StatusOK, "Adjust points", `name="amount" value="5" checked`, "Alfie has <strong class=\"points-balance\">0 pts</strong>")
+
+	// Signed-out display: refused.
+	expect(t, wall.post(page+"/points", url.Values{"direction": {"take"}, "amount": {"5"}, "reason": {"Hit his sister"}}), http.StatusSeeOther)
+
+	// A quick amount, taken away, goes below zero.
+	r := phone.post(page+"/points", url.Values{"direction": {"take"}, "amount": {"5"}, "reason": {"Hit his sister. Hitting hurts."}})
+	expect(t, r, http.StatusOK, "Took 5 points from Alfie.", "−5 pts", "Hit his sister. Hitting hurts.", `<datalist id="reason-suggestions">`)
+	if b := balance(); b != -5 {
+		t.Fatalf("balance = %d, want -5", b)
+	}
+	var entry int64
+	if err := h.st.DB.QueryRowContext(t.Context(), "SELECT MAX(id) FROM ledger_entries WHERE kind = 'manual'").Scan(&entry); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(r.body, `action="/admin/people/`+itoa(alfie.ID)+`/points/`+itoa(entry)+`/undo"`) {
+		t.Error("no undo form")
+	}
+
+	// The board shows it, reason and all.
+	expect(t, wall.get("/board"), http.StatusOK, "−5 pts")
+	expect(t, wall.get("/board/people/"+itoa(alfie.ID)), http.StatusOK, "Points changes", "−5", "Hit his sister. Hitting hurts.", "This week: −5 pts")
+
+	// Undo, then it can't be undone again.
+	expect(t, phone.post(page+"/points/"+itoa(entry)+"/undo", nil), http.StatusOK, "Undone.")
+	if b := balance(); b != 0 {
+		t.Errorf("after undo balance = %d, want 0", b)
+	}
+	expect(t, phone.post(page+"/points/"+itoa(entry)+"/undo", nil), http.StatusConflict, "can&#39;t be undone any more")
+
+	// A custom amount, given.
+	expect(t, phone.post(page+"/points", url.Values{"direction": {"give"}, "amount": {"custom"}, "amount_custom": {"12"}, "reason": {"Helped Gran with the shopping"}}),
+		http.StatusOK, "Gave 12 points to Alfie.", "&#43;12", `name="direction" value="give" checked`)
+	if b := balance(); b != 12 {
+		t.Errorf("balance = %d, want 12", b)
+	}
+
+	// Mistakes keep what was typed.
+	expect(t, phone.post(page+"/points", url.Values{"direction": {"take"}, "amount": {"custom"}, "amount_custom": {"0"}, "reason": {"Rude"}}),
+		http.StatusUnprocessableEntity, "Choose how many points", `value="Rude"`)
+	expect(t, phone.post(page+"/points", url.Values{"direction": {"take"}, "amount": {"3"}, "reason": {" "}}),
+		http.StatusUnprocessableEntity, "Choose how many points", "Say what they did and why")
+	if b := balance(); b != 12 {
+		t.Errorf("balance after errors = %d, want 12", b)
+	}
+}
+
+func TestPointsFormatting(t *testing.T) {
+	for n, want := range map[int64]string{0: "0 pts", 1: "1 pt", -1: "−1 pt", 12: "12 pts", -5: "−5 pts"} {
+		if got := pts(n); got != want {
+			t.Errorf("pts(%d) = %q, want %q", n, got, want)
+		}
+	}
+	for n, want := range map[int64]string{5: "+5", -5: "−5"} {
+		if got := signedPts(n); got != want {
+			t.Errorf("signedPts(%d) = %q, want %q", n, got, want)
+		}
+	}
+}

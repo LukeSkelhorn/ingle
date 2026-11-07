@@ -214,3 +214,65 @@ func TestSharedChoresMigrationKeepsData(t *testing.T) {
 		t.Errorf("shared chore after down = %q (%v), want pool", mode, err)
 	}
 }
+
+// The manual points migration rebuilds ledger_entries; balances must survive
+// it both ways, and 'manual' entries become plain adjustments on the way down.
+func TestManualPointsMigrationKeepsLedger(t *testing.T) {
+	st := openTest(t)
+	ctx := t.Context()
+	sub, err := fs.Sub(migrations, "migrations")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := goose.NewProvider(goose.DialectSQLite3, st.DB, sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.DownTo(ctx, 12); err != nil {
+		t.Fatalf("DownTo(12): %v", err)
+	}
+	for _, q := range []string{
+		`INSERT INTO households (id, name, created_at) VALUES (1, 'Home', 1)`,
+		`INSERT INTO people (id, household_id, name, kind, colour, created_at) VALUES (1, 1, 'Alfie', 'child', '#46A758', 1)`,
+		`INSERT INTO ledger_entries (household_id, person_id, points, pence, kind, note, created_at) VALUES (1, 1, 10, 50, 'completion', '', 1)`,
+		`INSERT INTO ledger_entries (household_id, person_id, points, pence, kind, note, created_at) VALUES (1, 1, -2, 0, 'adjustment', 'Reversed: Bins', 2)`,
+	} {
+		if _, err := st.DB.ExecContext(ctx, q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	if _, err := st.DB.ExecContext(ctx, `INSERT INTO ledger_entries (household_id, person_id, points, pence, kind, created_at) VALUES (1, 1, -1, 0, 'manual', 3)`); err == nil {
+		t.Fatal("'manual' accepted before the migration")
+	}
+	sum := func() string {
+		t.Helper()
+		var n, pts, pence int
+		if err := st.DB.QueryRowContext(ctx, `SELECT count(*), sum(points), sum(pence) FROM ledger_entries`).Scan(&n, &pts, &pence); err != nil {
+			t.Fatal(err)
+		}
+		return fmt.Sprintf("%d/%d/%d", n, pts, pence)
+	}
+	if _, err := p.Up(ctx); err != nil {
+		t.Fatalf("Up: %v", err)
+	}
+	if got := sum(); got != "2/8/50" {
+		t.Errorf("after up = %s, want 2/8/50", got)
+	}
+	if _, err := st.DB.ExecContext(ctx, `INSERT INTO ledger_entries (household_id, person_id, points, pence, kind, note, created_at) VALUES (1, 1, -5, 0, 'manual', 'Hit his sister', 3)`); err != nil {
+		t.Fatalf("manual after up: %v", err)
+	}
+	if _, err := p.DownTo(ctx, 12); err != nil {
+		t.Fatalf("DownTo(12) again: %v", err)
+	}
+	var kinds string
+	if err := st.DB.QueryRowContext(ctx, `SELECT group_concat(kind, ',') FROM (SELECT kind FROM ledger_entries ORDER BY id)`).Scan(&kinds); err != nil {
+		t.Fatal(err)
+	}
+	if got := sum(); got != "3/3/50" || kinds != "completion,adjustment,adjustment" {
+		t.Errorf("after down = %s %s", got, kinds)
+	}
+	var on int
+	if err := st.DB.QueryRowContext(ctx, `PRAGMA foreign_keys`).Scan(&on); err != nil || on != 1 {
+		t.Errorf("foreign_keys = %d (%v), want 1", on, err)
+	}
+}

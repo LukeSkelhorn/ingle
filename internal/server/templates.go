@@ -159,6 +159,14 @@ func (s *Server) funcs() template.FuncMap {
 			t := time.Unix(unix, 0)
 			return loc.FormatDate(t) + " " + loc.FormatTime(t)
 		},
+		// dayOf is a moment's local day, e.g. "Thu 5 Nov".
+		"dayOf": func(unix int64) string {
+			loc := time.UTC
+			if s.Settings != nil {
+				loc = s.Settings.Location(context.Background(), s.HouseholdID)
+			}
+			return time.Unix(unix, 0).In(loc).Format("Mon 2 Jan")
+		},
 		"weekdayShort": func(d time.Weekday) string { return d.String()[:3] },
 		// names and orNames list people: "Isla and Mum", "Luke or Sam".
 		"names":     func(ps []dbq.Person) string { return joinNames(ps, "and") },
@@ -166,6 +174,8 @@ func (s *Server) funcs() template.FuncMap {
 		"shortDate": shortDate,
 		"worth":     s.worth,
 		"pts":       pts,
+		"signedPts": signedPts,
+		"net":       s.net,
 		"percent": func(done, total int) int {
 			if total == 0 {
 				return 0
@@ -204,12 +214,43 @@ func (s *Server) worth(points, pence int64) string {
 	return strings.Join(parts, " · ")
 }
 
-// pts formats a points count: "1 pt", "12 pts".
+// pts formats a points count: "1 pt", "12 pts", "−5 pts" (with a real
+// minus sign).
 func pts(n int64) string {
+	unit := " pts"
 	if n == 1 || n == -1 {
-		return strconv.FormatInt(n, 10) + " pt"
+		unit = " pt"
 	}
-	return strconv.FormatInt(n, 10) + " pts"
+	return minus(n) + unit
+}
+
+// signedPts formats a change in points: "+5", "−5".
+func signedPts(n int64) string {
+	if n > 0 {
+		return "+" + strconv.FormatInt(n, 10)
+	}
+	return minus(n)
+}
+
+// minus formats n with a real minus sign when it's negative.
+func minus(n int64) string {
+	if n < 0 {
+		return "−" + strconv.FormatInt(-n, 10)
+	}
+	return strconv.FormatInt(n, 10)
+}
+
+// net describes a net amount that can be negative, e.g. "−5 pts · £0.50",
+// or "" if nothing. Unlike worth, negative points are shown.
+func (s *Server) net(points, pence int64) string {
+	var parts []string
+	if points != 0 {
+		parts = append(parts, pts(points))
+	}
+	if pence > 0 {
+		parts = append(parts, s.Locale.FormatMoney(pence))
+	}
+	return strings.Join(parts, " · ")
 }
 
 // dict builds a map from alternating keys and values, for passing several

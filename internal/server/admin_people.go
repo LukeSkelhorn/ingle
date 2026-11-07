@@ -58,12 +58,34 @@ type personForm struct {
 
 	Goal    int64        // the reward they're saving for, 0 for none
 	Rewards []dbq.Reward // to pick a goal from (editing only)
+
+	Points pointsPanel // the Adjust points section (editing only)
 }
+
+// pointsPanel is the person page's Points section: their balance, the
+// Adjust points form (with what was typed, after an error), the reasons to
+// suggest, their recent adjustments, and the one just made, for Undo.
+type pointsPanel struct {
+	Points, HeldPoints int64
+	Direction          string // take or give
+	Amount             string // 1, 2, 5, 10 or custom
+	Custom             string
+	Reason             string
+	Suggestions        []string
+	History            []chores.Adjustment
+	Undo               int64 // the ledger entry just made, 0 for none
+}
+
+// quickAmounts are the Adjust points form's one-tap amounts.
+var quickAmounts = []string{"1", "2", "5", "10"}
+
+func (pointsPanel) QuickAmounts() []string { return quickAmounts }
 
 func newPersonForm() personForm {
 	return personForm{
 		Kind: household.KindChild, Colour: household.Colours[0], AvatarMode: "emoji",
 		Emoji: avatar.Emojis[0], Colours: household.Colours, Emojis: avatar.Emojis,
+		Points: pointsPanel{Direction: "take", Amount: "5"},
 	}
 }
 
@@ -104,6 +126,10 @@ func (s *Server) renderPerson(w http.ResponseWriter, r *http.Request, status int
 			return
 		}
 		f.Rewards = rewards
+		if err := s.loadPointsPanel(r, &f); err != nil {
+			s.serverError(w, r, err)
+			return
+		}
 	}
 	v := s.view(r, title, f)
 	v.Nav = "people"

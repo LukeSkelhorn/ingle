@@ -279,6 +279,16 @@ button.chore__main:active { background: var(--line); }
 .person__money { margin-left: 0.3em; color: var(--muted); }
 .person__week { margin: 4px 0 0; color: var(--muted); }
 .person__sub { margin: 20px 0 8px; font-size: 1rem; }
+
+/* Bonuses and points taken away, with their reasons */
+.adjustments { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.adjustment { display: flex; gap: 12px; align-items: baseline; }
+.adjustment__points {
+  flex: none; min-width: 3.2em; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--muted);
+}
+.adjustment__points--plus { color: var(--ok-fg); }
+.adjustment__text { min-width: 0; overflow-wrap: anywhere; }
+.adjustment__text small { white-space: nowrap; }
 .rewards { list-style: none; margin: 0 0 18px; padding: 0; display: grid; gap: 8px; max-height: 45vh; overflow-y: auto; }
 .reward {
   display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px;

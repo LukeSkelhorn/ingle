@@ -188,7 +188,7 @@
   </div>
   <p class="person__balance">{{pts .Points}}{{if .Pence}} <span class="person__money">{{money .Pence}}</span>{{end}}
     {{- with worth .HeldPoints .HeldPence}} <span class="person__held">({{.}} held)</span>{{end}}</p>
-  <p class="person__week">This week: {{with worth .WeekPoints .WeekPence}}{{.}}{{else}}nothing yet{{end}}</p>
+  <p class="person__week">This week: {{with net .WeekPoints .WeekPence}}{{.}}{{else}}nothing yet{{end}}</p>
   {{with .Goal}}
   <h3 class="person__sub">Saving for</h3>
   {{template "goal" (dict "Goal" . "PersonID" $.Person.ID)}}
@@ -217,6 +217,17 @@
       <button class="btn btn--ghost reward__action" type="button" hx-disabled-elt="this"
               hx-post="/board/redemptions/{{.ID}}/cancel">Cancel</button>
       {{end}}
+    </li>
+    {{end}}
+  </ul>
+  {{end}}
+  {{if .Adjustments}}
+  <h3 class="person__sub">Points changes</h3>
+  <ul class="adjustments">
+    {{range .Adjustments}}
+    <li class="adjustment">
+      <span class="adjustment__points{{if gt .Points 0}} adjustment__points--plus{{end}}">{{signedPts .Points}}</span>
+      <span class="adjustment__text">{{.Note}} <small class="muted">{{dayOf .At.Unix}}</small></span>
     </li>
     {{end}}
   </ul>
