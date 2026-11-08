@@ -6,6 +6,15 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ## [Unreleased]
 
+## [v0.2.6] - 2026-11-08
+
+Give or take points straight from the People list.
+
+### Added
+
+- **⋯ menu on Admin › People:** each person has a ⋯ menu with **Give points**, **Take points away** and **Edit**. Give and Take open the usual Adjust points form (how many and a reason) in a pop-up, so you don't have to open each person. After saving you're back on the list, with **Undo**. ([DOM-53](https://linear.app/skeltech/issue/DOM-53))
+- **Balances on Admin › People:** each person's points, and money when they have some, show on their row.
+
 ## [v0.2.5] - 2026-11-08
 
 More room for everyone's chores: Up for grabs moves into a pop-up.

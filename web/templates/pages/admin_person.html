@@ -76,36 +76,7 @@
   <section class="card stack" id="points">
     <h2>Points</h2>
     <p class="muted">{{$.Data.Name}} has <strong class="points-balance">{{pts .Points}}</strong>{{if .HeldPoints}} ({{pts .HeldPoints}} held for a reward){{end}}.</p>
-    <form class="stack" method="post" action="/admin/people/{{$.Data.ID}}/points">
-      <fieldset class="field">
-        <legend>Adjust points</legend>
-        <div class="segmented">
-          <label><input type="radio" name="direction" value="take"{{if ne .Direction "give"}} checked{{end}}> <span>Take away</span></label>
-          <label><input type="radio" name="direction" value="give"{{if eq .Direction "give"}} checked{{end}}> <span>Give</span></label>
-        </div>
-      </fieldset>
-      <fieldset class="field">
-        <legend>How many</legend>
-        <div class="segmented">
-          {{range .QuickAmounts}}<label><input type="radio" name="amount" value="{{.}}"{{if eq $.Data.Points.Amount .}} checked{{end}}> <span>{{.}}</span></label>{{end}}
-          <label><input type="radio" name="amount" value="custom"{{if eq .Amount "custom"}} checked{{end}}> <span>Other</span></label>
-        </div>
-        {{template "err" index $.Errors "amount"}}
-      </fieldset>
-      <label class="field field--short" data-show-when="amount=custom">
-        <span>Points</span>
-        <input type="number" name="amount_custom" value="{{.Custom}}" min="1" max="1000" inputmode="numeric">
-      </label>
-      <label class="field">
-        <span>Reason</span>
-        <input name="reason" value="{{.Reason}}" required maxlength="200" autocomplete="off"
-               list="reason-suggestions" placeholder="e.g. Hit his sister. We don't hurt people.">
-        {{with .Suggestions}}<datalist id="reason-suggestions">{{range .}}<option value="{{.}}">{{end}}</datalist>{{end}}
-        <small class="muted">Say what they did and why it matters. Everyone sees this on the board.</small>
-        {{template "err" index $.Errors "reason"}}
-      </label>
-      <button class="btn" type="submit">Save</button>
-    </form>
+    {{template "points_form" (dict "PersonID" $.Data.ID "Name" $.Data.Name "Panel" . "Errors" $.Errors "From" "")}}
     {{if .History}}
     <h3>Last 30 days</h3>
     <ul class="adjustments">

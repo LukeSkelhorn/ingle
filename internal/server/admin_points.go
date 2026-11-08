@@ -57,10 +57,30 @@ func (s *Server) handleAdjustPoints(w http.ResponseWriter, r *http.Request) {
 	if in.Direction != "give" {
 		in.Direction = "take"
 	}
+	fromList := f.str("from") == fromPeople
 	again := func(status int, errs valid.Errors, flash string) {
+		if fromList {
+			s.renderPeople(w, r, status, peopleView{Adjust: &pointsDialog{Person: p, Panel: in}}, errs, flash)
+			return
+		}
 		pf := s.personFormFor(r, p)
 		pf.Points = in
 		s.renderPerson(w, r, status, pf, errs, flash)
+	}
+	// done shows a flash without the form: on the list, or on their page.
+	done := func(status int, flash string, undo int64) {
+		if fromList {
+			v := peopleView{}
+			if undo != 0 {
+				v.Undo = &peopleUndo{PersonID: p.ID, EntryID: undo}
+			}
+			s.renderPeople(w, r, status, v, nil, flash)
+			return
+		}
+		pf := s.personFormFor(r, p)
+		pf.Points.Direction = in.Direction // keep their choice for the next one
+		pf.Points.Undo = undo
+		s.renderPerson(w, r, status, pf, nil, flash)
 	}
 
 	amount := in.Amount
@@ -87,7 +107,7 @@ func (s *Server) handleAdjustPoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if errors.Is(err, chores.ErrNotFound) { // archived
-		s.renderPerson(w, r, http.StatusConflict, s.personFormFor(r, p), nil, "Restore them before changing their points.")
+		done(http.StatusConflict, "Restore them before changing their points.", 0)
 		return
 	}
 	if err != nil {
@@ -98,10 +118,7 @@ func (s *Server) handleAdjustPoints(w http.ResponseWriter, r *http.Request) {
 	if in.Direction == "take" {
 		flash = fmt.Sprintf("Took %s from %s.", pointsWord(n), p.Name)
 	}
-	pf := s.personFormFor(r, p)
-	pf.Points.Direction = in.Direction // keep their choice for the next one
-	pf.Points.Undo = entry.ID
-	s.renderPerson(w, r, http.StatusOK, pf, nil, flash)
+	done(http.StatusOK, flash, entry.ID)
 }
 
 // handleUndoAdjustment removes an adjustment made in the last few minutes.
@@ -120,19 +137,30 @@ func (s *Server) handleUndoAdjustment(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
+	if err := parseForm(w, r); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	reply := func(status int, flash string) {
+		if r.PostFormValue("from") == fromPeople {
+			s.renderPeople(w, r, status, peopleView{}, nil, flash)
+			return
+		}
+		s.renderPerson(w, r, status, s.personFormFor(r, p), nil, flash)
+	}
 	err = s.Chores.UndoAdjustment(r.Context(), s.HouseholdID, adult.ID, entryID)
 	switch {
 	case errors.Is(err, chores.ErrUndoExpired):
-		s.renderPerson(w, r, http.StatusConflict, s.personFormFor(r, p), nil, "That can't be undone any more.")
+		reply(http.StatusConflict, "That can't be undone any more.")
 		return
 	case errors.Is(err, chores.ErrNotAdult):
-		s.renderPerson(w, r, http.StatusForbidden, s.personFormFor(r, p), nil, "Only adults can change points.")
+		reply(http.StatusForbidden, "Only adults can change points.")
 		return
 	case err != nil:
 		s.serverError(w, r, err)
 		return
 	}
-	s.renderPerson(w, r, http.StatusOK, s.personFormFor(r, p), nil, "Undone.")
+	reply(http.StatusOK, "Undone.")
 }
 
 // pointsWord is "1 point" or "5 points".
