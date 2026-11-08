@@ -115,3 +115,29 @@ func TestHistoryPaging(t *testing.T) {
 		t.Error("history for nobody")
 	}
 }
+
+// A timed chore's history line carries its time; others don't.
+func TestHistoryDueTime(t *testing.T) {
+	f := newFixture(t)
+	ctx := t.Context()
+
+	at := "19:30"
+	f.chore("Brush teeth", choreOpts{assignee: &f.kid.ID, points: 1, dueTime: &at})
+	if _, err := f.svc.Complete(ctx, f.hh, f.onlyOccurrence().ID, f.kid.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.AdjustPoints(ctx, f.hh, f.adult.ID, f.kid.ID, 3, "Helped out"); err != nil {
+		t.Fatal(err)
+	}
+
+	items, _ := f.history(f.kid, 0)
+	if len(items) != 2 {
+		t.Fatalf("history = %+v", items)
+	}
+	if got := items[0]; got.Kind != "manual" || got.DueTime != "" {
+		t.Errorf("adjustment = %+v, want no time", got)
+	}
+	if got := items[1]; got.Kind != "completion" || got.Title != "Brush teeth" || got.DueTime != "19:30" {
+		t.Errorf("completion = %+v, want Brush teeth at 19:30", got)
+	}
+}

@@ -150,7 +150,7 @@
 <li class="money-line{{if eq .Kind "waiting"}} money-line--waiting{{end}}">
   <span class="money-line__text">
     {{- with .Emoji}}<span aria-hidden="true">{{.}}</span> {{end}}
-    {{- if eq .Kind "completion"}}{{or .Title "A chore"}}
+    {{- if eq .Kind "completion"}}{{or .Title "A chore"}}{{with .DueTime}} · {{.}}{{end}}
     {{- else if eq .Kind "redemption"}}{{or .Title .Note "A reward"}}
     {{- else if eq .Kind "waiting"}}{{or .Title "A reward"}} <span class="tag tag--wait">waiting</span>
     {{- else if eq .Kind "payout"}}{{money (neg .Pence)}} moved to your bank
