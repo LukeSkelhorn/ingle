@@ -124,6 +124,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /board/calendar", viewer(s.handleCalendarView))
 	mux.Handle("GET /board/calendar/day/{date}", viewer(s.handleCalendarDay))
 	mux.Handle("GET /board/calendar/chores/{id}/{date}", viewer(s.handleCalendarChore))
+	mux.Handle("GET /board/pool", viewer(s.handlePoolSheet))
 	mux.Handle("GET /board/occurrences/{id}/pick", viewer(s.handlePick))
 	mux.Handle("POST /board/occurrences/{id}/claim", viewer(s.handleClaim))
 	mux.Handle("POST /board/occurrences/{id}/complete", viewer(s.handleComplete))

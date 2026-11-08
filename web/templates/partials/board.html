@@ -11,14 +11,6 @@
     {{else}}<p class="muted">A grown-up can add people and chores in Admin.</p>{{end}}
   </div>
   {{else}}
-  <section class="pool" aria-labelledby="pool-h">
-    <h2 id="pool-h" class="pool__title">Up for grabs</h2>
-    {{if .Pool}}
-    <ul class="chores chores--pool">{{range .Pool}}{{template "card" (dict "Card" . "Adult" $.Adult)}}{{end}}</ul>
-    {{else}}
-    <p class="pool__empty">Nothing up for grabs right now.</p>
-    {{end}}
-  </section>
   <div class="columns">
     {{range $col := .Columns}}
     <section class="column" style="--person: {{.Person.Colour}}" aria-label="{{.Person.Name}}" data-person="{{.Person.ID}}">
@@ -52,6 +44,37 @@
     {{end}}
   </div>
   {{end}}
+</div>
+{{if .OOB}}{{template "pool_button" .}}{{end}}
+{{end}}
+
+{{/* The header's Up for grabs button: the count of chores in the pool,
+     red when one is overdue. Hidden (but kept, for the out-of-band swap)
+     when there are none. */}}
+{{define "pool_button"}}
+{{- if .Pool}}
+<button id="pool-btn" class="grabs-btn{{if .PoolLate}} grabs-btn--late{{end}}" type="button"
+        hx-get="/board/pool" hx-target="#sheet-body" hx-swap="innerHTML"{{if .OOB}} hx-swap-oob="true"{{end}}>
+  Up for grabs <span class="grabs-btn__count">{{len .Pool}}</span>
+</button>
+{{- else}}
+<span id="pool-btn" hidden{{if .OOB}} hx-swap-oob="true"{{end}}></span>
+{{- end}}
+{{end}}
+
+{{/* The Up for grabs sheet: the pool chores, each opening the picker.
+     data-refresh keeps it live while it's open. */}}
+{{define "pool_sheet"}}
+<div class="grabs" data-refresh="/board/pool">
+  <h2 class="picker__title" tabindex="-1" autofocus>Up for grabs</h2>
+  {{if .Pool}}
+  <ul class="chores chores--pool">{{range .Pool}}{{template "card" (dict "Card" . "Adult" $.Adult)}}{{end}}</ul>
+  {{else}}
+  <p class="muted">Nothing up for grabs right now.</p>
+  {{end}}
+  <div class="picker__actions">
+    <button class="btn btn--ghost btn--block" type="button" data-close>Close</button>
+  </div>
 </div>
 {{end}}
 
@@ -140,7 +163,8 @@
             hx-post="/board/occurrences/{{.Card.OccurrenceID}}/claim">I'll do it</button>
     <button class="btn btn--primary btn--block" type="button" hx-disabled-elt="this"
             hx-post="/board/occurrences/{{.Card.OccurrenceID}}/complete">It's done</button>
-    <button class="btn btn--ghost btn--block" type="button" data-close>Cancel</button>
+    <button class="btn btn--ghost btn--block" type="button"
+            hx-get="/board/pool" hx-target="#sheet-body" hx-swap="innerHTML">Back</button>
   </div>
 </form>
 {{end}}
