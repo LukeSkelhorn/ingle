@@ -195,7 +195,8 @@ const listLedgerHistory = `-- name: ListLedgerHistory :many
 SELECT
     l.id, l.kind, l.points, l.pence, l.note, l.created_at,
     CAST(COALESCE(ch.title, rw.title, '') AS TEXT) AS title,
-    CAST(COALESCE(ch.emoji, rw.emoji, '') AS TEXT) AS emoji
+    CAST(COALESCE(ch.emoji, rw.emoji, '') AS TEXT) AS emoji,
+    CAST(COALESCE(o.due_time, '') AS TEXT) AS due_time
 FROM ledger_entries l
 LEFT JOIN completions c ON c.id = l.completion_id
 LEFT JOIN chore_occurrences o ON o.id = c.occurrence_id
@@ -226,11 +227,12 @@ type ListLedgerHistoryRow struct {
 	CreatedAt int64  `json:"created_at"`
 	Title     string `json:"title"`
 	Emoji     string `json:"emoji"`
+	DueTime   string `json:"due_time"`
 }
 
 // A person's ledger, newest first, for My money: entries since since_unix
 // (0 for any) and older than before_id (math.MaxInt64 for any), with the
-// chore or reward each one was for.
+// chore or reward each one was for, and the chore's time (” for none).
 func (q *Queries) ListLedgerHistory(ctx context.Context, arg ListLedgerHistoryParams) ([]ListLedgerHistoryRow, error) {
 	rows, err := q.db.QueryContext(ctx, listLedgerHistory,
 		arg.HouseholdID,
@@ -255,6 +257,7 @@ func (q *Queries) ListLedgerHistory(ctx context.Context, arg ListLedgerHistoryPa
 			&i.CreatedAt,
 			&i.Title,
 			&i.Emoji,
+			&i.DueTime,
 		); err != nil {
 			return nil, err
 		}
