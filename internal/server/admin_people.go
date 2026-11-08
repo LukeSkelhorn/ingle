@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"github.com/lukeskelhorn/ingle/internal/avatar"
 	"github.com/lukeskelhorn/ingle/internal/chores"
@@ -15,23 +16,87 @@ import (
 type peopleView struct {
 	People   []dbq.Person
 	Archived []dbq.Person
+	// Balances are each active person's points and pence, by person ID.
+	Balances map[int64]dbq.BalancesForHouseholdRow
+	// Adjust is the open Give / Take points pop-up, nil when closed.
+	Adjust *pointsDialog
+	// Undo is the adjustment just made from the list, nil for none.
+	Undo *peopleUndo
 }
 
+// pointsDialog is the Adjust points pop-up on Admin › People.
+type pointsDialog struct {
+	Person dbq.Person
+	Panel  pointsPanel
+}
+
+// peopleUndo is the Undo button in the flash after adjusting from the list.
+type peopleUndo struct {
+	PersonID, EntryID int64
+}
+
+// fromPeople is the form value that sends an adjustment (or its undo) back
+// to Admin › People instead of the person's page.
+const fromPeople = "people"
+
 func (s *Server) handlePeople(w http.ResponseWriter, r *http.Request) {
+	var v peopleView
+	if id, err := strconv.ParseInt(r.URL.Query().Get("adjust"), 10, 64); err == nil && id > 0 {
+		p, err := s.Household.Person(r.Context(), s.HouseholdID, id)
+		switch {
+		case errors.Is(err, household.ErrNotFound):
+			http.NotFound(w, r)
+			return
+		case err != nil:
+			s.serverError(w, r, err)
+			return
+		}
+		if p.ArchivedAt == nil {
+			dir := r.URL.Query().Get("direction")
+			if dir != "give" {
+				dir = "take"
+			}
+			v.Adjust = &pointsDialog{Person: p, Panel: pointsPanel{Direction: dir}}
+		}
+	}
+	s.renderPeople(w, r, http.StatusOK, v, nil, "")
+}
+
+// renderPeople renders Admin › People, with the Adjust points pop-up open
+// when v.Adjust is set.
+func (s *Server) renderPeople(w http.ResponseWriter, r *http.Request, status int, v peopleView, errs valid.Errors, flash string) {
 	ctx := r.Context()
-	people, err := s.Household.People(ctx, s.HouseholdID)
+	var err error
+	if v.People, err = s.Household.People(ctx, s.HouseholdID); err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	if v.Archived, err = s.Household.ArchivedPeople(ctx, s.HouseholdID); err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	balances, err := s.Store.Q.BalancesForHousehold(ctx, s.HouseholdID)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	archived, err := s.Household.ArchivedPeople(ctx, s.HouseholdID)
-	if err != nil {
-		s.serverError(w, r, err)
-		return
+	v.Balances = make(map[int64]dbq.BalancesForHouseholdRow, len(balances))
+	for _, b := range balances {
+		v.Balances[b.PersonID] = b
 	}
-	v := s.view(r, "People", peopleView{People: people, Archived: archived})
-	v.Nav = "people"
-	s.render(w, r, http.StatusOK, "admin_people", v)
+	if v.Adjust != nil {
+		if v.Adjust.Panel.Suggestions, err = s.Chores.ReasonSuggestions(ctx, s.HouseholdID); err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+		b := v.Balances[v.Adjust.Person.ID]
+		v.Adjust.Panel.Points = b.Points
+	}
+	page := s.view(r, "People", v)
+	page.Nav = "people"
+	page.Errors = errs
+	page.Flash = flash
+	s.render(w, r, status, "admin_people", page)
 }
 
 // personForm is the person edit page: the profile form plus, for adults,

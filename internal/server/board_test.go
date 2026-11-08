@@ -945,6 +945,72 @@ func TestMissedDismiss(t *testing.T) {
 	}
 }
 
+// Give / Take points from the ⋯ menu on Admin › People: the pop-up, its
+// mistakes, the flash with Undo, and the balance on each row.
+func TestAdjustPointsFromPeopleList(t *testing.T) {
+	h, _, phone := boardHousehold(t)
+	alfie := h.person("Alfie")
+	id := itoa(alfie.ID)
+	balance := func() int64 {
+		t.Helper()
+		return must(h.st.Q.BalanceForPerson(t.Context(), dbq.BalanceForPersonParams{HouseholdID: h.hh, PersonID: alfie.ID})).Points
+	}
+
+	// The list: each row has a balance and a ⋯ menu; no pop-up yet.
+	r := phone.get("/admin/people")
+	expect(t, r, http.StatusOK, `class="list__balance">0 pts</span>`, `aria-label="More for Alfie"`,
+		`href="/admin/people?adjust=`+id+`&amp;direction=give">Give points`,
+		`href="/admin/people?adjust=`+id+`&amp;direction=take">Take points away`,
+		`href="/admin/people/`+id+`">Edit`)
+	if strings.Contains(r.body, `id="adjust"`) {
+		t.Error("pop-up open without ?adjust")
+	}
+
+	// Give points opens the pop-up with Give chosen.
+	expect(t, phone.get("/admin/people?adjust="+id+"&direction=give"), http.StatusOK,
+		`id="adjust"`, "Give points to Alfie", `name="direction" value="give" checked`,
+		`<input type="hidden" name="from" value="people">`, `action="/admin/people/`+id+`/points"`)
+	expect(t, phone.get("/admin/people?adjust="+id+"&direction=take"), http.StatusOK,
+		"Take points from Alfie", `name="direction" value="take" checked`)
+	expect(t, phone.get("/admin/people?adjust=99999"), http.StatusNotFound)
+
+	// A mistake keeps the pop-up open with what was typed.
+	r = phone.post("/admin/people/"+id+"/points", url.Values{"from": {"people"}, "direction": {"give"}, "amount": {"5"}, "reason": {" "}})
+	expect(t, r, http.StatusUnprocessableEntity, `id="adjust"`, "Say what they did and why", `name="amount" value="5" checked`)
+	if b := balance(); b != 0 {
+		t.Fatalf("balance after a mistake = %d, want 0", b)
+	}
+
+	// Saved: back on the list, no pop-up, flash with Undo, new balance.
+	r = phone.post("/admin/people/"+id+"/points", url.Values{"from": {"people"}, "direction": {"give"}, "amount": {"5"}, "reason": {"Tidied without being asked"}})
+	expect(t, r, http.StatusOK, "<h1>People</h1>", "Gave 5 points to Alfie.", `class="list__balance">5 pts</span>`)
+	if strings.Contains(r.body, `id="adjust"`) {
+		t.Error("pop-up still open after saving")
+	}
+	if b := balance(); b != 5 {
+		t.Fatalf("balance = %d, want 5", b)
+	}
+	var entry int64
+	if err := h.st.DB.QueryRowContext(t.Context(), "SELECT MAX(id) FROM ledger_entries WHERE kind = 'manual'").Scan(&entry); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(r.body, `action="/admin/people/`+id+`/points/`+itoa(entry)+`/undo"`) {
+		t.Error("no undo form on the list")
+	}
+
+	// Undo from the list returns to the list.
+	r = phone.post("/admin/people/"+id+"/points/"+itoa(entry)+"/undo", url.Values{"from": {"people"}})
+	expect(t, r, http.StatusOK, "<h1>People</h1>", "Undone.", `class="list__balance">0 pts</span>`)
+	if b := balance(); b != 0 {
+		t.Errorf("after undo balance = %d, want 0", b)
+	}
+
+	// Money shows too, once they have some.
+	occ := h.occurrence("Hoover the lounge")
+	expect(t, phone.post("/board/occurrences/"+itoa(occ.ID)+"/complete", url.Values{"person": {id}}), http.StatusOK)
+	expect(t, phone.get("/admin/people"), http.StatusOK, `class="list__balance">5 pts · £0.50</span>`)
+}
+
 func TestAdjustPointsAdmin(t *testing.T) {
 	h, wall, phone := boardHousehold(t)
 	alfie := h.person("Alfie")
