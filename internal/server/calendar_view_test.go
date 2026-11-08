@@ -30,7 +30,7 @@ func TestBoardCalendar(t *testing.T) {
 	expect(t, r, http.StatusOK, "29 Jun – 5 Jul", `aria-current="date"`, "Wed 1 Jul",
 		"Feed the cat", "08:00", "Alfie", "Hoover the lounge", "Up for grabs",
 		"09:00</span> <span class=\"cal-item__title\">Swimming", "Camping",
-		`hx-get="/board/calendar/chores/`+itoa(h.chore("Feed the cat").ID)+`/2026-07-01"`,
+		`hx-get="/board/calendar/chores/`+itoa(h.chore("Feed the cat").ID)+`/2026-07-01?person=`+itoa(h.person("Alfie").ID)+`&amp;at=08:00"`,
 		`style="--item: #46A758"`)
 	if n := strings.Count(r.body, ">Camping<"); n != 2 {
 		t.Errorf("two-day event shows %d times, want 2", n)

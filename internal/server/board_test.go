@@ -991,3 +991,146 @@ func TestPointsFormatting(t *testing.T) {
 		}
 	}
 }
+
+func TestChoreTimes(t *testing.T) {
+	h, wall, phone := boardHousehold(t)
+	alfie := h.person("Alfie")
+	form := url.Values{
+		"title": {"Brush teeth"}, "mode": {"assigned"}, "assignee_id": {itoa(alfie.ID)}, "repeat": {"daily"},
+		"starts_on": {"2026-07-01"}, "points": {"1"}, "due_time": {"19:30", "07:30", ""}, "show_before": {"60"},
+	}
+	// The new-chore form starts at an hour before.
+	expect(t, phone.get("/admin/chores/new"), http.StatusOK, `<option value="60" selected>1 hour before</option>`, "+ Another time")
+	expectRedirect(t, phone.post("/admin/chores", form), "/admin/chores")
+	teeth := h.chore("Brush teeth")
+	if teeth.DueTimes != "07:30,19:30" || teeth.ShowBefore == nil || *teeth.ShowBefore != 60 {
+		t.Fatalf("saved %q / %v", teeth.DueTimes, teeth.ShowBefore)
+	}
+	expect(t, phone.get("/admin/chores"), http.StatusOK, "by 07:30 and 19:30 · shows 1 hour before")
+	expect(t, phone.get("/admin/chores/"+itoa(teeth.ID)), http.StatusOK,
+		`name="due_time" value="07:30"`, `name="due_time" value="19:30"`, `<option value="60" selected>`)
+
+	// A flexible chore can only have one time.
+	bad := url.Values{
+		"title": {"Wash the car"}, "mode": {"assigned"}, "assignee_id": {itoa(alfie.ID)}, "repeat": {"weekly"},
+		"days": {"2", "4"}, "day_mode": {"any"}, "starts_on": {"2026-07-01"}, "due_time": {"10:00", "15:00"},
+	}
+	expect(t, phone.post("/admin/chores", bad), http.StatusUnprocessableEntity, "can have one time")
+
+	// 00:30 local: neither is on the board yet, and the board knows when to
+	// look again (06:30, six hours away).
+	r := wall.get("/board")
+	if col := section(r.body, "Alfie"); strings.Contains(col, "Brush teeth") {
+		t.Errorf("00:30 column shows Brush teeth: %s", col)
+	}
+	expect(t, r, http.StatusOK, `data-next-in="21601"`)
+
+	h.advance(6 * time.Hour) // 06:30
+	col := section(wall.get("/board").body, "Alfie")
+	if !strings.Contains(col, "by 07:30") || strings.Contains(col, "by 19:30") {
+		t.Errorf("06:30 column: %s", col)
+	}
+	var morning int64
+	if err := h.st.DB.QueryRowContext(t.Context(),
+		"SELECT id FROM chore_occurrences WHERE chore_id = ? AND due_on = '2026-07-01' AND due_time = '07:30'", teeth.ID).Scan(&morning); err != nil {
+		t.Fatal(err)
+	}
+	expect(t, wall.post("/board/occurrences/"+itoa(morning)+"/complete", nil), http.StatusOK)
+
+	h.advance(12 * time.Hour) // 18:30
+	col = section(wall.get("/board").body, "Alfie")
+	if !strings.Contains(col, "by 19:30") {
+		t.Errorf("18:30 column: %s", col)
+	}
+	expect(t, phone.get("/admin/completions"), http.StatusOK, "Brush teeth · 07:30")
+}
+
+func TestEachChore(t *testing.T) {
+	h, wall, phone := boardHousehold(t)
+	mum, alfie, isla := h.person("Mum"), h.person("Alfie"), h.person("Isla")
+	expect(t, phone.get("/admin/chores/new"), http.StatusOK, `value="each"`, "Each of these people", `name="adult_points"`)
+
+	// Nobody chosen.
+	expect(t, phone.post("/admin/chores", url.Values{
+		"title": {"Exercise"}, "mode": {"each"}, "each_who": {"chosen"}, "repeat": {"daily"}, "starts_on": {"2026-07-01"},
+	}), http.StatusUnprocessableEntity, "Choose who does it, or Everyone.")
+
+	expectRedirect(t, phone.post("/admin/chores", url.Values{
+		"title": {"Brush teeth"}, "mode": {"each"}, "each_who": {"everyone"}, "repeat": {"daily"},
+		"starts_on": {"2026-07-01"}, "points": {"2"}, "money": {"0.10"}, "adult_points": {"1"},
+	}), "/admin/chores")
+	expectRedirect(t, phone.post("/admin/chores", url.Values{
+		"title": {"Exercise"}, "mode": {"each"}, "each_who": {"chosen"}, "each_ids": {itoa(mum.ID), itoa(isla.ID)},
+		// people_ids belong to "Any of these people" and are ignored here.
+		"people_ids": {itoa(alfie.ID)},
+		"repeat":     {"daily"}, "starts_on": {"2026-07-01"}, "points": {"3"}, "adult_points": {"2"},
+	}), "/admin/chores")
+	teeth, exercise := h.chore("Brush teeth"), h.chore("Exercise")
+	if teeth.Mode != "each" || teeth.ForEveryone != 1 || teeth.AdultPoints != 1 || teeth.Pence != 10 {
+		t.Fatalf("teeth = %+v", teeth)
+	}
+	expect(t, phone.get("/admin/chores"), http.StatusOK, "Everyone · Every day", "Each: Mum and Isla · Every day")
+	expect(t, phone.get("/admin/chores/"+itoa(exercise.ID)), http.StatusOK,
+		`name="each_who" value="chosen" checked`, `name="each_ids" value="`+itoa(mum.ID)+`" checked`,
+		`name="each_ids" value="`+itoa(isla.ID)+`" checked`, `name="adult_points" value="2"`)
+	expect(t, phone.get("/admin/chores/"+itoa(teeth.ID)), http.StatusOK, `name="each_who" value="everyone" checked`)
+	// Alfie's filter includes the Everyone chore, not Exercise.
+	if body := phone.get("/admin/chores?person=" + itoa(alfie.ID)).body; !strings.Contains(body, "Brush teeth") || strings.Contains(body, "Exercise") {
+		t.Errorf("Alfie's chores list:\n%s", body)
+	}
+
+	// On the board: everyone has their own, worth what they'd earn.
+	r := wall.get("/board")
+	for _, p := range []dbq.Person{mum, alfie, isla} {
+		if !strings.Contains(section(r.body, p.Name), "Brush teeth") {
+			t.Errorf("%s has no Brush teeth", p.Name)
+		}
+	}
+	if strings.Contains(section(r.body, "Alfie"), "Exercise") || strings.Contains(poolOf(r.body), "Brush teeth") {
+		t.Error("Exercise shown for Alfie, or Brush teeth up for grabs")
+	}
+	if mumCol := section(r.body, "Mum"); strings.Contains(mumCol, "£0.10") || !strings.Contains(mumCol, ">1 pt<") {
+		t.Errorf("Mum's Brush teeth should be 1 pt and no money:\n%s", mumCol)
+	}
+	if !strings.Contains(section(r.body, "Alfie"), "2 pts · £0.10") {
+		t.Errorf("Alfie's Brush teeth should be 2 pts · £0.10")
+	}
+
+	copyOf := func(p dbq.Person) int64 {
+		var id int64
+		if err := h.st.DB.QueryRowContext(t.Context(),
+			"SELECT id FROM chore_occurrences WHERE chore_id = ? AND due_on = '2026-07-01' AND assignee_id = ?", teeth.ID, p.ID).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	expect(t, wall.post("/board/occurrences/"+itoa(copyOf(alfie))+"/complete", nil), http.StatusOK)
+	r = wall.get("/board")
+	if !strings.Contains(section(r.body, "Isla"), "Brush teeth") {
+		t.Error("Alfie doing his took Isla's off")
+	}
+
+	// Someone new gets the Everyone chore straight away.
+	expectPersonCreated(t, phone.post("/admin/people", url.Values{
+		"name": {"Dad"}, "kind": {"adult"}, "colour": {"#4A90D9"}, "avatar_mode": {"none"}, "sort_order": {"3"},
+	}))
+	if !strings.Contains(section(wall.get("/board").body, "Dad"), "Brush teeth") {
+		t.Error("Dad has no Brush teeth")
+	}
+	// Archiving Isla takes her copies still to do with her, and her off Exercise.
+	expectRedirect(t, phone.post("/admin/people/"+itoa(isla.ID)+"/archive", nil), "/admin/people")
+	var left int
+	if err := h.st.DB.QueryRowContext(t.Context(),
+		"SELECT count(*) FROM chore_occurrences WHERE for_person = ? AND status = 'open'", isla.ID).Scan(&left); err != nil {
+		t.Fatal(err)
+	}
+	if left != 0 {
+		t.Errorf("Isla has %d open copies left", left)
+	}
+	expect(t, phone.get("/admin/chores"), http.StatusOK, "Each: Mum · Every day")
+
+	// The calendar sheet opens the copy tapped.
+	expect(t, wall.get("/board/calendar"), http.StatusOK,
+		`/board/calendar/chores/`+itoa(teeth.ID)+`/2026-07-02?person=`+itoa(mum.ID)+`&amp;at="`)
+	expect(t, wall.get("/board/calendar/chores/"+itoa(teeth.ID)+"/2026-07-02?person="+itoa(alfie.ID)), http.StatusOK, "Alfie", "2 pts · £0.10")
+}

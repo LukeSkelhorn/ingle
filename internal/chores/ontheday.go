@@ -53,7 +53,7 @@ func onTheDayCutoff(onTheDay int64, dueOn string, dueTime *string, loc *time.Loc
 
 // tooLate reports whether occurrence occ of chore c is past its cutoff.
 func (s *Service) tooLate(ctx context.Context, householdID int64, c dbq.Chore, occ dbq.ChoreOccurrence) bool {
-	at, ok := onTheDayCutoff(c.OnTheDay, occ.DueOn, c.DueTime, s.loc(ctx, householdID), s.dayStart(ctx, householdID))
+	at, ok := onTheDayCutoff(c.OnTheDay, occ.DueOn, optTime(occ.DueTime), s.loc(ctx, householdID), s.dayStart(ctx, householdID))
 	return ok && !s.now().Before(at)
 }
 
@@ -105,12 +105,12 @@ func (s *Service) Missed(ctx context.Context, householdID int64, boardDay time.T
 		if r.Status != StatusOpen && r.Status != StatusClaimed {
 			continue
 		}
-		at, ok := onTheDayCutoff(r.OnTheDay, r.DueOn, r.DueTime, loc, dayStart)
+		at, ok := onTheDayCutoff(r.OnTheDay, r.DueOn, optTime(r.DueTime), loc, dayStart)
 		if !ok || now.Before(at) {
 			continue
 		}
 		m := MissedDetail{
-			OccurrenceID: r.ID, Title: r.Title, Emoji: r.Emoji, DueOn: r.DueOn, DueTime: r.DueTime,
+			OccurrenceID: r.ID, Title: r.Title, Emoji: r.Emoji, DueOn: r.DueOn, DueTime: optTime(r.DueTime),
 			Points: r.Points, Pence: r.Pence,
 		}
 		owner := r.AssigneeID
@@ -124,6 +124,7 @@ func (s *Service) Missed(ctx context.Context, householdID int64, boardDay time.T
 				continue // archived since
 			}
 			m.Person = &p
+			m.Points, m.Pence = Earns(r.Mode, p.Kind, r.Points, r.Pence, r.AdultPoints)
 		case r.Mode == ModeShared:
 			for _, id := range shared[r.ChoreID] {
 				if p, ok := byID[id]; ok {

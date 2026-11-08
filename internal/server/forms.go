@@ -32,13 +32,6 @@ func (f *form) str(name string) string { return strings.TrimSpace(f.r.FormValue(
 // raw returns the value untrimmed (passwords).
 func (f *form) raw(name string) string { return f.r.FormValue(name) }
 
-func (f *form) optStr(name string) *string {
-	if v := f.str(name); v != "" {
-		return &v
-	}
-	return nil
-}
-
 func (f *form) checked(name string) bool { return f.r.FormValue(name) != "" }
 
 func (f *form) int(name, msg string) int64 {

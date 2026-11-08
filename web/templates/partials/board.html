@@ -104,7 +104,7 @@
 {{with $e}}<span class="chore__emoji" aria-hidden="true">{{.}}</span>{{end}}
 <span class="chore__text">
   <span class="chore__title">{{.Title}}</span>
-  <span class="chore__meta">{{if .Pending}}<span class="tag tag--wait">Waiting for a grown-up</span>{{else}}Done{{end}}</span>
+  <span class="chore__meta">{{if .Pending}}<span class="tag tag--wait">Waiting for a grown-up</span>{{else}}Done{{end}}{{with .DueTime}} · {{.}}{{end}}</span>
 </span>
 {{end}}{{end}}
 

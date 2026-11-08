@@ -1,8 +1,8 @@
 -- name: CreateChore :one
 INSERT INTO chores (
     household_id, title, emoji, description, mode, assignee_id, rrule, starts_on,
-    due_time, points, pence, requires_approval, created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    due_times, show_before, points, pence, requires_approval, created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING *;
 
 -- name: GetChore :one
@@ -16,7 +16,7 @@ ORDER BY title;
 -- name: UpdateChore :one
 UPDATE chores SET
     title = ?, emoji = ?, description = ?, mode = ?, assignee_id = ?, rrule = ?, starts_on = ?,
-    due_time = ?, points = ?, pence = ?, requires_approval = ?, updated_at = ?
+    due_times = ?, show_before = ?, points = ?, pence = ?, requires_approval = ?, updated_at = ?
 WHERE household_id = ? AND id = ?
 RETURNING *;
 
@@ -26,6 +26,10 @@ RETURNING *;
 
 -- name: SetChoreOnTheDay :one
 UPDATE chores SET on_the_day = ? WHERE household_id = ? AND id = ?
+RETURNING *;
+
+-- name: SetChoreEach :one
+UPDATE chores SET for_everyone = ?, adult_points = ? WHERE household_id = ? AND id = ?
 RETURNING *;
 
 -- name: ArchiveChore :exec

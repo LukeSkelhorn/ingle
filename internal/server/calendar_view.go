@@ -333,7 +333,9 @@ func (s *Server) handleCalendarChore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	date := d.Format(chores.DateLayout)
-	c, ch, err := s.Chores.ChoreOn(r.Context(), s.HouseholdID, s.boardDay(r), id, date)
+	pick := chores.CalPick{At: r.URL.Query().Get("at")}
+	pick.PersonID, _ = strconv.ParseInt(r.URL.Query().Get("person"), 10, 64)
+	c, ch, err := s.Chores.ChoreOn(r.Context(), s.HouseholdID, s.boardDay(r), id, date, pick)
 	if errors.Is(err, chores.ErrNotFound) {
 		s.boardFailed(w, r, "That chore isn't on the calendar any more.")
 		return
