@@ -6,6 +6,8 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ## [Unreleased]
 
+## [v0.3.1] - 2026-11-09
+
 ### Fixed
 
 - **Choosing modules:** the card on Admin home that asks you to choose your modules now names all of them, including **My money**. It used to list only calendar, photos and rewards. ([DOM-68](https://linear.app/skeltech/issue/DOM-68))
