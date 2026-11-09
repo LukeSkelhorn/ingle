@@ -48,7 +48,7 @@ func TestModulesPage(t *testing.T) {
 	}
 	h.srv.Modules.Invalidate(h.hh)
 	r = phone.get("/admin")
-	expect(t, r, http.StatusOK, "Choose modules", `href="/admin/rewards"`, `href="/admin/calendars"`)
+	expect(t, r, http.StatusOK, "Choose modules", "switch whole features off: Rewards, My money, Photos and Calendar.", `href="/admin/rewards"`, `href="/admin/calendars"`)
 	expect(t, phone.get("/admin/modules"), http.StatusOK, "Everything is on until you save this page", `value="photos" checked`)
 
 	// Saving once answers it.

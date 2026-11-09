@@ -6,6 +6,10 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Choosing modules:** the card on Admin home that asks you to choose your modules now names all of them, including **My money**. It used to list only calendar, photos and rewards. ([DOM-68](https://linear.app/skeltech/issue/DOM-68))
+
 ## [v0.3.0] - 2026-11-09
 
 Kids' money: each child gets their own PIN and a private My money on the wall, can ask for money to go to their real bank, and you can switch whole features on or off.

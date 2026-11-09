@@ -24,8 +24,11 @@ type adminHome struct {
 	StaleBanks []chores.StaleBank
 	// ModulesChosen is false until Admin › Modules has been saved once.
 	ModulesChosen bool
-	Lock          lockView
-	Activity      []dbq.ListRecentActivityWithActorRow
+	// ModuleNames lists every module, e.g. "Rewards, My money, Photos and
+	// Calendar", for the card shown until they're chosen.
+	ModuleNames string
+	Lock        lockView
+	Activity    []dbq.ListRecentActivityWithActorRow
 }
 
 func (s *Server) handleAdminHome(w http.ResponseWriter, r *http.Request) {
@@ -73,6 +76,14 @@ func (s *Server) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
+	var names string
+	if !mods.Chosen {
+		var ids []string
+		for _, m := range s.Modules.Registry().All() {
+			ids = append(ids, m.ID())
+		}
+		names = s.moduleNames(ids)
+	}
 	var bank int
 	var stale []chores.StaleBank
 	if s.moduleOn(ctx, modMoney) {
@@ -87,7 +98,7 @@ func (s *Server) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 	}
 	v := s.view(r, "Admin", adminHome{
 		People: len(people), Chores: len(chs), Rewards: len(rewards), Pending: len(pending) + len(claims), Bank: bank, StaleBanks: stale,
-		ModulesChosen: mods.Chosen, Lock: lv, Activity: act,
+		ModulesChosen: mods.Chosen, ModuleNames: names, Lock: lv, Activity: act,
 	})
 	v.Nav = "home"
 	s.render(w, r, http.StatusOK, "admin_home", v)
