@@ -23,6 +23,23 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 - This release has database migrations (new tables for modules, bank requests and bank balances). Ingle takes care of them on start. Nothing changes after upgrading: every module stays on, and **Admin** asks you to choose your modules until you save **Admin › Modules** once.
 - **My money** is on after upgrading. Changing a child to an adult in **Admin › People** removes their PIN, so it never starts unlocking admin; set them a new one.
 
+## [v0.2.6] - 2026-11-08
+
+Give or take points straight from the People list.
+
+### Added
+
+- **⋯ menu on Admin › People:** each person has a ⋯ menu with **Give points**, **Take points away** and **Edit**. Give and Take open the usual Adjust points form (how many and a reason) in a pop-up, so you don't have to open each person. After saving you're back on the list, with **Undo**. ([DOM-53](https://linear.app/skeltech/issue/DOM-53))
+- **Balances on Admin › People:** each person's points, and money when they have some, show on their row.
+
+## [v0.2.5] - 2026-11-08
+
+More room for everyone's chores: Up for grabs moves into a pop-up.
+
+### Changed
+
+- **Up for grabs** is now a button next to the household name, with how many chores are up for grabs (red when one is overdue). Tap it to see them; tapping a chore asks **Who's doing this?** as before, and **Back** returns to the list. The button hides when nothing is up for grabs, so the person columns get the whole board. ([DOM-51](https://linear.app/skeltech/issue/DOM-51))
+
 ## [v0.2.4] - 2026-11-07
 
 One chore for everyone: each person ticks off their own.

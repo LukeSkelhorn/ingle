@@ -74,20 +74,30 @@ func section(body, name string) string {
 	return rest
 }
 
+// poolOf returns the chores in an Up for grabs sheet (GET /board/pool).
 func poolOf(body string) string {
-	i := strings.Index(body, `class="pool"`)
-	j := strings.Index(body, `class="columns"`)
-	if i < 0 || j < i {
+	i := strings.Index(body, `class="grabs"`)
+	if i < 0 {
 		return ""
 	}
-	return body[i:j]
+	return body[i:]
 }
 
 func TestBoardShowsColumnsAndPool(t *testing.T) {
 	_, wall, _ := boardHousehold(t)
 	r := wall.get("/")
-	expect(t, r, http.StatusOK, "Up for grabs", "Hoover the lounge", "5 pts · £0.50",
+	expect(t, r, http.StatusOK, `id="pool-btn"`, "Up for grabs", `<span class="grabs-btn__count">1</span>`,
 		`id="board"`, "/board/events", `id="sheet"`)
+	// The pool is in the sheet, not on the board.
+	if strings.Contains(r.body, "Hoover the lounge") {
+		t.Error("pool chore shown on the board")
+	}
+	pool := poolOf(wall.get("/board/pool").body)
+	for _, want := range []string{"Up for grabs", "Hoover the lounge", "5 pts · £0.50", `data-refresh="/board/pool"`} {
+		if !strings.Contains(pool, want) {
+			t.Errorf("pool sheet lacks %q\n%s", want, pool)
+		}
+	}
 	alfie := section(r.body, "Alfie")
 	for _, want := range []string{"🦖", "Feed the cat", "by 08:00", "0 of 1 done today", "0 pts"} {
 		if !strings.Contains(alfie, want) {
@@ -101,13 +111,14 @@ func TestBoardShowsColumnsAndPool(t *testing.T) {
 	if !strings.Contains(section(r.body, "Isla"), "Nothing today.") {
 		t.Error("Isla's empty column has no empty state")
 	}
-	expect(t, wall.get("/board"), http.StatusOK, `id="board"`, "Feed the cat")
+	// A board refresh carries the header button out of band.
+	expect(t, wall.get("/board"), http.StatusOK, `id="board"`, "Feed the cat", `id="pool-btn"`, `hx-swap-oob="true"`)
 }
 
 func TestBoardStrangerSeesNothing(t *testing.T) {
 	h, _, _ := boardHousehold(t)
 	stranger := h.device()
-	for _, p := range []string{"/board", "/board/events", "/board/occurrences/1/pick", "/board/people/1", "/board/redemptions/1/review"} {
+	for _, p := range []string{"/board", "/board/events", "/board/pool", "/board/occurrences/1/pick", "/board/people/1", "/board/redemptions/1/review"} {
 		expectRedirect(t, stranger.get(p), "/signin")
 	}
 	for _, p := range []string{"/board/occurrences/1/complete", "/board/rewards/1/claim", "/board/redemptions/1/approve", "/board/redemptions/1/cancel", "/board/people/1/goal", "/board/people/1/goal/clear"} {
@@ -171,7 +182,8 @@ func TestBoardPoolPickClaimRelease(t *testing.T) {
 	expect(t, wall.post(base+"/complete", nil), http.StatusConflict)
 
 	r = wall.post(base+"/claim", url.Values{"person": {itoa(isla.ID)}})
-	expect(t, r, http.StatusOK, "Nothing up for grabs right now.")
+	expect(t, r, http.StatusOK, `<span id="pool-btn" hidden hx-swap-oob="true"></span>`)
+	expect(t, wall.get("/board/pool"), http.StatusOK, "Nothing up for grabs right now.")
 	if !strings.Contains(section(r.body, "Isla"), "Hoover the lounge") || !strings.Contains(section(r.body, "Isla"), "Give back") {
 		t.Errorf("claimed chore not in Isla's column\n%s", section(r.body, "Isla"))
 	}
@@ -185,18 +197,26 @@ func TestBoardPoolPickClaimRelease(t *testing.T) {
 	if tt := toastOf(t, r); tt.Message != "Someone's already on that one." {
 		t.Errorf("toast = %+v", tt)
 	}
-	expect(t, phone.get(base+"/pick"), http.StatusConflict)
+	// A stale pick goes back to the fresh list, not the board.
+	r = phone.get(base + "/pick")
+	expect(t, r, http.StatusConflict, `class="grabs"`, "Nothing up for grabs right now.")
+	if strings.Contains(r.body, `id="board"`) {
+		t.Error("stale pick sent the board into the sheet")
+	}
+	if tt := toastOf(t, r); tt.Message != "Someone's already on that one." {
+		t.Errorf("stale pick toast = %+v", tt)
+	}
 
 	// Give it back.
 	r = wall.post(base+"/release", nil)
-	expect(t, r, http.StatusOK)
-	if !strings.Contains(poolOf(r.body), "Hoover the lounge") {
-		t.Errorf("released chore not back in the pool\n%s", poolOf(r.body))
+	expect(t, r, http.StatusOK, `<span class="grabs-btn__count">1</span>`)
+	if pool := poolOf(wall.get("/board/pool").body); !strings.Contains(pool, "Hoover the lounge") {
+		t.Errorf("released chore not back in the pool\n%s", pool)
 	}
 
 	// Done straight from the pool, from a phone, by Alfie.
 	r = phone.post(base+"/complete", url.Values{"person": {itoa(alfie.ID)}})
-	expect(t, r, http.StatusOK, "Nothing up for grabs right now.", "5 pts · £0.50")
+	expect(t, r, http.StatusOK, `<span id="pool-btn" hidden hx-swap-oob="true"></span>`, "5 pts · £0.50")
 	if !strings.Contains(section(r.body, "Alfie"), "Hoover the lounge") {
 		t.Error("done pool chore not shown under Alfie")
 	}
@@ -773,7 +793,7 @@ func TestBoardSharedChore(t *testing.T) {
 			t.Errorf("%s's column has no School run tapping as them:\n%s", p.Name, sec)
 		}
 	}
-	if strings.Contains(section(r.body, "Alfie"), "School run") || strings.Contains(poolOf(r.body), "School run") {
+	if strings.Contains(section(r.body, "Alfie"), "School run") || strings.Contains(poolOf(wall.get("/board/pool").body), "School run") {
 		t.Error("School run shown for Alfie or in Up for grabs")
 	}
 	if !strings.Contains(section(r.body, "Mum"), `aria-label="Shared with Isla"`) {
@@ -835,7 +855,8 @@ func TestBoardOnTheDay(t *testing.T) {
 
 	// 00:30 BST: on the board until 08:00, refreshing then.
 	r = wall.get("/board")
-	expect(t, r, http.StatusOK, "Until 08:00", "Today only", `data-next-in="27001"`)
+	expect(t, r, http.StatusOK, "Until 08:00", `data-next-in="27001"`)
+	expect(t, wall.get("/board/pool"), http.StatusOK, "Milk out", "Today only")
 	if strings.Contains(section(r.body, "Alfie"), "by 08:00</span><span class=\"chip\">3") {
 		t.Error("shows both by and until")
 	}
@@ -853,7 +874,7 @@ func TestBoardOnTheDay(t *testing.T) {
 
 	// Next day it's under Missed.
 	h.advance(24 * time.Hour)
-	if strings.Contains(wall.get("/board").body, "Milk out") {
+	if strings.Contains(wall.get("/board/pool").body, "Milk out") {
 		t.Error("milk carried over")
 	}
 	r = phone.get("/admin/completions")
@@ -922,6 +943,72 @@ func TestMissedDismiss(t *testing.T) {
 	if b := must(h.st.Q.BalanceForPerson(t.Context(), dbq.BalanceForPersonParams{HouseholdID: h.hh, PersonID: alfie.ID})); b.Points != 0 {
 		t.Errorf("points = %d, want 0", b.Points)
 	}
+}
+
+// Give / Take points from the ⋯ menu on Admin › People: the pop-up, its
+// mistakes, the flash with Undo, and the balance on each row.
+func TestAdjustPointsFromPeopleList(t *testing.T) {
+	h, _, phone := boardHousehold(t)
+	alfie := h.person("Alfie")
+	id := itoa(alfie.ID)
+	balance := func() int64 {
+		t.Helper()
+		return must(h.st.Q.BalanceForPerson(t.Context(), dbq.BalanceForPersonParams{HouseholdID: h.hh, PersonID: alfie.ID})).Points
+	}
+
+	// The list: each row has a balance and a ⋯ menu; no pop-up yet.
+	r := phone.get("/admin/people")
+	expect(t, r, http.StatusOK, `class="list__balance">0 pts</span>`, `aria-label="More for Alfie"`,
+		`href="/admin/people?adjust=`+id+`&amp;direction=give">Give points`,
+		`href="/admin/people?adjust=`+id+`&amp;direction=take">Take points away`,
+		`href="/admin/people/`+id+`">Edit`)
+	if strings.Contains(r.body, `id="adjust"`) {
+		t.Error("pop-up open without ?adjust")
+	}
+
+	// Give points opens the pop-up with Give chosen.
+	expect(t, phone.get("/admin/people?adjust="+id+"&direction=give"), http.StatusOK,
+		`id="adjust"`, "Give points to Alfie", `name="direction" value="give" checked`,
+		`<input type="hidden" name="from" value="people">`, `action="/admin/people/`+id+`/points"`)
+	expect(t, phone.get("/admin/people?adjust="+id+"&direction=take"), http.StatusOK,
+		"Take points from Alfie", `name="direction" value="take" checked`)
+	expect(t, phone.get("/admin/people?adjust=99999"), http.StatusNotFound)
+
+	// A mistake keeps the pop-up open with what was typed.
+	r = phone.post("/admin/people/"+id+"/points", url.Values{"from": {"people"}, "direction": {"give"}, "amount": {"5"}, "reason": {" "}})
+	expect(t, r, http.StatusUnprocessableEntity, `id="adjust"`, "Say what they did and why", `name="amount" value="5" checked`)
+	if b := balance(); b != 0 {
+		t.Fatalf("balance after a mistake = %d, want 0", b)
+	}
+
+	// Saved: back on the list, no pop-up, flash with Undo, new balance.
+	r = phone.post("/admin/people/"+id+"/points", url.Values{"from": {"people"}, "direction": {"give"}, "amount": {"5"}, "reason": {"Tidied without being asked"}})
+	expect(t, r, http.StatusOK, "<h1>People</h1>", "Gave 5 points to Alfie.", `class="list__balance">5 pts</span>`)
+	if strings.Contains(r.body, `id="adjust"`) {
+		t.Error("pop-up still open after saving")
+	}
+	if b := balance(); b != 5 {
+		t.Fatalf("balance = %d, want 5", b)
+	}
+	var entry int64
+	if err := h.st.DB.QueryRowContext(t.Context(), "SELECT MAX(id) FROM ledger_entries WHERE kind = 'manual'").Scan(&entry); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(r.body, `action="/admin/people/`+id+`/points/`+itoa(entry)+`/undo"`) {
+		t.Error("no undo form on the list")
+	}
+
+	// Undo from the list returns to the list.
+	r = phone.post("/admin/people/"+id+"/points/"+itoa(entry)+"/undo", url.Values{"from": {"people"}})
+	expect(t, r, http.StatusOK, "<h1>People</h1>", "Undone.", `class="list__balance">0 pts</span>`)
+	if b := balance(); b != 0 {
+		t.Errorf("after undo balance = %d, want 0", b)
+	}
+
+	// Money shows too, once they have some.
+	occ := h.occurrence("Hoover the lounge")
+	expect(t, phone.post("/board/occurrences/"+itoa(occ.ID)+"/complete", url.Values{"person": {id}}), http.StatusOK)
+	expect(t, phone.get("/admin/people"), http.StatusOK, `class="list__balance">5 pts · £0.50</span>`)
 }
 
 func TestAdjustPointsAdmin(t *testing.T) {
@@ -1088,7 +1175,7 @@ func TestEachChore(t *testing.T) {
 			t.Errorf("%s has no Brush teeth", p.Name)
 		}
 	}
-	if strings.Contains(section(r.body, "Alfie"), "Exercise") || strings.Contains(poolOf(r.body), "Brush teeth") {
+	if strings.Contains(section(r.body, "Alfie"), "Exercise") || strings.Contains(poolOf(wall.get("/board/pool").body), "Brush teeth") {
 		t.Error("Exercise shown for Alfie, or Brush teeth up for grabs")
 	}
 	if mumCol := section(r.body, "Mum"); strings.Contains(mumCol, "£0.10") || !strings.Contains(mumCol, ">1 pt<") {
