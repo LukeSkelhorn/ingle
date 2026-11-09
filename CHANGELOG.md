@@ -6,6 +6,10 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ## [Unreleased]
 
+## [v0.3.0] - 2026-11-09
+
+Kids' money: each child gets their own PIN and a private My money on the wall, can ask for money to go to their real bank, and you can switch whole features on or off.
+
 ### Added
 
 - **Modules:** switch whole features off in the new **Admin › Modules**: **Calendar** (feeds and their events), **Photos** (the screensaver slideshow) and **Rewards** (rewards, claims and savings goals). A module that's off disappears everywhere: its admin pages and links, its parts of the board and its background jobs. Its data is kept, so switching it back on brings everything back, waiting reward claims included. With Calendar off, the board calendar still shows chores; with Photos off, the screensaver and locked screen show the clock, events and chores without photos; with Rewards off, points still work. A new household starts with all three on. ([DOM-26](https://linear.app/skeltech/issue/DOM-26))
