@@ -1123,6 +1123,8 @@ func TestChoreTimes(t *testing.T) {
 		t.Fatal(err)
 	}
 	expect(t, wall.post("/board/occurrences/"+itoa(morning)+"/complete", nil), http.StatusOK)
+	// My money's history says which time it was for.
+	expect(t, phone.get("/admin/people/"+itoa(alfie.ID)+"/money"), http.StatusOK, "Brush teeth · 07:30")
 
 	h.advance(12 * time.Hour) // 18:30
 	col = section(wall.get("/board").body, "Alfie")

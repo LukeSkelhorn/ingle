@@ -73,6 +73,9 @@ The board has a column for each family member, adults included. Each column show
 - Tapped the wrong thing? **Undo** appears for a few seconds after each completion.
 - **Grown-ups can put it right.** Completions run on the honour system: points count straight away. If something was marked done that wasn't, an adult (unlocked on the display, or signed in on a phone) taps the done chore and chooses **Reverse**. The points come off and the chore goes back on the board. Chores set to need a grown-up's check show **Approve** and **Not done yet** instead. Completions can be reversed for 7 days.
 - Tap a person's avatar or name to open their sheet: their balance, what they've earned this week (reversals and points taken away come off, spending doesn't), their recent points changes with the reasons, and the household's rewards. Rewards they can afford are highlighted; the rest show how much more they need.
+- **My money:** on a household display, a person's sheet has **🔒 My money**. It asks for their PIN on the keypad, then shows their balance, this week's earnings, their savings goal and their history (chores, rewards, points given or taken away, and claims still waiting), with **Show more** for anything older than 30 days. Set a child's PIN (4 to 6 digits) in **Admin › People**. It opens only their own money: never admin, never the locked displays, never anyone else's. An adult's PIN opens their own My money too. My money closes after a minute without a tap, when the screensaver starts and when the displays lock, and five wrong PINs mean a five-minute wait. A grown-up signed in on a phone sees anyone's My money without a PIN, on the board or in **Admin › People › My money**.
+- **Moving money to the bank:** in My money, a child asks for some of their money to go to their real bank, picking the amount 50p at a time. It's held until an adult sends it in their banking app and taps **I've sent it** in **Admin › Bank** (or declines it with a reason the child sees). Adults can also record a move from **Admin › People › Move to bank**. Ingle never moves real money itself.
+- **Bank balance:** an adult types in what's in a child's real bank in **Admin › People › Bank balance**, and the child sees "In my bank: £23.40 · updated 2 days ago" in My money (nowhere else). Moves to the bank from Ingle are added on; after 14 days without an update, Admin home nudges an adult to check it.
 - Adults can give a bonus or take points away in **Admin › People**, with a reason saying what they did and why. Points can go below zero, and the reason shows on the person's sheet.
 - Tap **Claim** on an affordable reward to ask for it. The points are held while it waits for a grown-up, so they can't be spent twice: the balance shows what's left, the held amount is shown next to it, and the column shows "🎁 1 waiting". The child can cancel a waiting claim. With admin unlocked on the display, tapping a waiting claim opens **Approve** / **Decline**, and anything claimed while an adult is unlocked or signed in is approved straight away.
 - Chores and rewards can have an emoji, shown before the title. In Admin, pick one from the grid or type any emoji; Ingle suggests one from the title as you type ("Feed the dog" → 🐶).
@@ -83,6 +86,15 @@ The board has a column for each family member, adults included. Each column show
 - Some chores only need doing once on one of several days. Set a weekly, fortnightly or weekday chore to **Any one of these days** and it's due once a week: it shows on each of its days ("Today or Thu") until someone does it, then it's gone until next week. Its last day says **Last chance**.
 
 Every open board (the wall iPad, a second display, an adult's phone) updates live when anything changes.
+
+### Modules
+
+Not every family wants everything. In **Admin › Modules**, switch off what you don't use: **Rewards**, **My money**, **Photos** or **Calendar**. A module that's off disappears everywhere: its admin pages and links, its parts of the board and its background jobs. Its data is kept, so switching it back on brings everything back. Some modules need another (they say so on the page); turning off one that another needs asks first and turns both off.
+
+- **Calendar off:** no feeds, and no events on the screensaver. The board calendar still shows chores.
+- **Photos off:** the screensaver and the locked screen show the clock, events and chores without the slideshow.
+- **Rewards off:** no rewards, claims or goals on the board or in admin. Points still work, and claims that were waiting stay waiting until Rewards is back on.
+- **My money off:** no My money button, no **Admin › Bank** and no PINs for children. Children's PINs and waiting bank requests (still held) are kept for when it's back on.
 
 ### Calendar
 
@@ -176,6 +188,7 @@ internal/household/ people, credentials and rewards admin
 internal/avatar/    emoji picker and photo uploads
 internal/picture/   safe image decoding and JPEG writing, shared by avatars and photos
 internal/lock/      locking the displays: state, schedule and idle lock
+internal/module/    modules: the Module interface, registry and each household's on/off state
 internal/photos/    screensaver slideshow: uploaded photos plus the read-only photos folder
 internal/calendar/  ICS feeds: fetch, parse and expand recurring events for the screensaver and board calendar
 internal/chores/    chore lifecycle: recurrence presets, admin edits, board, claim, complete, undo, approve, reverse, redeem
@@ -192,15 +205,16 @@ deploy/             Docker Compose + Caddy for a home server
 Every table has a `household_id`, so one database can hold several households. A self-hosted install has just one.
 
 - **households** and **household_settings**: name, timezone, when the board's day rolls over, and the admin, screensaver and calendar idle timeouts.
-- **people**: adults and children, each with a colour and an avatar (an emoji or an uploaded photo). Adults can have a PIN and an email + password, all stored as argon2id hashes.
+- **people**: adults and children, each with a colour and an avatar (an emoji or an uploaded photo). Adults can have a PIN and an email + password, all stored as argon2id hashes. Children can have a PIN too, which only opens their My money: admin and unlocking only ever check adults' PINs, and a child who becomes an adult loses theirs. A My money PIN check gives a token held in memory, not a session: it lasts a minute after each use, and 10 minutes at most.
 - **devices** are registered household displays, and **sessions** are adult sign-ins (PIN on a display, or password elsewhere). Only sha256 hashes of their tokens are stored.
 - **chores** are *assigned* to one person, sit in the shared *pool*, are *shared* by a few people (done once), or are done by *each* of several people (a copy each). Recurrence is an iCal `RRULE` evaluated in the household timezone. A chore can award points, pence or both, and can require an adult's approval.
 - **chore_occurrences**: the concrete instances that appear on the board. They're materialised 14 days ahead on startup, then refreshed every hour. Each pool occurrence can be claimed by one person.
 - **people.goal_reward_id** is the reward someone is saving for, and **goal_set_at** is when they picked it; a display remembers in its browser storage which goals (person, reward and pick time) it has already celebrated.
-- **completions** are pending, approved or rejected. Only approved completions credit the **ledger_entries** table, and balances are the sum of a person's entries. Rewards are claimed through **redemptions**: a pending claim holds its cost (what a person can spend is their balance less their pending claims) but writes nothing to the ledger; approving it adds one negative `redemption` entry, and declining or cancelling (stored as rejected) just lets the hold go.
+- **completions** are pending, approved or rejected. Only approved completions credit the **ledger_entries** table, and balances are the sum of a person's entries. Rewards are claimed through **redemptions**: a pending claim holds its cost (what a person can spend is their balance less their pending claims) but writes nothing to the ledger; approving it adds one negative `redemption` entry, and declining or cancelling (stored as rejected) just lets the hold go. Bank moves work the same way through **transfer_requests**: a pending request holds its pence, and approving it adds one negative `payout` entry, linked from the request (`ledger_entry_id`). An adult's own **Move to bank** is stored as an already-approved request with its payout. A child's real bank balance lives in **person_bank** (one row per child, `source` 'manual' for now); payouts add to its pence but not its `updated_at`, which is when someone last checked.
 - **household_lock** says whether the displays are locked, why, and which schedule window was last applied. The unlock code (hashed), lock schedule and idle hours live in **household_settings**.
 - **photos** are the screensaver photos uploaded in admin. Folder photos are indexed in memory and never stored.
 - **calendar_feeds** are the ICS addresses for the screensaver and the board calendar. Events are fetched into memory and not stored.
+- **household_modules** says which modules a household has on. No rows means it hasn't chosen yet, and every module is on.
 - **activity** is an append-only feed and audit log.
 
 Timestamps are stored as unix seconds (UTC), local dates as `YYYY-MM-DD`, and money as integer pence.

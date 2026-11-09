@@ -55,6 +55,7 @@ var (
 	ErrNotAdult            = errors.New("only adults can do this")
 	ErrInsufficientBalance = errors.New("not enough points or money")
 	ErrInvalidRRule        = errors.New("invalid recurrence rule")
+	ErrNotChild            = errors.New("only children can do this")
 )
 
 // Window is how many days ahead occurrences are materialised.
@@ -496,19 +497,26 @@ func creditCompletion(ctx context.Context, q *dbq.Queries, c dbq.Completion, by 
 
 func (s *Service) activity(ctx context.Context, q *dbq.Queries, householdID, actorID int64, verb string, subjectID int64) error {
 	subjectType := map[string]string{
-		"chore.claimed":    "occurrence",
-		"chore.released":   "occurrence",
-		"chore.completed":  "completion",
-		"chore.undone":     "occurrence",
-		"chore.approved":   "completion",
-		"chore.rejected":   "completion",
-		"chore.reversed":   "completion",
-		"reward.requested": "redemption",
-		"reward.redeemed":  "redemption",
-		"reward.declined":  "redemption",
-		"reward.cancelled": "redemption",
-		"points.adjusted":  "ledger_entry",
-		"points.undone":    "ledger_entry",
+		"chore.claimed":      "occurrence",
+		"chore.released":     "occurrence",
+		"chore.completed":    "completion",
+		"chore.undone":       "occurrence",
+		"chore.approved":     "completion",
+		"chore.rejected":     "completion",
+		"chore.reversed":     "completion",
+		"reward.requested":   "redemption",
+		"reward.redeemed":    "redemption",
+		"reward.declined":    "redemption",
+		"reward.cancelled":   "redemption",
+		"points.adjusted":    "ledger_entry",
+		"points.undone":      "ledger_entry",
+		"transfer.requested": "transfer",
+		"transfer.cancelled": "transfer",
+		"transfer.approved":  "transfer",
+		"transfer.declined":  "transfer",
+		"transfer.paid":      "transfer",
+		"bank.updated":       "person",
+		"bank.removed":       "person",
 	}[verb]
 	if err := q.InsertActivity(ctx, dbq.InsertActivityParams{
 		HouseholdID: householdID,

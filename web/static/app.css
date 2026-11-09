@@ -288,6 +288,14 @@ button.chore__main:active { background: var(--line); }
 .person__head { display: flex; align-items: center; gap: 14px; }
 .person__balance { margin: 16px 0 0; font-size: 2.6rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .person__money { margin-left: 0.3em; color: var(--muted); }
+/* My money next to the name, and the balance that opens it. */
+.person__my-money { margin-left: auto; flex: none; }
+.person__balance--open {
+  display: block; width: 100%; padding: 0; border: 0; background: none; color: inherit;
+  font: inherit; font-size: 2.6rem; font-weight: 700; text-align: left; cursor: pointer;
+}
+.person__balance--open:focus-visible { outline: 2px solid var(--person, currentColor); outline-offset: 4px; border-radius: 8px; }
+.person__open { color: var(--muted); font-weight: 400; }
 .person__week { margin: 4px 0 0; color: var(--muted); }
 .person__sub { margin: 20px 0 8px; font-size: 1rem; }
 
@@ -300,6 +308,17 @@ button.chore__main:active { background: var(--line); }
 .adjustment__points--plus { color: var(--ok-fg); }
 .adjustment__text { min-width: 0; overflow-wrap: anywhere; }
 .adjustment__text small { white-space: nowrap; }
+
+/* My money: the history, newest first */
+.money-history { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.money-line { display: flex; gap: 12px; align-items: baseline; justify-content: space-between; }
+.money-line__text { min-width: 0; overflow-wrap: anywhere; }
+.money-line__text small { display: block; }
+.money-line__amount { flex: none; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--muted); }
+.money-line__amount--plus { color: var(--ok-fg); }
+.money-line--waiting .money-line__amount { font-weight: 400; }
+.money-history__more { margin-top: 4px; }
+.my-money .goal { margin-bottom: 4px; }
 .rewards { list-style: none; margin: 0 0 18px; padding: 0; display: grid; gap: 8px; max-height: 45vh; overflow-y: auto; }
 .reward {
   display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px;
@@ -521,6 +540,8 @@ input, select, textarea { -webkit-user-select: text; user-select: text; }
 .admin__head h1 { margin: 0; }
 .admin__main > p:first-child { margin: 0 0 8px; }
 
+.nudges { list-style: none; padding: 0; margin: 0 0 16px; display: grid; gap: 6px; }
+.nudges li { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
 .tiles { list-style: none; padding: 0; margin: 0 0 16px; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
 .tile {
   display: flex; flex-direction: column; gap: 2px; padding: 16px; border-radius: var(--radius);
@@ -785,3 +806,19 @@ details.card .list { margin: 8px -20px -20px; }
   -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 56px), transparent);
   mask-image: linear-gradient(to bottom, #000 calc(100% - 56px), transparent);
 }
+
+/* My money: what's in their real bank. */
+.money-inbank { margin: 4px 0 8px; }
+
+/* My money: asking to move money to the bank. */
+.money-bank { margin: 8px 0; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; }
+.money-bank p { margin: 0; }
+.money-bank--declined { display: block; color: var(--muted); }
+.money-bank__ask { margin: 8px 0 4px; }
+.money-bank__confirm { font-size: 1.25rem; text-align: center; }
+.stepper { display: flex; align-items: center; justify-content: center; gap: 16px; margin: 12px 0; }
+.stepper__btn { min-width: 64px; min-height: 64px; font-size: 2rem; line-height: 1; border-radius: 50%; }
+.stepper__value { min-width: 6ch; text-align: center; font-size: 2.4rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.bank-request { flex-wrap: wrap; }
+.bank-request__decline { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+.bank-request__decline .field { flex: 1 1 220px; margin: 0; }

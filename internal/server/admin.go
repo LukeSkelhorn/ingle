@@ -9,17 +9,23 @@ import (
 	"strings"
 
 	"github.com/lukeskelhorn/ingle/internal/auth"
+	"github.com/lukeskelhorn/ingle/internal/chores"
 	"github.com/lukeskelhorn/ingle/internal/settings"
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
 type adminHome struct {
-	People   int
-	Chores   int
-	Rewards  int
-	Pending  int
-	Lock     lockView
-	Activity []dbq.ListRecentActivityWithActorRow
+	People  int
+	Chores  int
+	Rewards int
+	Pending int
+	Bank    int // bank requests waiting
+	// StaleBanks are children whose bank balance wants checking.
+	StaleBanks []chores.StaleBank
+	// ModulesChosen is false until Admin › Modules has been saved once.
+	ModulesChosen bool
+	Lock          lockView
+	Activity      []dbq.ListRecentActivityWithActorRow
 }
 
 func (s *Server) handleAdminHome(w http.ResponseWriter, r *http.Request) {
@@ -59,8 +65,29 @@ func (s *Server) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
+	if !s.moduleOn(ctx, modRewards) {
+		claims = nil // they wait, unseen, until Rewards is back on
+	}
+	mods, err := s.Modules.State(ctx, s.HouseholdID)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	var bank int
+	var stale []chores.StaleBank
+	if s.moduleOn(ctx, modMoney) {
+		if bank, err = s.Chores.PendingTransferCount(ctx, s.HouseholdID); err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+		if stale, err = s.Chores.StaleBanks(ctx, s.HouseholdID); err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+	}
 	v := s.view(r, "Admin", adminHome{
-		People: len(people), Chores: len(chs), Rewards: len(rewards), Pending: len(pending) + len(claims), Lock: lv, Activity: act,
+		People: len(people), Chores: len(chs), Rewards: len(rewards), Pending: len(pending) + len(claims), Bank: bank, StaleBanks: stale,
+		ModulesChosen: mods.Chosen, Lock: lv, Activity: act,
 	})
 	v.Nav = "home"
 	s.render(w, r, http.StatusOK, "admin_home", v)
@@ -75,6 +102,40 @@ func activityActor(verb string) string {
 	return "Someone"
 }
 
+// activityLine is what the feed says after who did it: "asked to move
+// £5.00 to their bank", "approved moving £5.00 to Thomas's bank", or
+// "claimed Lego set".
+func (s *Server) activityLine(a dbq.ListRecentActivityWithActorRow) string {
+	if a.SubjectPence == nil && a.SubjectPerson != nil {
+		switch a.Verb {
+		case "bank.updated":
+			return "updated " + *a.SubjectPerson + "'s bank balance"
+		case "bank.removed":
+			return "removed " + *a.SubjectPerson + "'s bank balance"
+		}
+	}
+	if a.SubjectPence != nil && a.SubjectPerson != nil {
+		amount, whose := s.Locale.FormatMoney(*a.SubjectPence), *a.SubjectPerson+"'s"
+		switch a.Verb {
+		case "transfer.requested":
+			return "asked to move " + amount + " to their bank"
+		case "transfer.cancelled":
+			return "cancelled moving " + amount + " to their bank"
+		case "transfer.approved":
+			return "approved moving " + amount + " to " + whose + " bank"
+		case "transfer.declined":
+			return "declined moving " + amount + " to " + whose + " bank"
+		case "transfer.paid":
+			return "moved " + amount + " to " + whose + " bank"
+		}
+	}
+	d := describeActivity(a.Verb)
+	if a.SubjectTitle != nil {
+		d += " " + *a.SubjectTitle
+	}
+	return d
+}
+
 // describeActivity turns an activity verb into a short phrase for the feed.
 func describeActivity(verb string) string {
 	if d, ok := activityText[verb]; ok {
@@ -86,6 +147,7 @@ func describeActivity(verb string) string {
 var activityText = map[string]string{
 	"household.setup":         "set up the household",
 	"settings.updated":        "changed settings",
+	"modules.updated":         "changed the modules",
 	"admin.unlocked":          "unlocked admin on a display",
 	"admin.signed_in":         "signed in",
 	"device.registered":       "registered a household display",
@@ -119,6 +181,13 @@ var activityText = map[string]string{
 	"reward.cancelled":        "cancelled a claim for",
 	"points.adjusted":         "changed someone's points",
 	"points.undone":           "undid a points change",
+	"transfer.requested":      "asked to move money to their bank",
+	"transfer.cancelled":      "cancelled moving money to their bank",
+	"transfer.approved":       "approved moving money to a bank",
+	"transfer.declined":       "declined moving money to a bank",
+	"transfer.paid":           "moved money to a bank",
+	"bank.updated":            "updated a bank balance",
+	"bank.removed":            "removed a bank balance",
 	"photo.added":             "added a photo",
 	"photo.removed":           "removed a photo",
 	"calendar.added":          "added a calendar",

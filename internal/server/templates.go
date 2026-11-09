@@ -14,6 +14,7 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/auth"
 	"github.com/lukeskelhorn/ingle/internal/avatar"
 	"github.com/lukeskelhorn/ingle/internal/locale"
+	"github.com/lukeskelhorn/ingle/internal/module"
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 	"github.com/lukeskelhorn/ingle/internal/valid"
 	"github.com/lukeskelhorn/ingle/web"
@@ -123,7 +124,14 @@ func (s *Server) funcs() template.FuncMap {
 	return template.FuncMap{
 		"money":      func(pence int64) string { return s.Locale.FormatMoney(pence) },
 		"moneyInput": locale.FormatMoneyInput,
+		// updatedAgo says how long since a bank balance was checked.
+		"updatedAgo": func(t time.Time) string { return updatedAgo(s.now(), t) },
 		"avatar":     avatarOf,
+		// moduleOn "rewards" reports whether a module is switched on, so
+		// pages and partials can hide its pieces.
+		"moduleOn": func(id string) bool { return s.moduleOn(context.Background(), id) },
+		// moduleNav is the admin bar links of the modules that are on.
+		"moduleNav": func() []module.NavItem { return s.moduleNav(context.Background()) },
 		// plainAvatar is an avatar without its photo (initial or emoji),
 		// for the locked display, where /avatars/ isn't served.
 		"plainAvatar": func(p dbq.Person, size string) avatarView {
@@ -177,6 +185,8 @@ func (s *Server) funcs() template.FuncMap {
 		"inc":       func(i int) int { return i + 1 },
 		"signedPts": signedPts,
 		"net":       s.net,
+		"change":    s.change,
+		"neg":       func(n int64) int64 { return -n },
 		"percent": func(done, total int) int {
 			if total == 0 {
 				return 0
@@ -186,6 +196,9 @@ func (s *Server) funcs() template.FuncMap {
 		"dict":     dict,
 		"list":     func(v ...string) []string { return v },
 		"activity": describeActivity,
+		// activityLine is the feed's phrase for an activity row, with
+		// the amount and who for bank transfers.
+		"activityLine": s.activityLine,
 		// asset is a static file's URL with the build's asset hash, so a new
 		// build's CSS and JS are never served from an old cache.
 		"asset":         func(name string) string { return "/static/" + name + "?v=" + web.StaticVersion() },
@@ -252,6 +265,22 @@ func (s *Server) net(points, pence int64) string {
 		parts = append(parts, s.Locale.FormatMoney(pence))
 	}
 	return strings.Join(parts, " · ")
+}
+
+// change describes a signed change to a balance, e.g. "+10 pts +20p" or
+// "−£5.00", or "" if nothing.
+func (s *Server) change(points, pence int64) string {
+	var parts []string
+	if points != 0 {
+		parts = append(parts, signedPts(points)+strings.TrimPrefix(pts(points), minus(points)))
+	}
+	switch {
+	case pence > 0:
+		parts = append(parts, "+"+s.Locale.FormatMoney(pence))
+	case pence < 0:
+		parts = append(parts, "−"+s.Locale.FormatMoney(-pence))
+	}
+	return strings.Join(parts, " ")
 }
 
 // dict builds a map from alternating keys and values, for passing several

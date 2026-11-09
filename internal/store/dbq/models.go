@@ -113,6 +113,13 @@ type HouseholdLock struct {
 	ScheduleApplied int64  `json:"schedule_applied"`
 }
 
+type HouseholdModule struct {
+	HouseholdID int64  `json:"household_id"`
+	ModuleID    string `json:"module_id"`
+	Enabled     int64  `json:"enabled"`
+	ChangedAt   int64  `json:"changed_at"`
+}
+
 type HouseholdSetting struct {
 	HouseholdID            int64   `json:"household_id"`
 	Timezone               string  `json:"timezone"`
@@ -162,6 +169,16 @@ type Person struct {
 	PictureCards int64   `json:"picture_cards"`
 }
 
+type PersonBank struct {
+	PersonID    int64  `json:"person_id"`
+	HouseholdID int64  `json:"household_id"`
+	Label       string `json:"label"`
+	Pence       int64  `json:"pence"`
+	Source      string `json:"source"`
+	UpdatedAt   int64  `json:"updated_at"`
+	UpdatedBy   *int64 `json:"updated_by"`
+}
+
 type Photo struct {
 	ID          int64  `json:"id"`
 	HouseholdID int64  `json:"household_id"`
@@ -206,4 +223,18 @@ type Session struct {
 	UserAgent   string `json:"user_agent"`
 	CreatedAt   int64  `json:"created_at"`
 	LastSeenAt  int64  `json:"last_seen_at"`
+}
+
+type TransferRequest struct {
+	ID            int64  `json:"id"`
+	HouseholdID   int64  `json:"household_id"`
+	PersonID      int64  `json:"person_id"`
+	Pence         int64  `json:"pence"`
+	Status        string `json:"status"`
+	Reason        string `json:"reason"`
+	RequestedBy   *int64 `json:"requested_by"`
+	RequestedAt   int64  `json:"requested_at"`
+	ReviewedBy    *int64 `json:"reviewed_by"`
+	ReviewedAt    *int64 `json:"reviewed_at"`
+	LedgerEntryID *int64 `json:"ledger_entry_id"`
 }

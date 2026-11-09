@@ -126,6 +126,7 @@ type personForm struct {
 	Rewards []dbq.Reward // to pick a goal from (editing only)
 
 	Points pointsPanel // the Adjust points section (editing only)
+	Bank   bankPanel   // a child's Bank balance section (editing only)
 }
 
 // pointsPanel is the person page's Points section: their balance, the
@@ -133,6 +134,9 @@ type personForm struct {
 // suggest, their recent adjustments, and the one just made, for Undo.
 type pointsPanel struct {
 	Points, HeldPoints int64
+	Pence, HeldPence   int64  // money they can spend, and what's held
+	PayOut             string // Move to bank's amount, as typed
+	PayAll             bool   // Move to bank's All of it
 	Direction          string // take or give
 	Amount             string // 1, 2, 5, 10 or custom
 	Custom             string
@@ -186,13 +190,20 @@ func (s *Server) renderPerson(w http.ResponseWriter, r *http.Request, status int
 		title = f.Name
 	}
 	if f.ID != 0 && !f.Archived {
-		rewards, err := s.Household.Rewards(r.Context(), s.HouseholdID)
-		if err != nil {
+		// No rewards, no "Saving for" picker.
+		if s.moduleOn(r.Context(), modRewards) {
+			rewards, err := s.Household.Rewards(r.Context(), s.HouseholdID)
+			if err != nil {
+				s.serverError(w, r, err)
+				return
+			}
+			f.Rewards = rewards
+		}
+		if err := s.loadPointsPanel(r, &f); err != nil {
 			s.serverError(w, r, err)
 			return
 		}
-		f.Rewards = rewards
-		if err := s.loadPointsPanel(r, &f); err != nil {
+		if err := s.loadBankPanel(r, &f); err != nil {
 			s.serverError(w, r, err)
 			return
 		}
@@ -357,7 +368,7 @@ func (s *Server) handlePersonUpdate(w http.ResponseWriter, r *http.Request) {
 		_ = s.Avatars.Remove(name)
 	}
 	flash := "Saved."
-	if r.Form.Has("goal") {
+	if r.Form.Has("goal") && s.moduleOn(r.Context(), modRewards) {
 		if p, err = s.savePersonGoal(r, p, newForm(r).optID("goal")); errors.Is(err, chores.ErrNotFound) {
 			flash = "Saved, but that reward has gone, so their goal wasn't changed."
 		} else if err != nil {
@@ -460,8 +471,14 @@ func (s *Server) credentialAction(w http.ResponseWriter, r *http.Request, flash 
 	s.renderPerson(w, r, http.StatusOK, s.personFormFor(r, p), nil, flash)
 }
 
+// errKidPINOff: a child's PIN only opens My money, so it needs that module.
+var errKidPINOff = errors.New("my money is off")
+
 func (s *Server) handlePersonSetPIN(w http.ResponseWriter, r *http.Request) {
 	s.credentialAction(w, r, "PIN saved.", func(p dbq.Person, f *form) error {
+		if p.Kind != household.KindAdult && !s.moduleOn(r.Context(), modMoney) {
+			return errKidPINOff
+		}
 		if f.str("pin") != f.str("pin_confirm") {
 			f.errs.Add("pin_confirm", "The PINs don't match.")
 			return nil
@@ -500,7 +517,9 @@ func conflictMessage(err error) (string, bool) {
 	case errors.Is(err, household.ErrLastAdmin):
 		return "At least one adult must be able to sign in, so this can't be done for the last one.", true
 	case errors.Is(err, household.ErrNotAdult):
-		return "Only adults can have a PIN or sign-in.", true
+		return "Only adults can have a sign-in.", true
+	case errors.Is(err, errKidPINOff):
+		return "A child's PIN opens My money. Turn My money on in Admin › Modules first.", true
 	case errors.Is(err, household.ErrNotFound):
 		return "That person couldn't be found.", true
 	}

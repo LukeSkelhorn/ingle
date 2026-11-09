@@ -26,6 +26,7 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/household"
 	"github.com/lukeskelhorn/ingle/internal/locale"
 	"github.com/lukeskelhorn/ingle/internal/lock"
+	"github.com/lukeskelhorn/ingle/internal/module"
 	"github.com/lukeskelhorn/ingle/internal/photos"
 	"github.com/lukeskelhorn/ingle/internal/settings"
 	"github.com/lukeskelhorn/ingle/internal/store"
@@ -45,6 +46,7 @@ type harness struct {
 	lock     *lock.Service
 	// ics serves calendar feeds: icsBody at any path.
 	ics *httptest.Server
+	srv *Server
 
 	mu      sync.Mutex
 	now     time.Time
@@ -70,6 +72,12 @@ func (h *harness) advance(d time.Duration) {
 }
 
 func newHarness(t *testing.T) *harness {
+	t.Helper()
+	return newHarnessWith(t)
+}
+
+// newHarnessWith also registers extra modules after Ingle's own.
+func newHarnessWith(t *testing.T, extra ...module.Module) *harness {
 	t.Helper()
 	ctx := t.Context()
 	dir := t.TempDir()
@@ -135,6 +143,10 @@ func newHarness(t *testing.T) *harness {
 		t.Fatalf("New: %v", err)
 	}
 	srv.SetClock(h.clock)
+	for _, m := range extra {
+		srv.Modules.Registry().Register(m)
+	}
+	h.srv = srv
 	h.ts = httptest.NewServer(srv.Handler())
 	t.Cleanup(h.ts.Close)
 	return h
@@ -553,15 +565,16 @@ func TestPeopleAdmin(t *testing.T) {
 
 	expect(t, phone.get("/admin/people"), http.StatusOK, "Alfie", "🦖", "Child")
 	alfie := h.person("Alfie")
-	// Kids have no PIN or sign-in section.
+	// Kids have a My money PIN but no sign-in section…
 	r := phone.get("/admin/people/" + itoa(alfie.ID))
-	expect(t, r, http.StatusOK, "Archive Alfie")
-	if strings.Contains(r.body, "/pin\"") {
-		t.Error("child page offers a PIN form")
+	expect(t, r, http.StatusOK, "Archive Alfie", "Opens Alfie's My money", "can't open admin")
+	if strings.Contains(r.body, "/login\"") {
+		t.Error("child page offers a sign-in form")
 	}
 	// …and can't be given one.
-	expect(t, phone.post("/admin/people/"+itoa(alfie.ID)+"/pin", url.Values{"pin": {"1234"}, "pin_confirm": {"1234"}}),
-		http.StatusConflict, "Only adults")
+	expect(t, phone.post("/admin/people/"+itoa(alfie.ID)+"/login", url.Values{
+		"email": {"alfie@example.com"}, "password": {"a long password"}, "password_confirm": {"a long password"},
+	}), http.StatusConflict, "Only adults")
 
 	// Kids never appear on the unlock screen.
 	wall := h.setUpDisplayLocked()

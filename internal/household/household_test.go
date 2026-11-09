@@ -150,13 +150,46 @@ func TestArchiveRules(t *testing.T) {
 	}
 }
 
+func TestKidPIN(t *testing.T) {
+	f := newFixture(t)
+	ctx := t.Context()
+	kid := f.add("Alfie", KindChild)
+	if err := f.svc.SetPIN(ctx, f.hh, f.mum.ID, kid.ID, "12a4", nil); err == nil {
+		t.Error("bad kid PIN accepted")
+	}
+	if err := f.svc.SetPIN(ctx, f.hh, f.mum.ID, kid.ID, "2468", nil); err != nil {
+		t.Fatalf("kid PIN: %v", err)
+	}
+	kid, _ = f.svc.Person(ctx, f.hh, kid.ID)
+	if kid.PinHash == nil || !auth.VerifyPIN(*kid.PinHash, "2468") || kid.PinLength == nil || *kid.PinLength != 4 {
+		t.Errorf("kid = %+v", kid)
+	}
+	if err := f.svc.ClearPIN(ctx, f.hh, f.mum.ID, kid.ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	kid, _ = f.svc.Person(ctx, f.hh, kid.ID)
+	if kid.PinHash != nil {
+		t.Error("kid PIN not cleared")
+	}
+
+	// A child who becomes an adult loses their PIN, so it never starts
+	// unlocking admin.
+	if err := f.svc.SetPIN(ctx, f.hh, f.mum.ID, kid.ID, "2468", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.UpdatePerson(ctx, f.hh, f.mum.ID, kid.ID, PersonInput{Name: "Alfie", Kind: KindAdult, Colour: "#46A758"}); err != nil {
+		t.Fatal(err)
+	}
+	kid, _ = f.svc.Person(ctx, f.hh, kid.ID)
+	if kid.PinHash != nil || kid.PinLength != nil {
+		t.Errorf("promoted child keeps their PIN: %+v", kid)
+	}
+}
+
 func TestCredentialsAdultOnly(t *testing.T) {
 	f := newFixture(t)
 	ctx := t.Context()
 	kid := f.add("Alfie", KindChild)
-	if err := f.svc.SetPIN(ctx, f.hh, f.mum.ID, kid.ID, "1234", nil); !errors.Is(err, ErrNotAdult) {
-		t.Errorf("kid PIN: %v", err)
-	}
 	if err := f.svc.SetLogin(ctx, f.hh, f.mum.ID, kid.ID, "kid@example.com", "a long password", nil); !errors.Is(err, ErrNotAdult) {
 		t.Errorf("kid login: %v", err)
 	}

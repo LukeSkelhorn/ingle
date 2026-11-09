@@ -252,6 +252,12 @@ func (g Goal) Emoji() string {
 	return g.RewardEmoji
 }
 
+// NeedPoints is how many more points they need for it.
+func (g Goal) NeedPoints() int64 { return g.CostPoints - g.HavePoints }
+
+// NeedPence is how much more money they need for it.
+func (g Goal) NeedPence() int64 { return g.CostPence - g.HavePence }
+
 // newGoal works out progress towards row from what the person can spend.
 // For a reward that costs points and money, progress is the slower of the
 // two, so the bar only fills once both are covered. While a claim for it is

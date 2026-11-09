@@ -61,3 +61,24 @@ LIMIT 10;
 DELETE FROM ledger_entries
 WHERE household_id = sqlc.arg(household_id) AND id = sqlc.arg(id)
   AND kind = 'manual' AND created_at >= sqlc.arg(since_unix);
+
+-- name: ListLedgerHistory :many
+-- A person's ledger, newest first, for My money: entries since since_unix
+-- (0 for any) and older than before_id (math.MaxInt64 for any), with the
+-- chore or reward each one was for, and the chore's time ('' for none).
+SELECT
+    l.id, l.kind, l.points, l.pence, l.note, l.created_at,
+    CAST(COALESCE(ch.title, rw.title, '') AS TEXT) AS title,
+    CAST(COALESCE(ch.emoji, rw.emoji, '') AS TEXT) AS emoji,
+    CAST(COALESCE(o.due_time, '') AS TEXT) AS due_time
+FROM ledger_entries l
+LEFT JOIN completions c ON c.id = l.completion_id
+LEFT JOIN chore_occurrences o ON o.id = c.occurrence_id
+LEFT JOIN chores ch ON ch.id = o.chore_id
+LEFT JOIN redemptions d ON d.id = l.redemption_id
+LEFT JOIN rewards rw ON rw.id = d.reward_id
+WHERE l.household_id = sqlc.arg(household_id) AND l.person_id = sqlc.arg(person_id)
+  AND l.created_at >= sqlc.arg(since_unix)
+  AND l.id < sqlc.arg(before_id)
+ORDER BY l.id DESC
+LIMIT sqlc.arg(lim);

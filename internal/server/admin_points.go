@@ -26,6 +26,7 @@ func (s *Server) loadPointsPanel(r *http.Request, f *personForm) error {
 		return err
 	}
 	f.Points.Points, f.Points.HeldPoints = sum.Points, sum.HeldPoints
+	f.Points.Pence, f.Points.HeldPence = sum.Pence, sum.HeldPence
 	if f.Points.Suggestions, err = s.Chores.ReasonSuggestions(ctx, s.HouseholdID); err != nil {
 		return err
 	}

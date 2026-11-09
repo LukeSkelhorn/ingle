@@ -436,3 +436,64 @@ func TestEachPersonMigration(t *testing.T) {
 		t.Fatalf("Up again: %v", err)
 	}
 }
+
+// v0.3's migrations (modules, bank requests, bank balances) come after
+// v0.2.4's 14 and 15, so a database upgraded from v0.2.4 runs just them.
+func TestV03MigrationsAfterV024(t *testing.T) {
+	st := openTest(t)
+	ctx := t.Context()
+	sub, err := fs.Sub(migrations, "migrations")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := goose.NewProvider(goose.DialectSQLite3, st.DB, sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tables := []string{"household_modules", "transfer_requests", "person_bank"}
+	exists := func(name string) bool {
+		var n int
+		if err := st.DB.QueryRowContext(ctx, `SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, name).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n == 1
+	}
+
+	// Back to where v0.2.4 leaves a database.
+	if _, err := p.DownTo(ctx, 15); err != nil {
+		t.Fatalf("DownTo(15): %v", err)
+	}
+	for _, name := range tables {
+		if exists(name) {
+			t.Errorf("%s exists at v0.2.4", name)
+		}
+	}
+	results, err := p.Up(ctx)
+	if err != nil {
+		t.Fatalf("Up from v0.2.4: %v", err)
+	}
+	var ran []int64
+	for _, r := range results {
+		ran = append(ran, r.Source.Version)
+	}
+	if fmt.Sprint(ran) != "[16 17 18]" {
+		t.Errorf("upgrade ran %v, want [16 17 18]", ran)
+	}
+	if v, err := p.GetDBVersion(ctx); err != nil || v != 18 {
+		t.Errorf("version = %d, %v; want 18", v, err)
+	}
+	for _, name := range tables {
+		if !exists(name) {
+			t.Errorf("%s missing after upgrade", name)
+		}
+	}
+	// main's columns are still there alongside.
+	for _, q := range []string{
+		`SELECT for_everyone, adult_points, due_times, show_before FROM chores LIMIT 0`,
+		`SELECT due_time FROM chore_occurrences LIMIT 0`,
+	} {
+		if _, err := st.DB.ExecContext(ctx, q); err != nil {
+			t.Errorf("%s: %v", q, err)
+		}
+	}
+}

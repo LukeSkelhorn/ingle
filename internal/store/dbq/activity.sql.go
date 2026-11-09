@@ -82,11 +82,15 @@ func (q *Queries) ListRecentActivity(ctx context.Context, arg ListRecentActivity
 }
 
 const listRecentActivityWithActor = `-- name: ListRecentActivityWithActor :many
-SELECT activity.id, activity.household_id, activity.actor_id, activity.verb, activity.subject_type, activity.subject_id, activity.data, activity.created_at, people.name AS actor_name, rewards.title AS subject_title
+SELECT activity.id, activity.household_id, activity.actor_id, activity.verb, activity.subject_type, activity.subject_id, activity.data, activity.created_at, people.name AS actor_name, rewards.title AS subject_title,
+    transfer_requests.pence AS subject_pence, tp.name AS subject_person
 FROM activity
 LEFT JOIN people ON people.id = activity.actor_id
 LEFT JOIN redemptions ON activity.subject_type = 'redemption' AND redemptions.id = activity.subject_id
 LEFT JOIN rewards ON rewards.id = redemptions.reward_id
+LEFT JOIN transfer_requests ON activity.subject_type = 'transfer' AND transfer_requests.id = activity.subject_id
+LEFT JOIN people tp ON tp.id = coalesce(transfer_requests.person_id,
+    CASE WHEN activity.subject_type = 'person' AND activity.verb LIKE 'bank.%' THEN activity.subject_id END)
 WHERE activity.household_id = ?
 ORDER BY activity.created_at DESC, activity.id DESC
 LIMIT ?
@@ -98,19 +102,23 @@ type ListRecentActivityWithActorParams struct {
 }
 
 type ListRecentActivityWithActorRow struct {
-	ID           int64   `json:"id"`
-	HouseholdID  int64   `json:"household_id"`
-	ActorID      *int64  `json:"actor_id"`
-	Verb         string  `json:"verb"`
-	SubjectType  string  `json:"subject_type"`
-	SubjectID    int64   `json:"subject_id"`
-	Data         *string `json:"data"`
-	CreatedAt    int64   `json:"created_at"`
-	ActorName    *string `json:"actor_name"`
-	SubjectTitle *string `json:"subject_title"`
+	ID            int64   `json:"id"`
+	HouseholdID   int64   `json:"household_id"`
+	ActorID       *int64  `json:"actor_id"`
+	Verb          string  `json:"verb"`
+	SubjectType   string  `json:"subject_type"`
+	SubjectID     int64   `json:"subject_id"`
+	Data          *string `json:"data"`
+	CreatedAt     int64   `json:"created_at"`
+	ActorName     *string `json:"actor_name"`
+	SubjectTitle  *string `json:"subject_title"`
+	SubjectPence  *int64  `json:"subject_pence"`
+	SubjectPerson *string `json:"subject_person"`
 }
 
-// subject_title names the reward for reward claims ("claimed Lego set").
+// subject_title names the reward for reward claims ("claimed Lego set");
+// for bank transfers, subject_pence is the amount and subject_person who
+// it was for; for bank balances, subject_person is whose.
 func (q *Queries) ListRecentActivityWithActor(ctx context.Context, arg ListRecentActivityWithActorParams) ([]ListRecentActivityWithActorRow, error) {
 	rows, err := q.db.QueryContext(ctx, listRecentActivityWithActor, arg.HouseholdID, arg.Limit)
 	if err != nil {
@@ -131,6 +139,8 @@ func (q *Queries) ListRecentActivityWithActor(ctx context.Context, arg ListRecen
 			&i.CreatedAt,
 			&i.ActorName,
 			&i.SubjectTitle,
+			&i.SubjectPence,
+			&i.SubjectPerson,
 		); err != nil {
 			return nil, err
 		}

@@ -216,9 +216,14 @@ SELECT
     person_id,
     CAST(COALESCE(SUM(points), 0) AS INTEGER) AS points,
     CAST(COALESCE(SUM(pence), 0) AS INTEGER) AS pence,
-    CAST(COUNT(*) AS INTEGER) AS waiting
-FROM redemptions
-WHERE household_id = ? AND status = 'pending'
+    CAST(COALESCE(SUM(claim), 0) AS INTEGER) AS waiting
+FROM (
+    SELECT d.person_id, d.points, d.pence, 1 AS claim FROM redemptions d
+    WHERE d.household_id = ?1 AND d.status = 'pending'
+    UNION ALL
+    SELECT t.person_id, 0, t.pence, 0 FROM transfer_requests t
+    WHERE t.household_id = ?1 AND t.status = 'pending'
+)
 GROUP BY person_id
 `
 
@@ -229,6 +234,7 @@ type HeldForHouseholdRow struct {
 	Waiting  int64 `json:"waiting"`
 }
 
+// HeldForPerson for everyone.
 func (q *Queries) HeldForHousehold(ctx context.Context, householdID int64) ([]HeldForHouseholdRow, error) {
 	rows, err := q.db.QueryContext(ctx, heldForHousehold, householdID)
 	if err != nil {
@@ -261,9 +267,14 @@ const heldForPerson = `-- name: HeldForPerson :one
 SELECT
     CAST(COALESCE(SUM(points), 0) AS INTEGER) AS points,
     CAST(COALESCE(SUM(pence), 0) AS INTEGER) AS pence,
-    CAST(COUNT(*) AS INTEGER) AS waiting
-FROM redemptions
-WHERE household_id = ? AND person_id = ? AND status = 'pending'
+    CAST(COALESCE(SUM(claim), 0) AS INTEGER) AS waiting
+FROM (
+    SELECT d.points, d.pence, 1 AS claim FROM redemptions d
+    WHERE d.household_id = ?1 AND d.person_id = ?2 AND d.status = 'pending'
+    UNION ALL
+    SELECT 0, t.pence, 0 FROM transfer_requests t
+    WHERE t.household_id = ?1 AND t.person_id = ?2 AND t.status = 'pending'
+)
 `
 
 type HeldForPersonParams struct {
@@ -277,7 +288,8 @@ type HeldForPersonRow struct {
 	Waiting int64 `json:"waiting"`
 }
 
-// What a person's waiting claims hold back from their balance.
+// What a person's waiting reward claims and bank requests hold back from
+// their balance. waiting counts the reward claims only.
 func (q *Queries) HeldForPerson(ctx context.Context, arg HeldForPersonParams) (HeldForPersonRow, error) {
 	row := q.db.QueryRowContext(ctx, heldForPerson, arg.HouseholdID, arg.PersonID)
 	var i HeldForPersonRow
@@ -473,6 +485,59 @@ func (q *Queries) ListPendingRedemptions(ctx context.Context, householdID int64)
 			&i.RequestedAt,
 			&i.ReviewedBy,
 			&i.ReviewedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPendingRedemptionsForPerson = `-- name: ListPendingRedemptionsForPerson :many
+SELECT d.id, d.points, d.pence, d.requested_at, r.title, r.emoji
+FROM redemptions d
+JOIN rewards r ON r.id = d.reward_id
+WHERE d.household_id = ?1 AND d.person_id = ?2 AND d.status = 'pending'
+ORDER BY d.requested_at DESC, d.id DESC
+`
+
+type ListPendingRedemptionsForPersonParams struct {
+	HouseholdID int64 `json:"household_id"`
+	PersonID    int64 `json:"person_id"`
+}
+
+type ListPendingRedemptionsForPersonRow struct {
+	ID          int64  `json:"id"`
+	Points      int64  `json:"points"`
+	Pence       int64  `json:"pence"`
+	RequestedAt int64  `json:"requested_at"`
+	Title       string `json:"title"`
+	Emoji       string `json:"emoji"`
+}
+
+// A person's waiting claims, newest first, with what they're for.
+func (q *Queries) ListPendingRedemptionsForPerson(ctx context.Context, arg ListPendingRedemptionsForPersonParams) ([]ListPendingRedemptionsForPersonRow, error) {
+	rows, err := q.db.QueryContext(ctx, listPendingRedemptionsForPerson, arg.HouseholdID, arg.PersonID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPendingRedemptionsForPersonRow{}
+	for rows.Next() {
+		var i ListPendingRedemptionsForPersonRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Points,
+			&i.Pence,
+			&i.RequestedAt,
+			&i.Title,
+			&i.Emoji,
 		); err != nil {
 			return nil, err
 		}

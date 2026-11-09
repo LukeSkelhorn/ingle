@@ -85,12 +85,51 @@
       if (e.detail.target === sheetBody && !sheet.open) sheet.showModal();
     });
     document.addEventListener("htmx:afterRequest", function (e) {
-      if (sheet.open && sheet.contains(e.detail.elt) && e.detail.elt.hasAttribute("hx-post")) sheet.close();
+      var elt = e.detail.elt;
+      if (sheet.open && sheet.contains(elt) && elt.hasAttribute("hx-post") && !elt.closest("[data-keep-open]")) sheet.close();
     });
     sheet.addEventListener("click", function (e) {
       if (e.target === sheet || e.target.closest("[data-close]")) sheet.close();
     });
     sheet.addEventListener("close", function () { sheetBody.innerHTML = ""; });
+
+    // My money (and its Move to my bank panel) closes itself after a minute
+    // without a tap, which also drops its PIN check. Only taps count: the live refresh doesn't keep it open.
+    var moneyTimer = null;
+    function moneyIdle(tapped) {
+      var open = sheet.open && sheetBody.querySelector("[data-my-money], [data-bank-stepper]");
+      if (!open) { clearTimeout(moneyTimer); moneyTimer = null; return; }
+      if (moneyTimer && !tapped) return;
+      clearTimeout(moneyTimer);
+      moneyTimer = setTimeout(function () { moneyTimer = null; sheet.close(); }, 60000);
+    }
+    new MutationObserver(function () { moneyIdle(false); }).observe(sheetBody, { childList: true, subtree: true });
+    ["pointerdown", "keydown", "scroll", "wheel"].forEach(function (e) {
+      sheet.addEventListener(e, function () { moneyIdle(true); }, { passive: true, capture: true });
+    });
+    sheet.addEventListener("close", function () { moneyIdle(false); });
+
+    // Ask to move to my bank: − and + move the amount a step at a time
+    // between one step and all they have, then Next asks them to check it.
+    sheetBody.addEventListener("click", function (e) {
+      var root = e.target.closest("[data-bank-stepper]");
+      if (!root) return;
+      var input = root.querySelector("[data-bank-pence]"),
+          max = +root.dataset.max, step = +root.dataset.step,
+          pence = +input.value, b;
+      if ((b = e.target.closest("[data-bank-step]"))) pence += step * +b.dataset.bankStep;
+      else if (e.target.closest("[data-bank-all]")) pence = max;
+      else if (e.target.closest("[data-bank-next]") || e.target.closest("[data-bank-change]")) {
+        var confirming = !!e.target.closest("[data-bank-next]");
+        root.querySelector("[data-bank-pick]").hidden = confirming;
+        root.querySelector("[data-bank-confirm]").hidden = !confirming;
+        return;
+      } else return;
+      pence = Math.min(max, Math.max(step, pence));
+      input.value = pence;
+      var text = root.dataset.symbol + (pence / 100).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      root.querySelectorAll("[data-bank-amount]").forEach(function (el) { el.textContent = text; });
+    });
 
     // Toasts come from the HX-Trigger response header.
     document.body.addEventListener("toast", function (e) {
@@ -357,6 +396,7 @@
     arm();
   })();
 </script>
+{{if moduleOn "money"}}<script src="{{asset "pinpad.js"}}"></script>{{end}}
 <script src="{{asset "saver.js"}}"></script>
 <script>
   // Screensaver. On a household display it starts after

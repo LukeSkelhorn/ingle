@@ -47,6 +47,9 @@ func (s *Server) renderCompletionsUndo(w http.ResponseWriter, r *http.Request, s
 		s.serverError(w, r, err)
 		return
 	}
+	if !s.moduleOn(r.Context(), modRewards) {
+		claims = nil // they wait, unseen, until Rewards is back on
+	}
 	p := completionsPage{Claims: claims, Missed: missed, Undo: undo}
 	for _, c := range all {
 		if c.Pending() {

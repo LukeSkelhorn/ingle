@@ -359,6 +359,8 @@ func boardErrorText(err error) (string, bool) {
 		return "That chore isn't up for grabs.", true
 	case errors.Is(err, chores.ErrNotClaimedByYou):
 		return "That's not claimed any more.", true
+	case errors.Is(err, chores.ErrTransferPending):
+		return "You've already asked. Wait for a grown-up.", true
 	case errors.Is(err, chores.ErrUndoExpired):
 		return "Too late to undo. Ask a grown-up.", true
 	case errors.Is(err, chores.ErrTooOld):
@@ -394,6 +396,7 @@ type personSheetView struct {
 	Rewards     []rewardRow
 	Adjustments []chores.Adjustment // recent bonuses and points taken away
 	Adult       bool
+	MoneyHere   bool // My money opens here: on a display, or for a signed-in adult
 }
 
 // rewardRow is one reward on a person's sheet. NeedPoints and NeedPence are
@@ -442,6 +445,7 @@ func (s *Server) handlePersonSheet(w http.ResponseWriter, r *http.Request) {
 	v := personSheetView{
 		Summary: sum, Waiting: waiting, Rewards: make([]rewardRow, 0, len(rewards)),
 		Adjustments: adjustments, Adult: boardAdult(r) != nil,
+		MoneyHere: identityFrom(ctx).Device != nil || moneyAdult(r),
 	}
 	for _, rw := range rewards {
 		v.Rewards = append(v.Rewards, rewardRow{

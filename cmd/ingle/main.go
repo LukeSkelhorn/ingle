@@ -24,6 +24,7 @@ import (
 	householdpkg "github.com/lukeskelhorn/ingle/internal/household"
 	"github.com/lukeskelhorn/ingle/internal/locale"
 	"github.com/lukeskelhorn/ingle/internal/lock"
+	"github.com/lukeskelhorn/ingle/internal/module"
 	"github.com/lukeskelhorn/ingle/internal/photos"
 	"github.com/lukeskelhorn/ingle/internal/server"
 	"github.com/lukeskelhorn/ingle/internal/settings"
@@ -154,7 +155,6 @@ func run(log *slog.Logger) error {
 	choreSvc.SetDayStart(set.DayStart)
 
 	go maintenanceLoop(ctx, log, set, choreSvc, authSvc, household.ID)
-	go screensaverLoop(ctx, log, library, cals)
 	lockSvc := lock.New(st, set, authSvc.EndDisplaySessions)
 	go lockLoop(ctx, log, lockSvc, household.ID)
 	if cfg.BackupKeep > 0 {
@@ -175,6 +175,8 @@ func run(log *slog.Logger) error {
 		Photos:      library,
 		Calendars:   cals,
 		Lock:        lockSvc,
+		// Ingle's modules are registered in a fixed order by server.New.
+		Modules: module.NewService(st, module.NewRegistry()),
 		Locale: locale.Locale{
 			Location:   cfg.Location,
 			DateFormat: cfg.DateFormat,
@@ -188,6 +190,8 @@ func run(log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// The modules' background jobs: calendar feeds and the photos folder.
+	go srv.RunModuleLoops(ctx)
 
 	httpSrv := &http.Server{
 		Addr:              cfg.Addr,
@@ -253,38 +257,6 @@ func maintenanceLoop(ctx context.Context, log *slog.Logger, set *settings.Servic
 			return
 		case <-t.C:
 			run()
-		}
-	}
-}
-
-// screensaverLoop keeps the screensaver's sources fresh: calendar feeds are
-// re-fetched every calendar.RefreshEvery and the photos folder is
-// re-indexed every 10 minutes. Both run once at startup.
-func screensaverLoop(ctx context.Context, log *slog.Logger, library *photos.Library, cals *calendar.Service) {
-	rescan := func() {
-		if err := library.Rescan(ctx); err != nil && ctx.Err() == nil {
-			log.Error("scan photos folder", slog.Any("err", err))
-		}
-	}
-	refresh := func() {
-		if err := cals.Refresh(ctx); err != nil && ctx.Err() == nil {
-			log.Error("refresh calendars", slog.Any("err", err))
-		}
-	}
-	rescan()
-	refresh()
-	photoTick := time.NewTicker(10 * time.Minute)
-	defer photoTick.Stop()
-	calTick := time.NewTicker(calendar.RefreshEvery)
-	defer calTick.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-photoTick.C:
-			rescan()
-		case <-calTick.C:
-			refresh()
 		}
 	}
 }

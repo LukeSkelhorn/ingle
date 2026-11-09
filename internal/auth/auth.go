@@ -61,6 +61,8 @@ type Service struct {
 	codeLimiter *Limiter
 	pwLimiter   *Limiter
 	addrLimiter *Limiter
+
+	money moneyTokens
 }
 
 // New returns an auth Service.
@@ -73,6 +75,7 @@ func New(st *store.Store, set *settings.Service) *Service {
 		codeLimiter: NewLimiter(MaxFailures, LockoutPeriod),
 		pwLimiter:   NewLimiter(MaxFailures, LockoutPeriod),
 		addrLimiter: NewLimiter(MaxAddressFailures, LockoutPeriod),
+		money:       moneyTokens{grants: map[string]moneyGrant{}},
 	}
 }
 

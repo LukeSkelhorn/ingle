@@ -6,6 +6,28 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ## [Unreleased]
 
+## [v0.3.0] - 2026-11-09
+
+Kids' money: each child gets their own PIN and a private My money on the wall, can ask for money to go to their real bank, and you can switch whole features on or off.
+
+### Added
+
+- **Modules:** switch whole features off in the new **Admin › Modules**: **Calendar** (feeds and their events), **Photos** (the screensaver slideshow) and **Rewards** (rewards, claims and savings goals). A module that's off disappears everywhere: its admin pages and links, its parts of the board and its background jobs. Its data is kept, so switching it back on brings everything back, waiting reward claims included. With Calendar off, the board calendar still shows chores; with Photos off, the screensaver and locked screen show the clock, events and chores without photos; with Rewards off, points still work. A new household starts with all three on. ([DOM-26](https://linear.app/skeltech/issue/DOM-26))
+- **Kid PINs and My money:** children can have their own PIN now. In **Admin › People**, set a 4 to 6 digit PIN for a child; they can type it in themselves while you watch. On a household display, a person's sheet has a **🔒 My money** button that asks for their PIN on the usual keypad and then shows their balance. A child's PIN opens only their own money: it never opens admin, unlocks the displays or opens anyone else's. An adult's PIN opens their own My money too, and still unlocks admin as before. Wrong PINs are limited as for adults (5 tries, then a 5-minute wait), and it doesn't open while the displays are locked. It's a new module, **My money**, so it can be switched off in **Admin › Modules**. ([DOM-20](https://linear.app/skeltech/issue/DOM-20))
+- **My money shows everything:** after the PIN, My money shows the balance big, this week's earnings, what they're saving for (with a progress bar and how much more they need) and their history, newest first: chores earned, rewards bought, points given or taken away with the reason, and reward claims still waiting for a grown-up. It shows the last 30 days, and **Show more** goes further back. It closes by itself after a minute without a tap, when the screensaver starts or when the displays lock, and after 10 minutes it asks for the PIN again however much it's used. A grown-up signed in on a phone sees anyone's My money without their PIN, from the board or from **Admin › People › My money**. On a household display everyone types their own PIN, even with admin unlocked. ([DOM-21](https://linear.app/skeltech/issue/DOM-21))
+- **Ask to move money to my bank:** in My money, a child taps **🏦 Ask to move to my bank**, picks an amount with big − and + buttons (50p at a time, or **All of it**) and checks it before it's sent. It then shows as "Waiting for a grown-up", and that money is held so it can't be spent on a reward too; they can cancel it while it waits. Adults see requests in the new **Admin › Bank**, with a tile on Admin home. Ingle never moves real money: send it in your banking app, then tap **I've sent it** and it comes off their balance, showing in their history as "£5.00 moved to your bank". Or decline it with a reason, which they see in My money for a week. Adults can also record a move themselves from **Admin › People** (**Move to bank**, an amount or all of it), for example to pay everything out at the end of the month. Each step shows in Admin home's activity, e.g. "Thomas asked to move £5.00 to their bank". ([DOM-22](https://linear.app/skeltech/issue/DOM-22))
+- **Bank balance:** in **Admin › People**, a child's new **Bank balance** section holds what's in their real bank: an account name (e.g. "Monzo") and the balance, with **Update** recording when it was checked. They see it in My money as "In my bank: £23.40 · updated 2 days ago"; it isn't shown anywhere else, and not at all until it's set up. Money moved to the bank from Ingle is added on automatically. Once nobody has updated it for 14 days, Admin home says "Check Thomas's bank balance". ([DOM-23](https://linear.app/skeltech/issue/DOM-23))
+
+### Changed
+
+- **My money at the top:** on a person's sheet, **🔒 My money** is now next to their name instead of below the rewards, and tapping their balance opens it too. ([DOM-62](https://linear.app/skeltech/issue/DOM-62))
+- **My money shows a chore's time:** in My money's history, a timed chore shows which time it was for, as Admin › Completions does: "Brush teeth · 19:30". A chore done twice a day no longer shows as two lines with the same name. ([DOM-57](https://linear.app/skeltech/issue/DOM-57))
+
+### Upgrade notes
+
+- This release has database migrations (new tables for modules, bank requests and bank balances). Ingle takes care of them on start. Nothing changes after upgrading: every module stays on, and **Admin** asks you to choose your modules until you save **Admin › Modules** once.
+- **My money** is on after upgrading. Changing a child to an adult in **Admin › People** removes their PIN, so it never starts unlocking admin; set them a new one.
+
 ## [v0.2.6] - 2026-11-08
 
 Give or take points straight from the People list.

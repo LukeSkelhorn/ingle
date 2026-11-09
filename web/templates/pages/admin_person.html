@@ -25,7 +25,7 @@
         <label><input type="radio" name="kind" value="child"{{if eq .Data.Kind "child"}} checked{{end}}> <span>Child</span></label>
         <label><input type="radio" name="kind" value="adult"{{if eq .Data.Kind "adult"}} checked{{end}}> <span>Adult</span></label>
       </div>
-      <small class="muted">Only adults can have a PIN or sign-in and manage the household.</small>
+      <small class="muted">Only adults can sign in and manage the household.</small>
       {{template "err" index .Errors "kind"}}
     </fieldset>
     {{template "colour_picker" (dict "Selected" .Data.Colour "Colours" .Data.Colours "Err" (index .Errors "colour"))}}
@@ -75,7 +75,8 @@
   {{with .Data.Points}}
   <section class="card stack" id="points">
     <h2>Points</h2>
-    <p class="muted">{{$.Data.Name}} has <strong class="points-balance">{{pts .Points}}</strong>{{if .HeldPoints}} ({{pts .HeldPoints}} held for a reward){{end}}.</p>
+    <p class="muted">{{$.Data.Name}} has <strong class="points-balance">{{pts .Points}}</strong>{{if .HeldPoints}} ({{pts .HeldPoints}} held for a reward){{end}}.
+      {{- if moduleOn "money"}} <a href="/admin/people/{{$.Data.ID}}/money">My money ›</a>{{end}}</p>
     {{template "points_form" (dict "PersonID" $.Data.ID "Name" $.Data.Name "Panel" . "Errors" $.Errors "From" "")}}
     {{if .History}}
     <h3>Last 30 days</h3>
@@ -90,13 +91,69 @@
     </ul>
     {{end}}
   </section>
+  {{if and (moduleOn "money") (not $.Data.IsAdult)}}{{with $.Data.Bank}}
+  <section class="card stack" id="bank-balance">
+    <h2>Bank balance</h2>
+    {{with .Current}}
+    <p class="muted">{{.Label}}: <strong>{{money .Pence}}</strong> · updated {{updatedAgo .UpdatedAt}}.
+      Money moved from Ingle is added on; check the real bank now and then.</p>
+    {{else}}
+    <p class="muted">What's in {{$.Data.Name}}'s real bank, so they can see it in My money. Only they and adults see it.</p>
+    {{end}}
+    <form class="stack" method="post" action="/admin/people/{{$.Data.ID}}/bank-balance">
+      <label class="field">
+        <span>Account name</span>
+        <input name="bank_label" value="{{.Label}}" maxlength="40" autocomplete="off" placeholder="Monzo">
+        {{template "err" index $.Errors "bank_label"}}
+      </label>
+      <label class="field field--short">
+        <span>Balance</span>
+        <input name="bank_amount" value="{{.Amount}}" inputmode="decimal" autocomplete="off" placeholder="23.40">
+        {{template "err" index $.Errors "bank_pence"}}
+      </label>
+      <button class="btn" type="submit">Update</button>
+    </form>
+    {{if .Current}}
+    <form method="post" action="/admin/people/{{$.Data.ID}}/bank-balance/remove">
+      <button class="btn btn--ghost" type="submit">Remove bank balance</button>
+    </form>
+    {{end}}
+  </section>
+  {{end}}{{end}}
+  {{if moduleOn "money"}}
+  <section class="card stack" id="bank">
+    <h2>Move to bank</h2>
+    <p class="muted">{{$.Data.Name}} has <strong>{{money .Pence}}</strong> to spend{{if .HeldPence}} ({{money .HeldPence}} held){{end}}.
+      Send it in your banking app first, then record it here. It comes off their balance straight away.
+      {{- if not $.Data.IsAdult}} {{$.Data.Name}} can also ask from My money on the board; requests wait in <a href="/admin/bank">Bank</a>.{{end}}</p>
+    {{if gt .Pence 0}}
+    <form class="stack" method="post" action="/admin/people/{{$.Data.ID}}/bank">
+      <label class="check">
+        <input type="checkbox" name="all" value="1"{{if .PayAll}} checked{{end}}>
+        <span>All of it ({{money .Pence}})</span>
+      </label>
+      <label class="field field--short" data-show-when="all=">
+        <span>Amount</span>
+        <input name="amount" value="{{.PayOut}}" inputmode="decimal" autocomplete="off" placeholder="5.00">
+      </label>
+      {{template "err" index $.Errors "payout"}}
+      <button class="btn" type="submit">Record the move</button>
+    </form>
+    {{end}}
+  </section>
+  {{end}}
   {{end}}
   {{end}}
 
-  {{if and .Data.ID .Data.IsAdult (not .Data.Archived)}}
-  <section class="card stack">
+  {{$money := moduleOn "money"}}
+  {{if and .Data.ID (not .Data.Archived) (or .Data.IsAdult $money)}}
+  <section class="card stack" id="pin">
     <h2>PIN</h2>
-    <p class="muted">Unlocks admin on a household display. {{if .Data.HasPIN}}A PIN is set.{{else}}No PIN set.{{end}}</p>
+    {{if .Data.IsAdult}}
+    <p class="muted">Unlocks admin on a household display{{if $money}}, and opens your My money{{end}}. {{if .Data.HasPIN}}A PIN is set.{{else}}No PIN set.{{end}}</p>
+    {{else}}
+    <p class="muted">Opens {{.Data.Name}}'s My money on a household display, and nothing else: it can't open admin or unlock the displays. They can type it in themselves while you watch. {{if .Data.HasPIN}}A PIN is set.{{else}}No PIN set.{{end}}</p>
+    {{end}}
     <form class="stack" method="post" action="/admin/people/{{.Data.ID}}/pin">
       <label class="field field--short">
         <span>New PIN (4–6 digits)</span>
@@ -114,7 +171,9 @@
     <form method="post" action="/admin/people/{{.Data.ID}}/pin/clear"><button class="btn btn--danger" type="submit">Remove PIN</button></form>
     {{end}}
   </section>
+  {{end}}
 
+  {{if and .Data.ID .Data.IsAdult (not .Data.Archived)}}
   <section class="card stack">
     <h2>Sign-in</h2>
     <p class="muted">Email and password for managing Ingle from a phone or computer.</p>
