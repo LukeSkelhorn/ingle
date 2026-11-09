@@ -288,6 +288,14 @@ button.chore__main:active { background: var(--line); }
 .person__head { display: flex; align-items: center; gap: 14px; }
 .person__balance { margin: 16px 0 0; font-size: 2.6rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .person__money { margin-left: 0.3em; color: var(--muted); }
+/* My money next to the name, and the balance that opens it. */
+.person__my-money { margin-left: auto; flex: none; }
+.person__balance--open {
+  display: block; width: 100%; padding: 0; border: 0; background: none; color: inherit;
+  font: inherit; font-size: 2.6rem; font-weight: 700; text-align: left; cursor: pointer;
+}
+.person__balance--open:focus-visible { outline: 2px solid var(--person, currentColor); outline-offset: 4px; border-radius: 8px; }
+.person__open { color: var(--muted); font-weight: 400; }
 .person__week { margin: 4px 0 0; color: var(--muted); }
 .person__sub { margin: 20px 0 8px; font-size: 1rem; }
 

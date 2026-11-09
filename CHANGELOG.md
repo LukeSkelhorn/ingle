@@ -16,6 +16,7 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ### Changed
 
+- **My money at the top:** on a person's sheet, **🔒 My money** is now next to their name instead of below the rewards, and tapping their balance opens it too. ([DOM-62](https://linear.app/skeltech/issue/DOM-62))
 - **My money shows a chore's time:** in My money's history, a timed chore shows which time it was for, as Admin › Completions does: "Brush teeth · 19:30". A chore done twice a day no longer shows as two lines with the same name. ([DOM-57](https://linear.app/skeltech/issue/DOM-57))
 
 ### Upgrade notes

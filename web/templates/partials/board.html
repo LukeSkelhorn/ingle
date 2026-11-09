@@ -206,12 +206,20 @@
      data-refresh lets the page re-fetch it when the board changes. */}}
 {{define "person"}}
 <div class="person" style="--person: {{.Person.Colour}}" data-refresh="/board/people/{{.Person.ID}}">
+  {{$money := and .MoneyHere (moduleOn "money")}}
   <div class="person__head">
     {{template "avatar" (avatar .Person "lg")}}
     <h2 class="picker__title" tabindex="-1" autofocus>{{.Person.Name}}</h2>
+    {{if $money}}<button class="btn person__my-money" type="button"
+            hx-get="/board/money/{{.Person.ID}}" hx-target="#sheet-body" hx-swap="innerHTML">🔒 My money</button>{{end}}
   </div>
-  <p class="person__balance">{{pts .Points}}{{if .Pence}} <span class="person__money">{{money .Pence}}</span>{{end}}
-    {{- with worth .HeldPoints .HeldPence}} <span class="person__held">({{.}} held)</span>{{end}}</p>
+  {{/* With My money here, tapping the balance opens it too. */}}
+  {{if $money}}<button class="person__balance person__balance--open" type="button" title="Open My money"
+          hx-get="/board/money/{{.Person.ID}}" hx-target="#sheet-body" hx-swap="innerHTML">
+  {{- else}}<p class="person__balance">{{end}}
+    {{- pts .Points}}{{if .Pence}} <span class="person__money">{{money .Pence}}</span>{{end}}
+    {{- with worth .HeldPoints .HeldPence}} <span class="person__held">({{.}} held)</span>{{end}}
+    {{- if $money}} <span class="person__open" aria-hidden="true">›</span></button>{{else}}</p>{{end}}
   <p class="person__week">This week: {{with net .WeekPoints .WeekPence}}{{.}}{{else}}nothing yet{{end}}</p>
   {{$rewards := moduleOn "rewards"}}
   {{if $rewards}}{{with .Goal}}
@@ -287,8 +295,6 @@
   {{end}}
   {{end}}
   <div class="picker__actions">
-    {{if and .MoneyHere (moduleOn "money")}}<button class="btn btn--block" type="button"
-            hx-get="/board/money/{{.Person.ID}}" hx-target="#sheet-body" hx-swap="innerHTML">🔒 My money</button>{{end}}
     <button class="btn btn--ghost btn--block" type="button" data-close>Close</button>
   </div>
 </div>
