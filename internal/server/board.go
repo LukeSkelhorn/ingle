@@ -26,6 +26,20 @@ type boardView struct {
 	// and the board should refresh (0 for none). Relative, so a display
 	// whose clock is off still refreshes on time.
 	NextIn int64
+	// OOB is set on #board fragment responses: they also carry the header's
+	// Up for grabs button as an out-of-band swap, since it lives outside
+	// #board.
+	OOB bool
+}
+
+// PoolLate reports whether any chore up for grabs is overdue.
+func (v boardView) PoolLate() bool {
+	for _, c := range v.Pool {
+		if c.Overdue {
+			return true
+		}
+	}
+	return false
 }
 
 // boardPage is the full board page: clock plus the board.
@@ -83,7 +97,18 @@ func (s *Server) renderBoard(w http.ResponseWriter, r *http.Request, status int)
 		s.serverError(w, r, err)
 		return
 	}
+	b.OOB = true
 	s.renderPartialStatus(w, r, status, "board", b)
+}
+
+// handlePoolSheet is the Up for grabs sheet, opened from the header button.
+func (s *Server) handlePoolSheet(w http.ResponseWriter, r *http.Request) {
+	b, err := s.loadBoard(r)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	s.renderPartial(w, r, "pool_sheet", b)
 }
 
 func (s *Server) handlePick(w http.ResponseWriter, r *http.Request) {
@@ -103,8 +128,10 @@ func (s *Server) handlePick(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	// Claimed or done elsewhere since this screen last refreshed.
-	s.boardFailed(w, r, "Someone's already on that one.")
+	// Claimed or done elsewhere since this screen last refreshed: back to
+	// the (fresh) Up for grabs list, since the picker opens in its sheet.
+	setToast(w, toast{Message: "Someone's already on that one.", Error: true})
+	s.renderPartialStatus(w, r, http.StatusConflict, "pool_sheet", b)
 }
 
 func (s *Server) handleClaim(w http.ResponseWriter, r *http.Request) {

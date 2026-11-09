@@ -76,7 +76,7 @@ func TestPictureCards(t *testing.T) {
 	if !strings.Contains(col, "chores chores--pictures") || !strings.Contains(col, `<span class="chore__emoji" aria-hidden="true">🐱</span>`) {
 		t.Errorf("Alfie's column isn't picture cards: %s", col)
 	}
-	if pool := poolOf(body); strings.Contains(pool, "chore__emoji") || strings.Contains(pool, "chores--pictures") {
+	if pool := poolOf(wall.get("/board/pool").body); strings.Contains(pool, "chore__emoji") || strings.Contains(pool, "chores--pictures") {
 		t.Errorf("pool changed: %s", pool)
 	}
 
@@ -86,7 +86,7 @@ func TestPictureCards(t *testing.T) {
 		t.Fatal(err)
 	}
 	occ := h.occurrence("Hoover the lounge")
-	if pool := poolOf(wall.get("/board").body); !strings.Contains(pool, `<span class="chore__emoji" aria-hidden="true">🧹</span>`) {
+	if pool := poolOf(wall.get("/board/pool").body); !strings.Contains(pool, `<span class="chore__emoji" aria-hidden="true">🧹</span>`) {
 		t.Errorf("pool card has no emoji: %s", pool)
 	}
 	expect(t, wall.get("/board/occurrences/"+itoa(occ.ID)+"/pick"), http.StatusOK, `<span class="picker__emoji" aria-hidden="true">🧹</span>`)

@@ -6,14 +6,32 @@
     <h1>People</h1>
     <a class="btn btn--primary" href="/admin/people/new">Add someone</a>
   </div>
+  {{with .Data.Undo}}
+  <form class="flash flash--undo" role="status" method="post" action="/admin/people/{{.PersonID}}/points/{{.EntryID}}/undo">
+    <input type="hidden" name="from" value="people">
+    <span>{{$.Flash}}</span>
+    <button class="btn btn--ghost" type="submit">Undo</button>
+  </form>
+  {{else}}{{if not .Data.Adjust}}{{template "flash" .}}{{end}}{{end}}
   <ul class="list card">
     {{range .Data.People}}
-    <li><a class="list__row" href="/admin/people/{{.ID}}">
-      {{template "avatar" (avatar . "md")}}
-      <span class="list__main"><strong>{{.Name}}</strong>
-        <small class="muted">{{if eq .Kind "adult"}}Adult{{if .PinHash}} · PIN{{end}}{{if .PasswordHash}} · Sign-in{{end}}{{else}}Child{{end}}</small></span>
-      <span aria-hidden="true">›</span>
-    </a></li>
+    {{$b := index $.Data.Balances .ID}}
+    <li class="list__item">
+      <a class="list__row" href="/admin/people/{{.ID}}">
+        {{template "avatar" (avatar . "md")}}
+        <span class="list__main"><strong>{{.Name}}</strong>
+          <small class="muted">{{if eq .Kind "adult"}}Adult{{if .PinHash}} · PIN{{end}}{{if .PasswordHash}} · Sign-in{{end}}{{else}}Child{{end}}</small></span>
+        <span class="list__balance">{{pts $b.Points}}{{if $b.Pence}} · {{money $b.Pence}}{{end}}</span>
+      </a>
+      <details class="menu">
+        <summary class="menu__btn" aria-label="More for {{.Name}}" title="More">⋯</summary>
+        <div class="menu__panel">
+          <a href="/admin/people?adjust={{.ID}}&amp;direction=give">Give points</a>
+          <a href="/admin/people?adjust={{.ID}}&amp;direction=take">Take points away</a>
+          <a href="/admin/people/{{.ID}}">Edit</a>
+        </div>
+      </details>
+    </li>
     {{else}}
     <li class="list__empty muted">No one yet.</li>
     {{end}}
@@ -31,5 +49,45 @@
     </ul>
   </details>
   {{end}}
+  {{with .Data.Adjust}}
+  {{$b := index $.Data.Balances .Person.ID}}
+  <dialog class="dialog" id="adjust" data-open open aria-labelledby="adjust-h">
+    <div class="dialog__head">
+      {{template "avatar" (avatar .Person "md")}}
+      <div>
+        <h2 id="adjust-h" tabindex="-1" autofocus>{{if eq .Panel.Direction "give"}}Give points to{{else}}Take points from{{end}} {{.Person.Name}}</h2>
+        <p class="muted">{{.Person.Name}} has <strong>{{pts $b.Points}}</strong>{{if $b.Pence}} · {{money $b.Pence}}{{end}}.</p>
+      </div>
+    </div>
+    {{if $.Flash}}<p class="flash" role="status">{{$.Flash}}</p>{{end}}
+    {{template "points_form" (dict "PersonID" .Person.ID "Name" .Person.Name "Panel" .Panel "Errors" $.Errors "From" "people")}}
+  </dialog>
+  {{end}}
 </main>
+<script>
+  // ⋯ menus: one open at a time, closed by a tap elsewhere or Escape.
+  (function () {
+    var menus = document.querySelectorAll("details.menu");
+    document.addEventListener("click", function (e) {
+      menus.forEach(function (m) { if (m.open && !m.contains(e.target)) m.open = false; });
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") menus.forEach(function (m) { m.open = false; });
+    });
+    menus.forEach(function (m) {
+      m.addEventListener("toggle", function () {
+        if (m.open) menus.forEach(function (o) { if (o !== m) o.open = false; });
+      });
+    });
+    // The Adjust points pop-up: open when the page comes with it; closing
+    // it (Escape or a tap outside) goes back to the plain list.
+    var d = document.querySelector("dialog[data-open]");
+    if (!d || !d.showModal) return; // no JS or support: it shows inline, open
+    d.close();
+    d.showModal();
+    function back() { location.replace("/admin/people"); }
+    d.addEventListener("cancel", function (e) { e.preventDefault(); back(); });
+    d.addEventListener("click", function (e) { if (e.target === d) back(); });
+  })();
+</script>
 {{end}}

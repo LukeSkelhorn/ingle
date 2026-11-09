@@ -89,3 +89,47 @@
   {{template "err" $.Err}}
 </fieldset>
 {{end}}{{end}}
+
+{{/* The Adjust points form: dict "PersonID" int64 "Name" string "Panel"
+     pointsPanel "Errors" valid.Errors "From" ("people" sends it back to
+     Admin › People, "" to the person's page). */}}
+{{define "points_form"}}{{$p := .Panel}}{{$errs := .Errors}}
+<form class="stack" method="post" action="/admin/people/{{.PersonID}}/points">
+  {{if .From}}<input type="hidden" name="from" value="{{.From}}">{{end}}
+  <fieldset class="field">
+    <legend>Adjust points</legend>
+    <div class="segmented">
+      <label><input type="radio" name="direction" value="take"{{if ne $p.Direction "give"}} checked{{end}}> <span>Take away</span></label>
+      <label><input type="radio" name="direction" value="give"{{if eq $p.Direction "give"}} checked{{end}}> <span>Give</span></label>
+    </div>
+  </fieldset>
+  <fieldset class="field">
+    <legend>How many</legend>
+    <div class="segmented">
+      {{range $p.QuickAmounts}}<label><input type="radio" name="amount" value="{{.}}"{{if eq $p.Amount .}} checked{{end}}> <span>{{.}}</span></label>{{end}}
+      <label><input type="radio" name="amount" value="custom"{{if eq $p.Amount "custom"}} checked{{end}}> <span>Other</span></label>
+    </div>
+    {{template "err" index $errs "amount"}}
+  </fieldset>
+  <label class="field field--short" data-show-when="amount=custom">
+    <span>Points</span>
+    <input type="number" name="amount_custom" value="{{$p.Custom}}" min="1" max="1000" inputmode="numeric">
+  </label>
+  <label class="field">
+    <span>Reason</span>
+    <input name="reason" value="{{$p.Reason}}" required maxlength="200" autocomplete="off"
+           list="reason-suggestions" placeholder="e.g. Hit his sister. We don't hurt people.">
+    {{with $p.Suggestions}}<datalist id="reason-suggestions">{{range .}}<option value="{{.}}">{{end}}</datalist>{{end}}
+    <small class="muted">Say what they did and why it matters. Everyone sees this on the board.</small>
+    {{template "err" index $errs "reason"}}
+  </label>
+  {{if .From}}
+  <div class="dialog__actions">
+    <a class="btn btn--ghost" href="/admin/people">Cancel</a>
+    <button class="btn btn--primary" type="submit">Save</button>
+  </div>
+  {{else}}
+  <button class="btn" type="submit">Save</button>
+  {{end}}
+</form>
+{{end}}
