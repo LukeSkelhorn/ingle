@@ -33,7 +33,13 @@ func TestKidMoneyPIN(t *testing.T) {
 	}), http.StatusOK)
 
 	// No PIN yet: ask a grown-up.
-	expect(t, wall.get("/board/people/"+alfie), http.StatusOK, `hx-get="/board/money/`+alfie+`"`, "My money")
+	// The sheet opens My money from the button by the name and from the
+	// balance.
+	sheet := wall.get("/board/people/" + alfie)
+	expect(t, sheet, http.StatusOK, `class="btn person__my-money"`, "🔒 My money", `class="person__balance person__balance--open"`)
+	if n := strings.Count(sheet.body, `hx-get="/board/money/`+alfie+`"`); n != 2 {
+		t.Errorf("sheet opens My money from %d places, want 2", n)
+	}
 	r := wall.get("/board/money/" + alfie)
 	expect(t, r, http.StatusOK, "Alfie's money", "Ask a grown-up to set your PIN")
 	notContains(t, r, "pinpad__keys")
