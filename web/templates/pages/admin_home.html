@@ -6,7 +6,7 @@
   {{if not .Data.ModulesChosen}}
   <section class="card modules-prompt">
     <h2>Choose what your household uses</h2>
-    <p>Ingle now lets you switch whole features off: calendar, photos and rewards. Everything stays on until you choose.</p>
+    <p>Ingle now lets you switch whole features off: {{.Data.ModuleNames}}. Everything stays on until you choose.</p>
     <p><a class="btn btn--primary" href="/admin/modules">Choose modules</a></p>
   </section>
   {{end}}
