@@ -9,6 +9,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/lukeskelhorn/ingle/internal/auth"
@@ -49,6 +50,51 @@ func loadPages(funcs template.FuncMap) (*pages, error) {
 	}
 	return p, nil
 }
+
+// clone copies p. It fails once p has executed, so the master set that
+// clones come from is never executed itself.
+func (p *pages) clone() (*pages, error) {
+	base, err := p.base.Clone()
+	if err != nil {
+		return nil, err
+	}
+	c := &pages{base: base, sets: make(map[string]*template.Template, len(p.sets))}
+	for name, set := range p.sets {
+		if c.sets[name], err = set.Clone(); err != nil {
+			return nil, err
+		}
+	}
+	return c, nil
+}
+
+// bind replaces funcs in every set. A set's funcs are its own once cloned,
+// so this only touches the render holding p.
+func (p *pages) bind(funcs template.FuncMap) {
+	p.base.Funcs(funcs)
+	for _, set := range p.sets {
+		set.Funcs(funcs)
+	}
+}
+
+// pagePool hands each render its own copy of the templates, so the
+// household funcs can be bound to that render's request.
+type pagePool struct {
+	master *pages
+	pool   sync.Pool
+}
+
+func newPagePool(master *pages) *pagePool {
+	return &pagePool{master: master}
+}
+
+func (pp *pagePool) get() (*pages, error) {
+	if p, ok := pp.pool.Get().(*pages); ok {
+		return p, nil
+	}
+	return pp.master.clone()
+}
+
+func (pp *pagePool) put(p *pages) { pp.pool.Put(p) }
 
 func (p *pages) execute(w io.Writer, page string, data any) error {
 	set, ok := p.sets[page]
@@ -120,18 +166,49 @@ func avatarOf(p dbq.Person, size string) avatarView {
 	return v
 }
 
+// householdFuncs are the template funcs that depend on the household being
+// rendered for. Each render binds them to its request (see pages.bind).
+func (s *Server) householdFuncs(ctx context.Context) template.FuncMap {
+	return template.FuncMap{
+		// moduleOn "rewards" reports whether a module is switched on, so
+		// pages and partials can hide its pieces.
+		"moduleOn": func(id string) bool { return s.moduleOn(ctx, id) },
+		// moduleNav is the admin bar links of the modules that are on.
+		"moduleNav": func() []module.NavItem { return s.moduleNav(ctx) },
+		"when": func(unix int64) string {
+			loc := s.Locale
+			if s.Settings != nil {
+				loc.Location = s.Settings.Location(ctx, householdIn(ctx))
+			}
+			t := time.Unix(unix, 0)
+			return loc.FormatDate(t) + " " + loc.FormatTime(t)
+		},
+		// dayOf is a moment's local day, e.g. "Thu 5 Nov".
+		"dayOf": func(unix int64) string {
+			loc := time.UTC
+			if s.Settings != nil {
+				loc = s.Settings.Location(ctx, householdIn(ctx))
+			}
+			return time.Unix(unix, 0).In(loc).Format("Mon 2 Jan")
+		},
+	}
+}
+
 func (s *Server) funcs() template.FuncMap {
+	fm := s.householdFuncs(context.Background())
+	for k, v := range s.staticFuncs() {
+		fm[k] = v
+	}
+	return fm
+}
+
+func (s *Server) staticFuncs() template.FuncMap {
 	return template.FuncMap{
 		"money":      func(pence int64) string { return s.Locale.FormatMoney(pence) },
 		"moneyInput": locale.FormatMoneyInput,
 		// updatedAgo says how long since a bank balance was checked.
 		"updatedAgo": func(t time.Time) string { return updatedAgo(s.now(), t) },
 		"avatar":     avatarOf,
-		// moduleOn "rewards" reports whether a module is switched on, so
-		// pages and partials can hide its pieces.
-		"moduleOn": func(id string) bool { return s.moduleOn(context.Background(), id) },
-		// moduleNav is the admin bar links of the modules that are on.
-		"moduleNav": func() []module.NavItem { return s.moduleNav(context.Background()) },
 		// plainAvatar is an avatar without its photo (initial or emoji),
 		// for the locked display, where /avatars/ isn't served.
 		"plainAvatar": func(p dbq.Person, size string) avatarView {
@@ -158,22 +235,6 @@ func (s *Server) funcs() template.FuncMap {
 				return *v
 			}
 			return p
-		},
-		"when": func(unix int64) string {
-			loc := s.Locale
-			if s.Settings != nil {
-				loc.Location = s.Settings.Location(context.Background(), s.HouseholdID)
-			}
-			t := time.Unix(unix, 0)
-			return loc.FormatDate(t) + " " + loc.FormatTime(t)
-		},
-		// dayOf is a moment's local day, e.g. "Thu 5 Nov".
-		"dayOf": func(unix int64) string {
-			loc := time.UTC
-			if s.Settings != nil {
-				loc = s.Settings.Location(context.Background(), s.HouseholdID)
-			}
-			return time.Unix(unix, 0).In(loc).Format("Mon 2 Jan")
 		},
 		"weekdayShort": func(d time.Weekday) string { return d.String()[:3] },
 		// names and orNames list people: "Isla and Mum", "Luke or Sam".

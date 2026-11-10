@@ -33,7 +33,7 @@ func (s *Server) registerModules(reg *module.Registry) {
 
 // moduleOn reports whether the module id is on for the household.
 func (s *Server) moduleOn(ctx context.Context, id string) bool {
-	return s.Modules.Enabled(ctx, s.HouseholdID, id)
+	return s.Modules.Enabled(ctx, householdIn(ctx), id)
 }
 
 // moduleNav is the admin bar links of the modules that are on.
@@ -108,20 +108,44 @@ func (s *Server) kickLoops() {
 	}
 }
 
+// households lists the households the module loops run for.
+func (s *Server) households(ctx context.Context) ([]int64, error) {
+	if s.Households != nil {
+		return s.Households(ctx)
+	}
+	if s.HouseholdID == 0 {
+		return nil, nil
+	}
+	return []int64{s.HouseholdID}, nil
+}
+
 func (s *Server) runLoop(ctx context.Context, id string, l module.Loop, kick <-chan struct{}) {
-	skipped := true // so the first run happens
+	// ran holds the households the loop last ran for; one missing from it
+	// (new, or its module was off) runs on the next kick too.
+	ran := map[int64]bool{}
 	run := func(force bool) {
-		if !s.moduleOn(ctx, id) {
-			skipped = true
+		hhs, err := s.households(ctx)
+		if err != nil {
+			if ctx.Err() == nil {
+				s.Log.Error(l.Name, slog.String("module", id), slog.Any("err", err))
+			}
 			return
 		}
-		if !force && !skipped {
-			return
+		next := make(map[int64]bool, len(hhs))
+		for _, hh := range hhs {
+			hctx := withHousehold(ctx, hh)
+			if !s.moduleOn(hctx, id) {
+				continue
+			}
+			next[hh] = true
+			if !force && ran[hh] {
+				continue
+			}
+			if err := l.Run(hctx, hh); err != nil && ctx.Err() == nil {
+				s.Log.Error(l.Name, slog.String("module", id), slog.Int64("household", hh), slog.Any("err", err))
+			}
 		}
-		skipped = false
-		if err := l.Run(ctx, s.HouseholdID); err != nil && ctx.Err() == nil {
-			s.Log.Error(l.Name, slog.String("module", id), slog.Any("err", err))
-		}
+		ran = next
 	}
 	run(true)
 	t := time.NewTicker(l.Every)

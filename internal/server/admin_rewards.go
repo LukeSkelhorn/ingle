@@ -17,12 +17,12 @@ type rewardsView struct {
 
 func (s *Server) handleRewards(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	list, err := s.Household.Rewards(ctx, s.HouseholdID)
+	list, err := s.Household.Rewards(ctx, hhOf(r))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	archived, err := s.Household.ArchivedRewards(ctx, s.HouseholdID)
+	archived, err := s.Household.ArchivedRewards(ctx, hhOf(r))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -75,7 +75,7 @@ func (s *Server) loadReward(w http.ResponseWriter, r *http.Request) (dbq.Reward,
 		http.NotFound(w, r)
 		return dbq.Reward{}, false
 	}
-	rw, err := s.Household.Reward(r.Context(), s.HouseholdID, id)
+	rw, err := s.Household.Reward(r.Context(), hhOf(r), id)
 	if errors.Is(err, household.ErrNotFound) {
 		http.NotFound(w, r)
 		return dbq.Reward{}, false
@@ -127,7 +127,7 @@ func (s *Server) handleRewardCreate(w http.ResponseWriter, r *http.Request) {
 		s.renderReward(w, r, http.StatusOK, f, nil, suggestionFlash(e, "reward"))
 		return
 	}
-	_, err = s.Household.CreateReward(r.Context(), s.HouseholdID, actor(r).Person.ID, in)
+	_, err = s.Household.CreateReward(r.Context(), hhOf(r), actor(r).Person.ID, in)
 	if errs, ok := validationErrors(err); ok {
 		s.renderReward(w, r, http.StatusUnprocessableEntity, f, errs, "")
 		return
@@ -158,7 +158,7 @@ func (s *Server) handleRewardUpdate(w http.ResponseWriter, r *http.Request) {
 		s.renderReward(w, r, http.StatusOK, f, nil, suggestionFlash(e, "reward"))
 		return
 	}
-	rw, err := s.Household.UpdateReward(r.Context(), s.HouseholdID, actor(r).Person.ID, cur.ID, in)
+	rw, err := s.Household.UpdateReward(r.Context(), hhOf(r), actor(r).Person.ID, cur.ID, in)
 	if errs, ok := validationErrors(err); ok {
 		s.renderReward(w, r, http.StatusUnprocessableEntity, f, errs, "")
 		return
@@ -175,7 +175,7 @@ func (s *Server) handleRewardArchive(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := s.Household.ArchiveReward(r.Context(), s.HouseholdID, actor(r).Person.ID, rw.ID); err != nil {
+	if err := s.Household.ArchiveReward(r.Context(), hhOf(r), actor(r).Person.ID, rw.ID); err != nil {
 		s.serverError(w, r, err)
 		return
 	}
@@ -187,7 +187,7 @@ func (s *Server) handleRewardRestore(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := s.Household.RestoreReward(r.Context(), s.HouseholdID, actor(r).Person.ID, rw.ID); err != nil {
+	if err := s.Household.RestoreReward(r.Context(), hhOf(r), actor(r).Person.ID, rw.ID); err != nil {
 		s.serverError(w, r, err)
 		return
 	}

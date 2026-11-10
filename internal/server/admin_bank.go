@@ -27,7 +27,7 @@ func (s *Server) handleBank(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) renderBank(w http.ResponseWriter, r *http.Request, status int, p bankPage, errs valid.Errors, flash string) {
-	all, err := s.Chores.Transfers(r.Context(), s.HouseholdID, s.now().AddDate(0, 0, -bankHistoryDays))
+	all, err := s.Chores.Transfers(r.Context(), hhOf(r), s.now().AddDate(0, 0, -bankHistoryDays))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -59,7 +59,7 @@ func (s *Server) handleBankApprove(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
-	if err := s.Chores.ApproveTransfer(r.Context(), s.HouseholdID, id, adult.ID); err != nil {
+	if err := s.Chores.ApproveTransfer(r.Context(), hhOf(r), id, adult.ID); err != nil {
 		s.bankFailed(w, r, err, bankPage{})
 		return
 	}
@@ -83,7 +83,7 @@ func (s *Server) handleBankDecline(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	reason := r.PostFormValue("reason")
-	if err := s.Chores.DeclineTransfer(r.Context(), s.HouseholdID, id, adult.ID, reason); err != nil {
+	if err := s.Chores.DeclineTransfer(r.Context(), hhOf(r), id, adult.ID, reason); err != nil {
 		s.bankFailed(w, r, err, bankPage{Declining: id, Reason: reason})
 		return
 	}
@@ -144,7 +144,7 @@ func (s *Server) handlePayOut(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	_, err := s.Chores.PayOut(r.Context(), s.HouseholdID, p.ID, pence, adult.ID)
+	_, err := s.Chores.PayOut(r.Context(), hhOf(r), p.ID, pence, adult.ID)
 	switch {
 	case errors.Is(err, chores.ErrInsufficientBalance):
 		again(http.StatusUnprocessableEntity, "That's more than "+p.Name+" has to spend.")

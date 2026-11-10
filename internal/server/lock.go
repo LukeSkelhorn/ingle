@@ -36,7 +36,7 @@ func (s *Server) locked(r *http.Request) (lock.State, error) {
 	if s.Lock == nil {
 		return lock.State{}, nil
 	}
-	return s.Lock.State(r.Context(), s.HouseholdID)
+	return s.Lock.State(r.Context(), hhOf(r))
 }
 
 // lockGate keeps a locked display to the locked screen: it may load the
@@ -60,7 +60,7 @@ func (s *Server) lockGate(next http.Handler) http.Handler {
 			// Automatic polling (the clock, the screensaver panel, the
 			// event stream) isn't someone using the board.
 			if r.Method != http.MethodGet || r.URL.Path == "/" {
-				s.Lock.Touch(s.HouseholdID)
+				s.Lock.Touch(hhOf(r))
 			}
 			next.ServeHTTP(w, r)
 			return
@@ -101,12 +101,12 @@ func (s *Server) boardLock(r *http.Request) (lockView, error) {
 	v := lockView{Locked: st.Locked}
 	if st.Locked {
 		loc := s.Locale
-		loc.Location = s.Settings.Location(r.Context(), s.HouseholdID)
+		loc.Location = s.Settings.Location(r.Context(), hhOf(r))
 		v.Since = loc.FormatTime(loc.In(st.Since))
 	}
 	if identityFrom(r.Context()).Device == nil {
 		v.CanLock = true // an adult's phone can always unlock again
-	} else if v.CanLock, err = s.Auth.CanUnlockOnDisplay(r.Context(), s.HouseholdID); err != nil {
+	} else if v.CanLock, err = s.Auth.CanUnlockOnDisplay(r.Context(), hhOf(r)); err != nil {
 		return lockView{}, err
 	}
 	return v, nil
@@ -118,7 +118,7 @@ func (s *Server) renderLocked(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	set, err := s.Settings.Get(r.Context(), s.HouseholdID)
+	set, err := s.Settings.Get(r.Context(), hhOf(r))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -143,7 +143,7 @@ func (s *Server) handleLock(w http.ResponseWriter, r *http.Request) {
 	if id.Device == nil {
 		reason = lock.Remote
 	} else {
-		ok, err := s.Auth.CanUnlockOnDisplay(r.Context(), s.HouseholdID)
+		ok, err := s.Auth.CanUnlockOnDisplay(r.Context(), hhOf(r))
 		if err != nil {
 			s.serverError(w, r, err)
 			return
@@ -153,7 +153,7 @@ func (s *Server) handleLock(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := s.Lock.Lock(r.Context(), s.HouseholdID, by, reason); err != nil {
+	if err := s.Lock.Lock(r.Context(), hhOf(r), by, reason); err != nil {
 		s.serverError(w, r, err)
 		return
 	}
@@ -174,7 +174,7 @@ func (s *Server) handleUnlock(w http.ResponseWriter, r *http.Request) {
 			redirect(w, r, "/signin")
 			return
 		}
-		if err := s.Lock.Unlock(r.Context(), s.HouseholdID, &id.Session.Person.ID, lock.ByPhone); err != nil {
+		if err := s.Lock.Unlock(r.Context(), hhOf(r), &id.Session.Person.ID, lock.ByPhone); err != nil {
 			s.serverError(w, r, err)
 			return
 		}
@@ -215,7 +215,7 @@ func (s *Server) handleUnlock(w http.ResponseWriter, r *http.Request) {
 	if who != nil {
 		how = lock.ByPIN
 	}
-	if err := s.Lock.Unlock(r.Context(), s.HouseholdID, who, how); err != nil {
+	if err := s.Lock.Unlock(r.Context(), hhOf(r), who, how); err != nil {
 		s.serverError(w, r, err)
 		return
 	}

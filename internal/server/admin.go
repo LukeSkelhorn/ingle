@@ -33,32 +33,32 @@ type adminHome struct {
 
 func (s *Server) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	people, err := s.Household.People(ctx, s.HouseholdID)
+	people, err := s.Household.People(ctx, hhOf(r))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	chs, err := s.Chores.Chores(ctx, s.HouseholdID)
+	chs, err := s.Chores.Chores(ctx, hhOf(r))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	rewards, err := s.Household.Rewards(ctx, s.HouseholdID)
+	rewards, err := s.Household.Rewards(ctx, hhOf(r))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	pending, err := s.Store.Q.ListPendingCompletions(ctx, s.HouseholdID)
+	pending, err := s.Store.Q.ListPendingCompletions(ctx, hhOf(r))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	claims, err := s.Store.Q.ListPendingRedemptions(ctx, s.HouseholdID)
+	claims, err := s.Store.Q.ListPendingRedemptions(ctx, hhOf(r))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	act, err := s.Store.Q.ListRecentActivityWithActor(ctx, dbq.ListRecentActivityWithActorParams{HouseholdID: s.HouseholdID, Limit: 20})
+	act, err := s.Store.Q.ListRecentActivityWithActor(ctx, dbq.ListRecentActivityWithActorParams{HouseholdID: hhOf(r), Limit: 20})
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -71,7 +71,7 @@ func (s *Server) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 	if !s.moduleOn(ctx, modRewards) {
 		claims = nil // they wait, unseen, until Rewards is back on
 	}
-	mods, err := s.Modules.State(ctx, s.HouseholdID)
+	mods, err := s.Modules.State(ctx, hhOf(r))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -87,11 +87,11 @@ func (s *Server) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 	var bank int
 	var stale []chores.StaleBank
 	if s.moduleOn(ctx, modMoney) {
-		if bank, err = s.Chores.PendingTransferCount(ctx, s.HouseholdID); err != nil {
+		if bank, err = s.Chores.PendingTransferCount(ctx, hhOf(r)); err != nil {
 			s.serverError(w, r, err)
 			return
 		}
-		if stale, err = s.Chores.StaleBanks(ctx, s.HouseholdID); err != nil {
+		if stale, err = s.Chores.StaleBanks(ctx, hhOf(r)); err != nil {
 			s.serverError(w, r, err)
 			return
 		}
@@ -264,7 +264,7 @@ func (s *Server) settingsForm(set settings.Settings) settingsForm {
 }
 
 func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
-	set, err := s.Settings.Get(r.Context(), s.HouseholdID)
+	set, err := s.Settings.Get(r.Context(), hhOf(r))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -299,14 +299,14 @@ func (s *Server) handleSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 		LockUntil:              f.str("lock_until"),
 		LockIdleHours:          f.int("lock_idle_hours", "Choose between 0 (never) and 72 hours."),
 	}
-	if set, err := s.Settings.Get(r.Context(), s.HouseholdID); err == nil {
+	if set, err := s.Settings.Get(r.Context(), hhOf(r)); err == nil {
 		data.HasUnlockCode = set.HasUnlockCode()
 	}
 	if !f.ok() {
 		s.renderSettings(w, r, http.StatusUnprocessableEntity, data, f.errs, "")
 		return
 	}
-	err := s.Settings.Update(r.Context(), s.HouseholdID, actor(r).Person.ID, settings.Input{
+	err := s.Settings.Update(r.Context(), hhOf(r), actor(r).Person.ID, settings.Input{
 		HouseholdName: data.HouseholdName, Timezone: data.Timezone,
 		DayStartsAt: data.DayStartsAt, AdminIdleMinutes: data.AdminIdleMinutes,
 		ScreensaverIdleMinutes: data.ScreensaverIdleMinutes,
@@ -343,7 +343,7 @@ func (s *Server) handleUnlockCodeSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f := newForm(r)
-	set, err := s.Settings.Get(r.Context(), s.HouseholdID)
+	set, err := s.Settings.Get(r.Context(), hhOf(r))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -352,7 +352,7 @@ func (s *Server) handleUnlockCodeSet(w http.ResponseWriter, r *http.Request) {
 		s.renderSettings(w, r, http.StatusUnprocessableEntity, s.settingsForm(set), map[string]string{"code_confirm": "The codes don't match."}, "")
 		return
 	}
-	err = s.Auth.SetUnlockCode(r.Context(), s.HouseholdID, actor(r).Person.ID, f.str("code"))
+	err = s.Auth.SetUnlockCode(r.Context(), hhOf(r), actor(r).Person.ID, f.str("code"))
 	if errors.Is(err, auth.ErrInvalidPIN) {
 		s.renderSettings(w, r, http.StatusUnprocessableEntity, s.settingsForm(set), map[string]string{"code": "Use 4 to 6 digits."}, "")
 		return
@@ -366,7 +366,7 @@ func (s *Server) handleUnlockCodeSet(w http.ResponseWriter, r *http.Request) {
 
 // handleUnlockCodeClear removes the household unlock code.
 func (s *Server) handleUnlockCodeClear(w http.ResponseWriter, r *http.Request) {
-	if err := s.Auth.ClearUnlockCode(r.Context(), s.HouseholdID, actor(r).Person.ID); err != nil {
+	if err := s.Auth.ClearUnlockCode(r.Context(), hhOf(r), actor(r).Person.ID); err != nil {
 		s.serverError(w, r, err)
 		return
 	}
@@ -374,7 +374,7 @@ func (s *Server) handleUnlockCodeClear(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) settingsSaved(w http.ResponseWriter, r *http.Request, flash string) {
-	set, err := s.Settings.Get(r.Context(), s.HouseholdID)
+	set, err := s.Settings.Get(r.Context(), hhOf(r))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -428,12 +428,12 @@ func (s *Server) handleDevices(w http.ResponseWriter, r *http.Request) {
 func (s *Server) renderDevices(w http.ResponseWriter, r *http.Request, status int, flash string, errs map[string]string) {
 	ctx := r.Context()
 	id := identityFrom(ctx)
-	displays, err := s.Store.Q.ListDevices(ctx, s.HouseholdID)
+	displays, err := s.Store.Q.ListDevices(ctx, hhOf(r))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	rows, err := s.Store.Q.ListPersonalSessions(ctx, s.HouseholdID)
+	rows, err := s.Store.Q.ListPersonalSessions(ctx, hhOf(r))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -475,7 +475,7 @@ func (s *Server) handleDeviceRegister(w http.ResponseWriter, r *http.Request) {
 		s.renderDevices(w, r, http.StatusUnprocessableEntity, "", map[string]string{"name": "Name this display, e.g. Kitchen."})
 		return
 	}
-	token, _, err := s.Auth.RegisterDisplay(ctx, s.HouseholdID, name, id.Session.Person.ID)
+	token, _, err := s.Auth.RegisterDisplay(ctx, hhOf(r), name, id.Session.Person.ID)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -495,7 +495,7 @@ func (s *Server) handleDeviceRevoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	if err := s.Auth.RevokeDevice(ctx, s.HouseholdID, devID, actor(r).Person.ID); err != nil {
+	if err := s.Auth.RevokeDevice(ctx, hhOf(r), devID, actor(r).Person.ID); err != nil {
 		s.serverError(w, r, err)
 		return
 	}
@@ -519,7 +519,7 @@ func (s *Server) handleSessionRevoke(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad session", http.StatusBadRequest)
 		return
 	}
-	if err := s.Auth.RevokeSession(r.Context(), s.HouseholdID, hash, actor(r).Person.ID); err != nil {
+	if err := s.Auth.RevokeSession(r.Context(), hhOf(r), hash, actor(r).Person.ID); err != nil {
 		s.serverError(w, r, err)
 		return
 	}
@@ -533,7 +533,7 @@ func (s *Server) handleSessionRevoke(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleSignOutOthers(w http.ResponseWriter, r *http.Request) {
 	a := actor(r)
-	if err := s.Auth.SignOutEverywhere(r.Context(), s.HouseholdID, a.Person.ID, a.TokenHash); err != nil {
+	if err := s.Auth.SignOutEverywhere(r.Context(), hhOf(r), a.Person.ID, a.TokenHash); err != nil {
 		s.serverError(w, r, err)
 		return
 	}

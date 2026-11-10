@@ -26,7 +26,7 @@ func (s *Server) loadBankPanel(r *http.Request, f *personForm) error {
 	if f.Kind != "child" || !s.moduleOn(r.Context(), modMoney) {
 		return nil
 	}
-	b, err := s.Chores.PersonBank(r.Context(), s.HouseholdID, f.ID)
+	b, err := s.Chores.PersonBank(r.Context(), hhOf(r), f.ID)
 	if err != nil {
 		return err
 	}
@@ -64,7 +64,7 @@ func (s *Server) handleSetBankBalance(w http.ResponseWriter, r *http.Request) {
 		again(http.StatusUnprocessableEntity, valid.Errors{"bank_pence": "Enter the balance, like 23.40."})
 		return
 	}
-	err = s.Chores.SetBank(r.Context(), s.HouseholdID, p.ID, label, pence, adult.ID)
+	err = s.Chores.SetBank(r.Context(), hhOf(r), p.ID, label, pence, adult.ID)
 	if errs, ok := validationErrors(err); ok {
 		again(http.StatusUnprocessableEntity, errs)
 		return
@@ -88,7 +88,7 @@ func (s *Server) handleRemoveBankBalance(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
-	err := s.Chores.RemoveBank(r.Context(), s.HouseholdID, p.ID, adult.ID)
+	err := s.Chores.RemoveBank(r.Context(), hhOf(r), p.ID, adult.ID)
 	if errors.Is(err, chores.ErrNotFound) {
 		s.renderPerson(w, r, http.StatusOK, s.personFormFor(r, p), nil, "")
 		return

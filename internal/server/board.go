@@ -56,7 +56,7 @@ type pickerView struct {
 }
 
 func (s *Server) loadBoard(r *http.Request) (boardView, error) {
-	b, err := s.Chores.Board(r.Context(), s.HouseholdID, s.boardDay(r))
+	b, err := s.Chores.Board(r.Context(), hhOf(r), s.boardDay(r))
 	if err != nil {
 		return boardView{}, err
 	}
@@ -143,7 +143,7 @@ func (s *Server) handleClaim(w http.ResponseWriter, r *http.Request) {
 		s.boardFailed(w, r, "Choose who's doing it.")
 		return
 	}
-	if err := s.Chores.Claim(r.Context(), s.HouseholdID, id, *person); err != nil {
+	if err := s.Chores.Claim(r.Context(), hhOf(r), id, *person); err != nil {
 		s.boardError(w, r, err)
 		return
 	}
@@ -157,7 +157,7 @@ func (s *Server) handleComplete(w http.ResponseWriter, r *http.Request) {
 	}
 	if person == nil {
 		// Assigned and claimed chores already know whose they are.
-		occ, err := s.Store.Q.GetOccurrence(r.Context(), dbq.GetOccurrenceParams{HouseholdID: s.HouseholdID, ID: id})
+		occ, err := s.Store.Q.GetOccurrence(r.Context(), dbq.GetOccurrenceParams{HouseholdID: hhOf(r), ID: id})
 		if err != nil {
 			s.boardError(w, r, chores.ErrNotFound)
 			return
@@ -171,7 +171,7 @@ func (s *Server) handleComplete(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	c, err := s.Chores.Complete(r.Context(), s.HouseholdID, id, *person)
+	c, err := s.Chores.Complete(r.Context(), hhOf(r), id, *person)
 	if err != nil {
 		s.boardError(w, r, err)
 		return
@@ -180,7 +180,7 @@ func (s *Server) handleComplete(w http.ResponseWriter, r *http.Request) {
 		Message: "Nice one, " + s.personName(r, *person) + "!",
 		Undo:    "/board/completions/" + itoa(c.ID) + "/undo",
 	}
-	if s.Chores.IsShared(r.Context(), s.HouseholdID, id) {
+	if s.Chores.IsShared(r.Context(), hhOf(r), id) {
 		t.Message += " Done for everyone."
 	}
 	if c.Status == chores.StatusPending {
@@ -194,12 +194,12 @@ func (s *Server) handleRelease(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	occ, err := s.Store.Q.GetOccurrence(r.Context(), dbq.GetOccurrenceParams{HouseholdID: s.HouseholdID, ID: id})
+	occ, err := s.Store.Q.GetOccurrence(r.Context(), dbq.GetOccurrenceParams{HouseholdID: hhOf(r), ID: id})
 	if err != nil || occ.ClaimedBy == nil {
 		s.boardFailed(w, r, "That's not claimed any more.")
 		return
 	}
-	if err := s.Chores.Release(r.Context(), s.HouseholdID, id, *occ.ClaimedBy); err != nil {
+	if err := s.Chores.Release(r.Context(), hhOf(r), id, *occ.ClaimedBy); err != nil {
 		s.boardError(w, r, err)
 		return
 	}
@@ -211,7 +211,7 @@ func (s *Server) handleUndo(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := s.Chores.Undo(r.Context(), s.HouseholdID, id); err != nil {
+	if err := s.Chores.Undo(r.Context(), hhOf(r), id); err != nil {
 		s.boardError(w, r, err)
 		return
 	}
@@ -241,7 +241,7 @@ func (s *Server) handleReviewSheet(w http.ResponseWriter, r *http.Request) {
 		s.boardFailed(w, r, needAdult)
 		return
 	}
-	c, err := s.Chores.Completion(r.Context(), s.HouseholdID, id)
+	c, err := s.Chores.Completion(r.Context(), hhOf(r), id)
 	if err != nil {
 		s.boardError(w, r, err)
 		return
@@ -264,7 +264,7 @@ func (s *Server) boardReview(fn func(ctx context.Context, hh, id, reviewerID int
 			s.renderBoard(w, r, http.StatusForbidden)
 			return
 		}
-		if err := fn(r.Context(), s.HouseholdID, id, adult.ID); err != nil {
+		if err := fn(r.Context(), hhOf(r), id, adult.ID); err != nil {
 			s.boardError(w, r, err)
 			return
 		}
@@ -323,7 +323,7 @@ func asciiJSON(b []byte) string {
 // boardDone finishes a successful board action: tell every other screen and
 // return the fresh board with a toast.
 func (s *Server) boardDone(w http.ResponseWriter, r *http.Request, t toast) {
-	s.events.publish(s.HouseholdID, boardClient(r.Header.Get(boardClientHeader)))
+	s.events.publish(hhOf(r), boardClient(r.Header.Get(boardClientHeader)))
 	setToast(w, t)
 	s.renderBoard(w, r, http.StatusOK)
 }
@@ -380,7 +380,7 @@ func boardErrorText(err error) (string, bool) {
 }
 
 func (s *Server) personName(r *http.Request, id int64) string {
-	p, err := s.Store.Q.GetPerson(r.Context(), dbq.GetPersonParams{HouseholdID: s.HouseholdID, ID: id})
+	p, err := s.Store.Q.GetPerson(r.Context(), dbq.GetPersonParams{HouseholdID: hhOf(r), ID: id})
 	if err != nil {
 		return "you"
 	}
@@ -416,8 +416,8 @@ func (s *Server) handlePersonSheet(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	loc := s.Locale
-	loc.Location = s.Settings.Location(ctx, s.HouseholdID)
-	sum, err := s.Chores.PersonSummary(ctx, s.HouseholdID, id, loc.StartOfWeek(s.now()))
+	loc.Location = s.Settings.Location(ctx, hhOf(r))
+	sum, err := s.Chores.PersonSummary(ctx, hhOf(r), id, loc.StartOfWeek(s.now()))
 	if errors.Is(err, chores.ErrNotFound) {
 		// Archived since this screen last refreshed.
 		s.boardFailed(w, r, "They're not on the board any more.")
@@ -427,17 +427,17 @@ func (s *Server) handlePersonSheet(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	rewards, err := s.Household.Rewards(ctx, s.HouseholdID)
+	rewards, err := s.Household.Rewards(ctx, hhOf(r))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	waiting, err := s.Chores.PendingRedemptions(ctx, s.HouseholdID, &id)
+	waiting, err := s.Chores.PendingRedemptions(ctx, hhOf(r), &id)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	adjustments, err := s.Chores.Adjustments(ctx, s.HouseholdID, id, s.now().Add(-adjustmentHistory), 5)
+	adjustments, err := s.Chores.Adjustments(ctx, hhOf(r), id, s.now().Add(-adjustmentHistory), 5)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -472,7 +472,7 @@ func (s *Server) handleRewardClaim(w http.ResponseWriter, r *http.Request) {
 	if adult := boardAdult(r); adult != nil {
 		approver = &adult.ID
 	}
-	red, err := s.Chores.ClaimReward(r.Context(), s.HouseholdID, id, *person, approver)
+	red, err := s.Chores.ClaimReward(r.Context(), hhOf(r), id, *person, approver)
 	if err != nil {
 		s.boardError(w, r, err)
 		return
@@ -496,7 +496,7 @@ func (s *Server) handleGoalSet(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "which reward?", http.StatusBadRequest)
 		return
 	}
-	rw, err := s.Chores.SetGoal(r.Context(), s.HouseholdID, id, *rewardID)
+	rw, err := s.Chores.SetGoal(r.Context(), hhOf(r), id, *rewardID)
 	if err != nil {
 		s.boardError(w, r, err)
 		return
@@ -514,7 +514,7 @@ func (s *Server) handleGoalClear(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := s.Chores.ClearGoal(r.Context(), s.HouseholdID, id); err != nil {
+	if err := s.Chores.ClearGoal(r.Context(), hhOf(r), id); err != nil {
 		s.boardError(w, r, err)
 		return
 	}
@@ -536,7 +536,7 @@ func (s *Server) handleClaimReviewSheet(w http.ResponseWriter, r *http.Request) 
 		s.boardFailed(w, r, needAdult)
 		return
 	}
-	d, err := s.Chores.Redemption(r.Context(), s.HouseholdID, id)
+	d, err := s.Chores.Redemption(r.Context(), hhOf(r), id)
 	if err != nil {
 		s.boardError(w, r, err)
 		return
@@ -555,7 +555,7 @@ func (s *Server) handleClaimCancel(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := s.Chores.CancelRedemption(r.Context(), s.HouseholdID, id); err != nil {
+	if err := s.Chores.CancelRedemption(r.Context(), hhOf(r), id); err != nil {
 		s.boardError(w, r, err)
 		return
 	}

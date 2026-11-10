@@ -6,6 +6,10 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ## [Unreleased]
 
+### Changed
+
+- **For developers: one server, many households.** The server now works out the household for each request instead of using one fixed household, so a program built on the core can serve many households from one process. A request's household comes from a new resolver hook, or else from its display or session. A display or session from another household is signed out, and the right password for another household doesn't sign in. First-run setup, module background jobs (calendar refresh, photo rescan) and the dates shown on pages all follow the request's household too. Self-hosted Ingle still has one household and works as before. ([DOM-69](https://linear.app/skeltech/issue/DOM-69))
+
 ## [v0.3.2] - 2026-11-10
 
 ### Added

@@ -96,9 +96,9 @@ func (s *Server) handleBoardEvents(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Accel-Buffering", "no") // nginx: don't buffer
 	w.WriteHeader(http.StatusOK)
 
-	ch, unsubscribe := s.events.subscribe(s.HouseholdID, boardClient(r.URL.Query().Get("client")))
+	ch, unsubscribe := s.events.subscribe(hhOf(r), boardClient(r.URL.Query().Get("client")))
 	defer unsubscribe()
-	lockCh, unsubscribeLock := s.lockEvents.subscribe(s.HouseholdID, "")
+	lockCh, unsubscribeLock := s.lockEvents.subscribe(hhOf(r), "")
 	defer unsubscribeLock()
 	// lockEvent says whether the displays are locked; the page compares it
 	// with what it shows and reloads if they differ (so a reconnect catches

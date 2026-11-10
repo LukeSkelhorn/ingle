@@ -84,7 +84,7 @@ func (d calDay) Count() int { return len(d.AllDay) + len(d.Items) }
 // calendarLocale is the household locale in its own timezone.
 func (s *Server) calendarLocale(r *http.Request) locale.Locale {
 	loc := s.Locale
-	loc.Location = s.Settings.Location(r.Context(), s.HouseholdID)
+	loc.Location = s.Settings.Location(r.Context(), hhOf(r))
 	return loc
 }
 
@@ -195,7 +195,7 @@ func (s *Server) handleCalendarView(w http.ResponseWriter, r *http.Request) {
 		v.Title = weekTitle(cr.gridFrom, cr.gridTo)
 	}
 	if s.Calendars != nil && s.moduleOn(r.Context(), modCalendar) {
-		feeds, err := s.Calendars.Feeds(r.Context(), s.HouseholdID)
+		feeds, err := s.Calendars.Feeds(r.Context(), hhOf(r))
 		if err != nil {
 			s.serverError(w, r, err)
 			return
@@ -222,11 +222,11 @@ func (s *Server) calendarDays(r *http.Request, loc locale.Locale, first, last, t
 	ctx := r.Context()
 	z := loc.Location
 	from, to := first.Format(chores.DateLayout), last.Format(chores.DateLayout)
-	cal, err := s.Chores.Calendar(ctx, s.HouseholdID, today, from, to)
+	cal, err := s.Chores.Calendar(ctx, hhOf(r), today, from, to)
 	if err != nil {
 		return nil, err
 	}
-	people, err := s.Store.Q.ListPeople(ctx, s.HouseholdID)
+	people, err := s.Store.Q.ListPeople(ctx, hhOf(r))
 	if err != nil {
 		return nil, err
 	}
@@ -236,7 +236,7 @@ func (s *Server) calendarDays(r *http.Request, loc locale.Locale, first, last, t
 	}
 	var events []calendar.Event
 	if s.Calendars != nil && s.moduleOn(ctx, modCalendar) {
-		events = s.Calendars.Upcoming(s.HouseholdID, first, last.AddDate(0, 0, 1))
+		events = s.Calendars.Upcoming(hhOf(r), first, last.AddDate(0, 0, 1))
 	}
 
 	var days []calDay
@@ -335,7 +335,7 @@ func (s *Server) handleCalendarChore(w http.ResponseWriter, r *http.Request) {
 	date := d.Format(chores.DateLayout)
 	pick := chores.CalPick{At: r.URL.Query().Get("at")}
 	pick.PersonID, _ = strconv.ParseInt(r.URL.Query().Get("person"), 10, 64)
-	c, ch, err := s.Chores.ChoreOn(r.Context(), s.HouseholdID, s.boardDay(r), id, date, pick)
+	c, ch, err := s.Chores.ChoreOn(r.Context(), hhOf(r), s.boardDay(r), id, date, pick)
 	if errors.Is(err, chores.ErrNotFound) {
 		s.boardFailed(w, r, "That chore isn't on the calendar any more.")
 		return
@@ -344,7 +344,7 @@ func (s *Server) handleCalendarChore(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	people, err := s.Store.Q.ListPeople(r.Context(), s.HouseholdID)
+	people, err := s.Store.Q.ListPeople(r.Context(), hhOf(r))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
