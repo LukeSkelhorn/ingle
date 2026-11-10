@@ -38,8 +38,9 @@ ORDER BY sessions.last_seen_at DESC;
 
 -- name: DeleteExpiredSessions :execrows
 DELETE FROM sessions
-WHERE (kind = 'personal' AND last_seen_at < sqlc.arg(personal_before))
-   OR (kind = 'display' AND last_seen_at < sqlc.arg(display_before));
+WHERE household_id = sqlc.arg(household_id)
+  AND ((kind = 'personal' AND last_seen_at < sqlc.arg(personal_before))
+    OR (kind = 'display' AND last_seen_at < sqlc.arg(display_before)));
 
 -- name: DeleteDisplaySessions :exec
 DELETE FROM sessions WHERE household_id = ? AND kind = 'display';

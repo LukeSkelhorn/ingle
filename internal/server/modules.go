@@ -44,7 +44,7 @@ func (s *Server) moduleNav(ctx context.Context) []module.NavItem {
 			nav = append(nav, m.AdminNav()...)
 		}
 	}
-	return nav
+	return append(nav, s.AdminLinks...)
 }
 
 // requireModule answers 404 while the module id is off.

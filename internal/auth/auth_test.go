@@ -210,3 +210,33 @@ func TestSweep(t *testing.T) {
 		t.Errorf("Sweep after 30d = %d, %v; want the personal session", n, err)
 	}
 }
+
+func TestSweepKeepsOtherHouseholds(t *testing.T) {
+	f := newFixture(t)
+	ctx := t.Context()
+	other, err := f.st.Q.CreateHousehold(ctx, dbq.CreateHouseholdParams{Name: "Next door", CreatedAt: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := f.st.Q.CreatePerson(ctx, dbq.CreatePersonParams{
+		HouseholdID: other.ID, Name: "Dad", Kind: "adult", Colour: "#4A90D9", CreatedAt: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	must(t, f.st.Q.CreateSession(ctx, dbq.CreateSessionParams{
+		TokenHash: []byte("next door"), HouseholdID: other.ID, PersonID: p.ID, Kind: "personal",
+		CreatedAt: f.now.Unix(), LastSeenAt: f.now.Unix(),
+	}))
+	f.now = f.now.Add(2 * auth.PersonalSessionTTL)
+	if _, err := f.svc.Sweep(ctx, f.hh); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err := f.st.DB.QueryRowContext(ctx, "SELECT count(*) FROM sessions WHERE household_id = ?", other.ID).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Errorf("sweeping one household removed another's session")
+	}
+}

@@ -94,7 +94,7 @@ func withOrientation(t *testing.T, j []byte) []byte {
 	return out.Bytes()
 }
 
-func decodeFile(t *testing.T, f *os.File) image.Config {
+func decodeFile(t *testing.T, f io.ReadCloser) image.Config {
 	t.Helper()
 	defer f.Close()
 	cfg, _, err := image.DecodeConfig(f)

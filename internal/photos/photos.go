@@ -69,12 +69,12 @@ type folderFile struct {
 
 // Library stores uploads and indexes the folder.
 type Library struct {
-	st      *store.Store
-	uploads string // uploaded photos: <name>.jpg and <name>_t.jpg
-	cache   string // resized folder photos
-	folder  string // read-only folder, or "" for none
-	log     *slog.Logger
-	now     func() time.Time
+	st     *store.Store
+	blobs  Blobs  // uploaded photos: <name>.jpg and <name>_t.jpg
+	cache  string // resized folder photos
+	folder string // read-only folder, or "" for none
+	log    *slog.Logger
+	now    func() time.Time
 
 	mu    sync.RWMutex
 	index map[string]folderFile
@@ -88,20 +88,22 @@ type Library struct {
 // folder photos under dataDir/photo-cache. folder may be "".
 func New(st *store.Store, dataDir, folder string, log *slog.Logger) (*Library, error) {
 	l := &Library{
-		st:      st,
-		uploads: filepath.Join(dataDir, "photos"),
-		cache:   filepath.Join(dataDir, "photo-cache"),
-		folder:  folder,
-		log:     log,
-		now:     time.Now,
-		index:   map[string]folderFile{},
-		bad:     map[string]bool{},
+		st:     st,
+		cache:  filepath.Join(dataDir, "photo-cache"),
+		folder: folder,
+		log:    log,
+		now:    time.Now,
+		index:  map[string]folderFile{},
+		bad:    map[string]bool{},
 	}
-	for _, d := range []string{l.uploads, l.cache} {
-		if err := os.MkdirAll(d, 0o750); err != nil {
-			return nil, fmt.Errorf("create %s: %w", d, err)
-		}
+	if err := os.MkdirAll(l.cache, 0o750); err != nil {
+		return nil, fmt.Errorf("create %s: %w", l.cache, err)
 	}
+	blobs, err := NewDiskBlobs(filepath.Join(dataDir, "photos"))
+	if err != nil {
+		return nil, err
+	}
+	l.blobs = blobs
 	return l, nil
 }
 
@@ -130,13 +132,21 @@ func (l *Library) Upload(ctx context.Context, householdID, actorID int64, r io.R
 	full := picture.Fit(img, FullSize)
 	thumb := imaging.Fill(img, ThumbSize, ThumbSize, imaging.Center, imaging.Lanczos)
 
-	name := randomName()
-	fullPath, thumbPath := l.uploadPaths(name)
-	if err := picture.WriteJPEG(fullPath, full, 85); err != nil {
+	fullJPEG, err := encodeJPEG(full, 85)
+	if err != nil {
 		return dbq.Photo{}, err
 	}
-	if err := picture.WriteJPEG(thumbPath, thumb, 80); err != nil {
-		_ = os.Remove(fullPath)
+	thumbJPEG, err := encodeJPEG(thumb, 80)
+	if err != nil {
+		return dbq.Photo{}, err
+	}
+	name := randomName()
+	fullName, thumbName := blobNames(name)
+	if err := l.blobs.Put(ctx, fullName, fullJPEG); err != nil {
+		return dbq.Photo{}, err
+	}
+	if err := l.blobs.Put(ctx, thumbName, thumbJPEG); err != nil {
+		l.removeBlobs(ctx, name)
 		return dbq.Photo{}, err
 	}
 
@@ -158,8 +168,7 @@ func (l *Library) Upload(ctx context.Context, householdID, actorID int64, r io.R
 		})
 	})
 	if err != nil {
-		_ = os.Remove(fullPath)
-		_ = os.Remove(thumbPath)
+		l.removeBlobs(ctx, name)
 		return dbq.Photo{}, err
 	}
 	return p, nil
@@ -188,12 +197,7 @@ func (l *Library) Delete(ctx context.Context, householdID, actorID, photoID int6
 	if err != nil {
 		return err
 	}
-	fullPath, thumbPath := l.uploadPaths(file)
-	for _, p := range []string{fullPath, thumbPath} {
-		if err := os.Remove(p); err != nil && !errors.Is(err, os.ErrNotExist) {
-			l.log.WarnContext(ctx, "remove photo file", slog.Any("err", err))
-		}
-	}
+	l.removeBlobs(ctx, file)
 	return nil
 }
 
@@ -237,19 +241,19 @@ func UploadURL(file string, thumb bool) string {
 
 // OpenUpload opens a household's uploaded photo for serving. Names that
 // aren't the household's photos return ErrNotFound, so paths can't escape.
-func (l *Library) OpenUpload(ctx context.Context, householdID int64, file string, thumb bool) (*os.File, error) {
+func (l *Library) OpenUpload(ctx context.Context, householdID int64, file string, thumb bool) (io.ReadSeekCloser, error) {
 	if !uploadRe.MatchString(file) {
 		return nil, ErrNotFound
 	}
 	if _, err := l.st.Q.GetPhotoByFile(ctx, dbq.GetPhotoByFileParams{HouseholdID: householdID, File: file}); err != nil {
 		return nil, ErrNotFound
 	}
-	fullPath, thumbPath := l.uploadPaths(file)
-	p := fullPath
+	fullName, thumbName := blobNames(file)
+	n := fullName
 	if thumb {
-		p = thumbPath
+		n = thumbName
 	}
-	f, err := os.Open(p) //nolint:gosec // file matched uploadRe and is a recorded photo
+	f, err := l.blobs.Open(ctx, n)
 	if err != nil {
 		return nil, ErrNotFound
 	}
@@ -399,8 +403,24 @@ func (l *Library) pruneCache(index map[string]folderFile) {
 	}
 }
 
-func (l *Library) uploadPaths(name string) (full, thumb string) {
-	return filepath.Join(l.uploads, name+".jpg"), filepath.Join(l.uploads, name+"_t.jpg")
+// SetBlobs stores uploaded photos in b instead of on disk. Call it before
+// serving; photos already uploaded stay where they were.
+func (l *Library) SetBlobs(b Blobs) { l.blobs = b }
+
+// blobNames are the stored files of the upload name.
+func blobNames(name string) (full, thumb string) {
+	return name + ".jpg", name + "_t.jpg"
+}
+
+// removeBlobs deletes both files of the upload name, logging failures: the
+// photo's row is already gone, or was never written.
+func (l *Library) removeBlobs(ctx context.Context, name string) {
+	full, thumb := blobNames(name)
+	for _, n := range []string{full, thumb} {
+		if err := l.blobs.Delete(ctx, n); err != nil {
+			l.log.WarnContext(ctx, "remove photo file", slog.Any("err", err))
+		}
+	}
 }
 
 func isPhotoExt(name string) bool {
