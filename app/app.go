@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/lukeskelhorn/ingle/internal/auth"
@@ -41,111 +42,91 @@ type Options struct {
 	Version string
 	// Log is where the server logs; nil means slog.Default().
 	Log *slog.Logger
+
+	// ResolveHousehold names the household a request is for, before its
+	// display or session is known (e.g. from the address it came to). ok
+	// is false when it can't tell; the request's display or session then
+	// decides. Setting it serves many households: no household is made at
+	// startup, and the background jobs run for every household in the
+	// database. Nil serves the single household of a self-hosted server.
+	ResolveHousehold func(r *http.Request) (id int64, ok bool, err error)
+	// Routes adds a program's own routes, such as sign-up or billing.
+	// They sit behind the same cross-origin check and identity as Ingle's
+	// own; use [Helpers] to require a signed-in adult.
+	Routes func(mux *http.ServeMux, h Helpers)
+	// AdminLinks are extra links in the Admin bar, after the modules'.
+	AdminLinks []AdminLink
+	// PhotoBlobs stores uploaded photos' files; nil keeps them on disk
+	// beside the database.
+	PhotoBlobs PhotoBlobs
+	// Jobs is where the background jobs run: here, beside the web server
+	// (the default), or elsewhere, in a process that calls [RunJobs].
+	Jobs JobMode
 }
+
+// AdminLink is a link in the Admin bar.
+type AdminLink struct {
+	// Label is the link text and Path where it goes, e.g. "Billing" and
+	// "/admin/billing". Path also marks the link current on its own page.
+	Label, Path string
+}
+
+// PhotoBlobs stores the files of uploaded photos by name. Its methods use
+// only standard library types, so another module can implement it.
+type PhotoBlobs = photos.Blobs
+
+// JobMode is where the background jobs run.
+type JobMode int
+
+const (
+	// JobsHere runs the background jobs in the same process as the web
+	// server.
+	JobsHere JobMode = iota
+	// JobsElsewhere leaves them to another process running [RunJobs].
+	JobsElsewhere
+)
+
+// Helpers are for handlers added through Options.Routes.
+type Helpers struct{ srv *server.Server }
+
+// RequireAdmin lets only a signed-in adult of the request's household
+// reach h; anyone else is sent to sign in.
+func (h Helpers) RequireAdmin(next http.Handler) http.Handler { return h.srv.RequireAdmin(next) }
+
+// RequireViewer lets only a household display or a signed-in adult reach
+// h.
+func (h Helpers) RequireViewer(next http.Handler) http.Handler { return h.srv.RequireViewer(next) }
+
+// HouseholdOf returns the household a request is for, or 0 when none is
+// known yet (nobody signed in and the resolver couldn't tell).
+func HouseholdOf(r *http.Request) int64 { return server.HouseholdOf(r) }
 
 // Run starts the server on INGLE_ADDR and serves until ctx is cancelled, then
 // shuts down gracefully.
 func Run(ctx context.Context, opts Options) error {
-	log := opts.Log
-	if log == nil {
-		log = slog.Default()
-	}
-	version := opts.Version
-	if version == "" {
-		version = "dev"
-	}
-
-	cfg, err := config.Load()
+	c, err := build(ctx, opts)
 	if err != nil {
 		return err
 	}
-	if len(cfg.Legacy) > 0 {
-		log.Warn("Ingle used to be called Domus: these settings still work, but rename them to INGLE_*",
-			slog.Any("settings", cfg.Legacy))
+	defer c.db.Close()
+	if opts.Jobs == JobsHere {
+		go c.runJobs(ctx)
 	}
-
-	db, err := store.Open(ctx, cfg.DBPath)
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
-	st := store.New(db)
-	household, err := st.EnsureHousehold(ctx, "Home", time.Now())
-	if err != nil {
-		return err
-	}
-	set := settings.New(st)
-	// INGLE_TZ seeds the timezone for a new household; after that it is
-	// changed under Admin › Settings.
-	if err := set.Ensure(ctx, household.ID, cfg.Location); err != nil {
-		return err
-	}
-	dataDir := filepath.Dir(cfg.DBPath)
-	avatars, err := avatar.NewStore(filepath.Join(dataDir, "avatars"))
-	if err != nil {
-		return err
-	}
-	library, err := photos.New(st, dataDir, cfg.PhotosDir, log)
-	if err != nil {
-		return err
-	}
-	cals := calendar.New(st, set.Location, nil, log)
-	authSvc := auth.New(st, set)
-	choreSvc := chores.New(st, set.Location)
-	choreSvc.SetDayStart(set.DayStart)
-
-	go maintenanceLoop(ctx, log, set, choreSvc, authSvc, household.ID)
-	lockSvc := lock.New(st, set, authSvc.EndDisplaySessions)
-	go lockLoop(ctx, log, lockSvc, household.ID)
-	if cfg.BackupKeep > 0 {
-		if err := backup.Check(cfg.BackupDir); err != nil {
-			log.Warn("backup dir not writable; nightly backups will fail", slog.String("dir", cfg.BackupDir), slog.Any("err", err))
-		}
-		go backupLoop(ctx, log, db, dataDir, cfg, func() *time.Location { return set.Location(ctx, household.ID) })
-	}
-
-	srv, err := server.New(server.Deps{
-		Store:       st,
-		HouseholdID: household.ID,
-		Auth:        authSvc,
-		Settings:    set,
-		Chores:      choreSvc,
-		Household:   householdpkg.New(st),
-		Avatars:     avatars,
-		Photos:      library,
-		Calendars:   cals,
-		Lock:        lockSvc,
-		// Ingle's modules are registered in a fixed order by server.New.
-		Modules: module.NewService(st, module.NewRegistry()),
-		Locale: locale.Locale{
-			Location:   cfg.Location,
-			DateFormat: cfg.DateFormat,
-			WeekStart:  cfg.WeekStart,
-			Currency:   cfg.Currency,
-		},
-		Log:            log,
-		TrustedProxies: cfg.TrustedProxies,
-		Version:        version,
-	})
-	if err != nil {
-		return err
-	}
-	// The modules' background jobs: calendar feeds and the photos folder.
-	go srv.RunModuleLoops(ctx)
 
 	httpSrv := &http.Server{
-		Addr:              cfg.Addr,
-		Handler:           srv.Handler(),
+		Addr:              c.cfg.Addr,
+		Handler:           c.srv.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
-	httpSrv.RegisterOnShutdown(srv.CloseStreams)
+	httpSrv.RegisterOnShutdown(c.srv.CloseStreams)
 
+	cfg, log := c.cfg, c.log
 	errCh := make(chan error, 1)
 	go func() {
-		log.Info("ingle listening", slog.String("version", version), slog.String("addr", cfg.Addr), slog.String("db", cfg.DBPath), slog.String("tz", cfg.Location.String()),
+		log.Info("ingle listening", slog.String("version", c.version), slog.String("addr", cfg.Addr), slog.String("db", cfg.DBPath), slog.String("tz", cfg.Location.String()),
 			slog.String("photos_dir", cfg.PhotosDir), slog.String("backup_dir", cfg.BackupDir), slog.Int("backup_keep", cfg.BackupKeep),
-			slog.Int("trusted_proxies", len(cfg.TrustedProxies)))
+			slog.Int("trusted_proxies", len(cfg.TrustedProxies)), slog.Bool("many_households", opts.ResolveHousehold != nil),
+			slog.Bool("jobs", opts.Jobs == JobsHere))
 		errCh <- httpSrv.ListenAndServe()
 	}()
 
@@ -162,6 +143,185 @@ func Run(ctx context.Context, opts Options) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	return httpSrv.Shutdown(shutdownCtx)
+}
+
+// RunJobs runs only the background jobs (chores, the lock schedule,
+// backups and the modules' jobs) until ctx is cancelled, for a worker
+// beside web servers started with JobsElsewhere. Its Options should match
+// theirs.
+func RunJobs(ctx context.Context, opts Options) error {
+	c, err := build(ctx, opts)
+	if err != nil {
+		return err
+	}
+	defer c.db.Close()
+	c.log.Info("ingle jobs running", slog.String("version", c.version), slog.String("db", c.cfg.DBPath))
+	c.runJobs(ctx)
+	return nil
+}
+
+// core is a built server and its services, not yet serving.
+type core struct {
+	cfg        config.Config
+	log        *slog.Logger
+	version    string
+	db         *sql.DB
+	set        *settings.Service
+	auth       *auth.Service
+	chores     *chores.Service
+	lock       *lock.Service
+	srv        *server.Server
+	households func(context.Context) ([]int64, error)
+	// backupLoc is the timezone nightly backups follow.
+	backupLoc func() *time.Location
+}
+
+func build(ctx context.Context, opts Options) (*core, error) {
+	c := &core{log: opts.Log, version: opts.Version}
+	if c.log == nil {
+		c.log = slog.Default()
+	}
+	if c.version == "" {
+		c.version = "dev"
+	}
+	log := c.log
+
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, err
+	}
+	c.cfg = cfg
+	if len(cfg.Legacy) > 0 {
+		log.Warn("Ingle used to be called Domus: these settings still work, but rename them to INGLE_*",
+			slog.Any("settings", cfg.Legacy))
+	}
+
+	db, err := store.Open(ctx, cfg.DBPath)
+	if err != nil {
+		return nil, err
+	}
+	c.db = db
+	ok := false
+	defer func() {
+		if !ok {
+			_ = db.Close()
+		}
+	}()
+
+	st := store.New(db)
+	c.set = settings.New(st)
+	var single int64
+	if opts.ResolveHousehold == nil {
+		household, err := st.EnsureHousehold(ctx, "Home", time.Now())
+		if err != nil {
+			return nil, err
+		}
+		// INGLE_TZ seeds the timezone for a new household; after that it
+		// is changed under Admin › Settings.
+		if err := c.set.Ensure(ctx, household.ID, cfg.Location); err != nil {
+			return nil, err
+		}
+		single = household.ID
+		c.households = func(context.Context) ([]int64, error) { return []int64{single}, nil }
+		c.backupLoc = func() *time.Location { return c.set.Location(ctx, single) }
+	} else {
+		c.households = st.Q.ListHouseholdIDs
+		c.backupLoc = func() *time.Location { return cfg.Location }
+	}
+
+	dataDir := filepath.Dir(cfg.DBPath)
+	avatars, err := avatar.NewStore(filepath.Join(dataDir, "avatars"))
+	if err != nil {
+		return nil, err
+	}
+	library, err := photos.New(st, dataDir, cfg.PhotosDir, log)
+	if err != nil {
+		return nil, err
+	}
+	if opts.PhotoBlobs != nil {
+		library.SetBlobs(opts.PhotoBlobs)
+	}
+	cals := calendar.New(st, c.set.Location, nil, log)
+	c.auth = auth.New(st, c.set)
+	c.chores = chores.New(st, c.set.Location)
+	c.chores.SetDayStart(c.set.DayStart)
+	c.lock = lock.New(st, c.set, c.auth.EndDisplaySessions)
+
+	adminLinks := make([]module.NavItem, 0, len(opts.AdminLinks))
+	for _, l := range opts.AdminLinks {
+		adminLinks = append(adminLinks, module.NavItem{Key: l.Path, Label: l.Label, Path: l.Path})
+	}
+	var routes func(*server.Server, *http.ServeMux)
+	if opts.Routes != nil {
+		routes = func(s *server.Server, mux *http.ServeMux) { opts.Routes(mux, Helpers{srv: s}) }
+	}
+
+	c.srv, err = server.New(server.Deps{
+		Store:            st,
+		HouseholdID:      single,
+		ResolveHousehold: opts.ResolveHousehold,
+		Households:       c.households,
+		Routes:           routes,
+		AdminLinks:       adminLinks,
+		Auth:             c.auth,
+		Settings:         c.set,
+		Chores:           c.chores,
+		Household:        householdpkg.New(st),
+		Avatars:          avatars,
+		Photos:           library,
+		Calendars:        cals,
+		Lock:             c.lock,
+		// Ingle's modules are registered in a fixed order by server.New.
+		Modules: module.NewService(st, module.NewRegistry()),
+		Locale: locale.Locale{
+			Location:   cfg.Location,
+			DateFormat: cfg.DateFormat,
+			WeekStart:  cfg.WeekStart,
+			Currency:   cfg.Currency,
+		},
+		Log:            log,
+		TrustedProxies: cfg.TrustedProxies,
+		Version:        c.version,
+	})
+	if err != nil {
+		return nil, err
+	}
+	ok = true
+	return c, nil
+}
+
+// runJobs runs the background jobs until ctx ends.
+func (c *core) runJobs(ctx context.Context) {
+	var wg sync.WaitGroup
+	wg.Go(func() { maintenanceLoop(ctx, c.log, c.set, c.chores, c.auth, c.households) })
+	wg.Go(func() { lockLoop(ctx, c.log, c.lock, c.households) })
+	if c.cfg.BackupKeep > 0 {
+		if err := backup.Check(c.cfg.BackupDir); err != nil {
+			c.log.Warn("backup dir not writable; nightly backups will fail", slog.String("dir", c.cfg.BackupDir), slog.Any("err", err))
+		}
+		wg.Go(func() { backupLoop(ctx, c.log, c.db, filepath.Dir(c.cfg.DBPath), c.cfg, c.backupLoc) })
+	}
+	// The modules' background jobs: calendar feeds and the photos folder.
+	wg.Go(func() { c.srv.RunModuleLoops(ctx) })
+	wg.Wait()
+}
+
+// eachHousehold runs fn for every household, logging a failure to list
+// them.
+func eachHousehold(ctx context.Context, log *slog.Logger, households func(context.Context) ([]int64, error), fn func(householdID int64)) {
+	ids, err := households(ctx)
+	if err != nil {
+		if ctx.Err() == nil {
+			log.Error("list households", slog.Any("err", err))
+		}
+		return
+	}
+	for _, id := range ids {
+		if ctx.Err() != nil {
+			return
+		}
+		fn(id)
+	}
 }
 
 // Healthcheck asks the server running on INGLE_ADDR for /healthz, e.g. for
@@ -215,8 +375,9 @@ func Backup(ctx context.Context) (string, error) {
 // window of chore occurrences filled (so new days and newly added chores
 // appear) from the household's current board day, and sweeps expired
 // sessions.
-func maintenanceLoop(ctx context.Context, log *slog.Logger, set *settings.Service, svc *chores.Service, authSvc *auth.Service, householdID int64) {
-	run := func() {
+func maintenanceLoop(ctx context.Context, log *slog.Logger, set *settings.Service, svc *chores.Service, authSvc *auth.Service, households func(context.Context) ([]int64, error)) {
+	one := func(householdID int64) {
+		log := log.With(slog.Int64("household", householdID))
 		s, err := set.Get(ctx, householdID)
 		if err != nil {
 			if ctx.Err() == nil {
@@ -236,6 +397,7 @@ func maintenanceLoop(ctx context.Context, log *slog.Logger, set *settings.Servic
 			log.Error("sweep sessions", slog.Any("err", err))
 		}
 	}
+	run := func() { eachHousehold(ctx, log, households, one) }
 	run()
 	t := time.NewTicker(time.Hour)
 	defer t.Stop()
@@ -250,13 +412,15 @@ func maintenanceLoop(ctx context.Context, log *slog.Logger, set *settings.Servic
 }
 
 // lockLoop applies the displays' lock schedule and idle lock every minute.
-func lockLoop(ctx context.Context, log *slog.Logger, svc *lock.Service, householdID int64) {
+func lockLoop(ctx context.Context, log *slog.Logger, svc *lock.Service, households func(context.Context) ([]int64, error)) {
 	t := time.NewTicker(time.Minute)
 	defer t.Stop()
 	for {
-		if err := svc.Tick(ctx, householdID); err != nil && ctx.Err() == nil {
-			log.Error("lock tick", slog.Any("err", err))
-		}
+		eachHousehold(ctx, log, households, func(householdID int64) {
+			if err := svc.Tick(ctx, householdID); err != nil && ctx.Err() == nil {
+				log.Error("lock tick", slog.Int64("household", householdID), slog.Any("err", err))
+			}
+		})
 		select {
 		case <-ctx.Done():
 			return

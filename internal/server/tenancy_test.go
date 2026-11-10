@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lukeskelhorn/ingle/internal/module"
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
@@ -198,4 +199,11 @@ func TestTenancyModuleLoopsRunForEveryHousehold(t *testing.T) {
 	if !got[x.a] || !got[x.b] {
 		t.Fatalf("calendar on for %v, want both %d and %d", got, x.a, x.b)
 	}
+}
+
+func TestAdminLinksShowInTheAdminBar(t *testing.T) {
+	h := newHarness(t)
+	h.srv.AdminLinks = []module.NavItem{{Key: "/admin/billing", Label: "Billing", Path: "/admin/billing"}}
+	d := h.setUp()
+	expect(t, d.get("/admin"), http.StatusOK, `<a href="/admin/billing">Billing</a>`)
 }

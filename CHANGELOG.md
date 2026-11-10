@@ -9,6 +9,16 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 ### Changed
 
 - **For developers: one server, many households.** The server now works out the household for each request instead of using one fixed household, so a program built on the core can serve many households from one process. A request's household comes from a new resolver hook, or else from its display or session. A display or session from another household is signed out, and the right password for another household doesn't sign in. First-run setup, module background jobs (calendar refresh, photo rescan) and the dates shown on pages all follow the request's household too. Self-hosted Ingle still has one household and works as before. ([DOM-69](https://linear.app/skeltech/issue/DOM-69))
+- **For developers: hooks in the `app` package.** `app.Options` gains several hooks, and none of them changes anything for people running Ingle. ([DOM-69](https://linear.app/skeltech/issue/DOM-69))
+  - `ResolveHousehold` serves many households from one server. No household is made at startup, and the background jobs run for every household.
+  - `Routes` adds your own pages behind Ingle's sign-in, with `Helpers.RequireAdmin`.
+  - `AdminLinks` adds links to the Admin bar.
+  - `PhotoBlobs` stores uploaded photos somewhere other than the data folder.
+  - `Jobs: app.JobsElsewhere` moves the background jobs to a separate process running `app.RunJobs`.
+
+### Fixed
+
+- **Signing out idle displays:** with more than one household in a database, the hourly clean-up of expired sign-ins used one household's admin timeout for every household's displays. Each household now uses its own. Self-hosted Ingle has a single household, so it was never affected. ([DOM-69](https://linear.app/skeltech/issue/DOM-69))
 
 ## [v0.3.2] - 2026-11-10
 
