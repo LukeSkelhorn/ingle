@@ -32,17 +32,17 @@ func (s *Server) renderCompletions(w http.ResponseWriter, r *http.Request, statu
 // renderCompletionsUndo renders Admin › Completions with a flash that can
 // undo dismissing the missed chores in undo.
 func (s *Server) renderCompletionsUndo(w http.ResponseWriter, r *http.Request, status int, flash string, undo []int64) {
-	all, err := s.Chores.Completions(r.Context(), s.HouseholdID)
+	all, err := s.Chores.Completions(r.Context(), hhOf(r))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	claims, err := s.Chores.PendingRedemptions(r.Context(), s.HouseholdID, nil)
+	claims, err := s.Chores.PendingRedemptions(r.Context(), hhOf(r), nil)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	missed, err := s.Chores.Missed(r.Context(), s.HouseholdID, s.boardDay(r))
+	missed, err := s.Chores.Missed(r.Context(), hhOf(r), s.boardDay(r))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -78,7 +78,7 @@ func (s *Server) adminReview(fn func(ctx context.Context, hh, id, reviewerID int
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
-		if err := fn(r.Context(), s.HouseholdID, id, adult.ID); err != nil {
+		if err := fn(r.Context(), hhOf(r), id, adult.ID); err != nil {
 			text, known := boardErrorText(err)
 			if !known {
 				s.serverError(w, r, err)
@@ -109,7 +109,7 @@ func (s *Server) handleMarkDone(w http.ResponseWriter, r *http.Request) {
 		s.renderCompletions(w, r, http.StatusBadRequest, "Choose who did it.")
 		return
 	}
-	if err := s.Chores.MarkDone(r.Context(), s.HouseholdID, id, person, adult.ID); err != nil {
+	if err := s.Chores.MarkDone(r.Context(), hhOf(r), id, person, adult.ID); err != nil {
 		text, known := boardErrorText(err)
 		if !known {
 			s.serverError(w, r, err)
@@ -145,7 +145,7 @@ func (s *Server) handleDismissMissed(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
-	done, err := s.Chores.Dismiss(r.Context(), s.HouseholdID, adult.ID, ids)
+	done, err := s.Chores.Dismiss(r.Context(), hhOf(r), adult.ID, ids)
 	if err != nil {
 		s.missedError(w, r, err)
 		return
@@ -170,7 +170,7 @@ func (s *Server) handleRestoreMissed(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
-	if _, err := s.Chores.Restore(r.Context(), s.HouseholdID, adult.ID, ids); err != nil {
+	if _, err := s.Chores.Restore(r.Context(), hhOf(r), adult.ID, ids); err != nil {
 		s.missedError(w, r, err)
 		return
 	}

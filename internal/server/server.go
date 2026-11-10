@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/netip"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -28,16 +29,27 @@ import (
 
 // Deps are the services the server is built from.
 type Deps struct {
-	Store       *store.Store
+	Store *store.Store
+	// HouseholdID is the one household of a self-hosted server. It's used
+	// when ResolveHousehold is nil, and for the module loops when
+	// Households is nil.
 	HouseholdID int64
-	Auth        *auth.Service
-	Settings    *settings.Service
-	Chores      *chores.Service
-	Household   *household.Service
-	Avatars     *avatar.Store
-	Photos      *photos.Library
-	Calendars   *calendar.Service
-	Lock        *lock.Service
+	// ResolveHousehold names the household a request is for, before its
+	// display or session is known (sign-in, setup). ok is false when it
+	// can't tell; a display or session cookie then decides. Nil means
+	// HouseholdID for every request.
+	ResolveHousehold func(r *http.Request) (id int64, ok bool, err error)
+	// Households lists the households the module loops run for. Nil means
+	// just HouseholdID.
+	Households func(ctx context.Context) ([]int64, error)
+	Auth       *auth.Service
+	Settings   *settings.Service
+	Chores     *chores.Service
+	Household  *household.Service
+	Avatars    *avatar.Store
+	Photos     *photos.Library
+	Calendars  *calendar.Service
+	Lock       *lock.Service
 	// Modules is which features each household has on. New fills in an
 	// empty one if it is nil, and registers Ingle's modules in it.
 	Modules *module.Service
@@ -53,7 +65,7 @@ type Deps struct {
 type Server struct {
 	Deps
 	db     *sql.DB
-	pages  *pages
+	pages  *pagePool
 	now    func() time.Time
 	events *hub
 	// lockEvents tells every open page the displays locked or unlocked.
@@ -63,9 +75,8 @@ type Server struct {
 	loopKicks    []chan struct{}
 	loopsStarted atomic.Bool
 
-	// setupDone latches once an adult can sign in; it never goes back
-	// because the last such adult can't be archived or stripped.
-	setupDone atomic.Bool
+	// setupDone holds the households known to be set up (see markSetUp).
+	setupDone sync.Map
 }
 
 // New builds a Server.
@@ -91,7 +102,7 @@ func New(d Deps) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	s.pages = p
+	s.pages = newPagePool(p)
 	return s, nil
 }
 
@@ -218,7 +229,7 @@ type clockView struct {
 func (s *Server) clock(ctx context.Context) clockView {
 	loc := s.Locale
 	if s.Settings != nil {
-		loc.Location = s.Settings.Location(ctx, s.HouseholdID)
+		loc.Location = s.Settings.Location(ctx, householdIn(ctx))
 	}
 	now := loc.In(s.now())
 	return clockView{
@@ -269,9 +280,20 @@ func (s *Server) handleAvatar(w http.ResponseWriter, r *http.Request) {
 	http.ServeContent(w, r, "", info.ModTime(), f)
 }
 
+// withPages runs fn with templates bound to r's household.
+func (s *Server) withPages(r *http.Request, fn func(*pages) error) error {
+	p, err := s.pages.get()
+	if err != nil {
+		return err
+	}
+	defer s.pages.put(p)
+	p.bind(s.householdFuncs(r.Context()))
+	return fn(p)
+}
+
 func (s *Server) render(w http.ResponseWriter, r *http.Request, status int, page string, data any) {
 	var buf bytes.Buffer
-	if err := s.pages.execute(&buf, page, data); err != nil {
+	if err := s.withPages(r, func(p *pages) error { return p.execute(&buf, page, data) }); err != nil {
 		s.Log.ErrorContext(r.Context(), "render template", slog.String("page", page), slog.Any("err", err))
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
@@ -288,7 +310,7 @@ func (s *Server) renderPartial(w http.ResponseWriter, r *http.Request, name stri
 
 func (s *Server) renderPartialStatus(w http.ResponseWriter, r *http.Request, status int, name string, data any) {
 	var buf bytes.Buffer
-	if err := s.pages.partial(&buf, name, data); err != nil {
+	if err := s.withPages(r, func(p *pages) error { return p.partial(&buf, name, data) }); err != nil {
 		s.Log.ErrorContext(r.Context(), "render partial", slog.String("partial", name), slog.Any("err", err))
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
@@ -304,7 +326,7 @@ func (s *Server) publishAfterWrite(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		next(w, r)
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			s.events.publish(s.HouseholdID, "")
+			s.events.publish(hhOf(r), "")
 		}
 	}
 }

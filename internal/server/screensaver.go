@@ -52,7 +52,7 @@ func (s *Server) screensaver(r *http.Request) (screensaverView, error) {
 	ctx := r.Context()
 	v := screensaverView{Clock: s.clock(ctx)}
 
-	b, err := s.Chores.Board(ctx, s.HouseholdID, s.boardDay(r))
+	b, err := s.Chores.Board(ctx, hhOf(r), s.boardDay(r))
 	if err != nil {
 		return v, err
 	}
@@ -72,13 +72,13 @@ func (s *Server) screensaver(r *http.Request) (screensaverView, error) {
 	if s.Calendars == nil || !s.moduleOn(ctx, modCalendar) {
 		return v, nil
 	}
-	feeds, err := s.Calendars.Feeds(ctx, s.HouseholdID)
+	feeds, err := s.Calendars.Feeds(ctx, hhOf(r))
 	if err != nil {
 		return v, err
 	}
 	v.HasCalendars = len(feeds) > 0
 	loc := s.Locale
-	loc.Location = s.Settings.Location(ctx, s.HouseholdID)
+	loc.Location = s.Settings.Location(ctx, hhOf(r))
 	now := s.now().In(loc.Location)
 	y, m, d := now.Date()
 	midnight := time.Date(y, m, d, 0, 0, 0, 0, loc.Location)
@@ -86,7 +86,7 @@ func (s *Server) screensaver(r *http.Request) (screensaverView, error) {
 	after := midnight.AddDate(0, 0, 2)
 
 	n := 0
-	for _, e := range s.Calendars.Upcoming(s.HouseholdID, now, after) {
+	for _, e := range s.Calendars.Upcoming(hhOf(r), now, after) {
 		if n == maxScreensaverEvents {
 			break
 		}
@@ -120,7 +120,7 @@ func (s *Server) handleSlides(w http.ResponseWriter, r *http.Request) {
 	urls := []string{}
 	if s.Photos != nil {
 		var err error
-		if urls, err = s.Photos.Slides(r.Context(), s.HouseholdID); err != nil {
+		if urls, err = s.Photos.Slides(r.Context(), hhOf(r)); err != nil {
 			s.serverError(w, r, err)
 			return
 		}
@@ -144,7 +144,7 @@ func (s *Server) handlePhoto(w http.ResponseWriter, r *http.Request) {
 	)
 	switch r.PathValue("kind") {
 	case "u":
-		f, err = s.Photos.OpenUpload(r.Context(), s.HouseholdID, name, r.URL.Query().Get("s") == "thumb")
+		f, err = s.Photos.OpenUpload(r.Context(), hhOf(r), name, r.URL.Query().Get("s") == "thumb")
 	case "f":
 		f, err = s.Photos.OpenFolder(r.Context(), name)
 	default:
@@ -196,7 +196,7 @@ func (s *Server) handlePhotos(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) renderPhotos(w http.ResponseWriter, r *http.Request, status int, flash string, problems []string) {
-	ps, err := s.Photos.List(r.Context(), s.HouseholdID)
+	ps, err := s.Photos.List(r.Context(), hhOf(r))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -243,7 +243,7 @@ func (s *Server) handlePhotoUpload(w http.ResponseWriter, r *http.Request) {
 			_ = part.Close()
 			break
 		}
-		_, uerr := s.Photos.Upload(r.Context(), s.HouseholdID, actor(r).Person.ID, part)
+		_, uerr := s.Photos.Upload(r.Context(), hhOf(r), actor(r).Person.ID, part)
 		_ = part.Close()
 		switch {
 		case errors.Is(uerr, photos.ErrTooLarge), errors.Is(uerr, photos.ErrNotAnImage):
@@ -279,7 +279,7 @@ func (s *Server) handlePhotoDelete(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	err := s.Photos.Delete(r.Context(), s.HouseholdID, actor(r).Person.ID, id)
+	err := s.Photos.Delete(r.Context(), hhOf(r), actor(r).Person.ID, id)
 	if errors.Is(err, photos.ErrNotFound) {
 		s.renderPhotos(w, r, http.StatusNotFound, "That photo has already gone.", nil)
 		return
@@ -309,7 +309,7 @@ func (s *Server) handleCalendars(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) renderCalendars(w http.ResponseWriter, r *http.Request, status int, p calendarsPage, errs map[string]string, flash string) {
-	feeds, err := s.Calendars.Feeds(r.Context(), s.HouseholdID)
+	feeds, err := s.Calendars.Feeds(r.Context(), hhOf(r))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -337,7 +337,7 @@ func (s *Server) handleCalendarAdd(w http.ResponseWriter, r *http.Request) {
 	}
 	f := newForm(r)
 	p := calendarsPage{Name: f.str("name"), URL: f.str("url")}
-	_, err := s.Calendars.AddFeed(r.Context(), s.HouseholdID, actor(r).Person.ID, p.Name, p.URL)
+	_, err := s.Calendars.AddFeed(r.Context(), hhOf(r), actor(r).Person.ID, p.Name, p.URL)
 	if errs, ok := validationErrors(err); ok {
 		s.renderCalendars(w, r, http.StatusUnprocessableEntity, p, errs, "")
 		return
@@ -355,7 +355,7 @@ func (s *Server) handleCalendarDelete(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	err := s.Calendars.RemoveFeed(r.Context(), s.HouseholdID, actor(r).Person.ID, id)
+	err := s.Calendars.RemoveFeed(r.Context(), hhOf(r), actor(r).Person.ID, id)
 	if errors.Is(err, calendar.ErrNotFound) {
 		s.renderCalendars(w, r, http.StatusNotFound, calendarsPage{}, nil, "That calendar has already gone.")
 		return
@@ -368,7 +368,7 @@ func (s *Server) handleCalendarDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCalendarRefresh(w http.ResponseWriter, r *http.Request) {
-	if err := s.Calendars.RefreshHousehold(r.Context(), s.HouseholdID); err != nil {
+	if err := s.Calendars.RefreshHousehold(r.Context(), hhOf(r)); err != nil {
 		s.Log.ErrorContext(r.Context(), "refresh calendars", slog.Any("err", err))
 		s.serverError(w, r, err)
 		return

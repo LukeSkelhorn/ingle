@@ -42,7 +42,7 @@ const fromPeople = "people"
 func (s *Server) handlePeople(w http.ResponseWriter, r *http.Request) {
 	var v peopleView
 	if id, err := strconv.ParseInt(r.URL.Query().Get("adjust"), 10, 64); err == nil && id > 0 {
-		p, err := s.Household.Person(r.Context(), s.HouseholdID, id)
+		p, err := s.Household.Person(r.Context(), hhOf(r), id)
 		switch {
 		case errors.Is(err, household.ErrNotFound):
 			http.NotFound(w, r)
@@ -67,15 +67,15 @@ func (s *Server) handlePeople(w http.ResponseWriter, r *http.Request) {
 func (s *Server) renderPeople(w http.ResponseWriter, r *http.Request, status int, v peopleView, errs valid.Errors, flash string) {
 	ctx := r.Context()
 	var err error
-	if v.People, err = s.Household.People(ctx, s.HouseholdID); err != nil {
+	if v.People, err = s.Household.People(ctx, hhOf(r)); err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	if v.Archived, err = s.Household.ArchivedPeople(ctx, s.HouseholdID); err != nil {
+	if v.Archived, err = s.Household.ArchivedPeople(ctx, hhOf(r)); err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	balances, err := s.Store.Q.BalancesForHousehold(ctx, s.HouseholdID)
+	balances, err := s.Store.Q.BalancesForHousehold(ctx, hhOf(r))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -85,7 +85,7 @@ func (s *Server) renderPeople(w http.ResponseWriter, r *http.Request, status int
 		v.Balances[b.PersonID] = b
 	}
 	if v.Adjust != nil {
-		if v.Adjust.Panel.Suggestions, err = s.Chores.ReasonSuggestions(ctx, s.HouseholdID); err != nil {
+		if v.Adjust.Panel.Suggestions, err = s.Chores.ReasonSuggestions(ctx, hhOf(r)); err != nil {
 			s.serverError(w, r, err)
 			return
 		}
@@ -192,7 +192,7 @@ func (s *Server) renderPerson(w http.ResponseWriter, r *http.Request, status int
 	if f.ID != 0 && !f.Archived {
 		// No rewards, no "Saving for" picker.
 		if s.moduleOn(r.Context(), modRewards) {
-			rewards, err := s.Household.Rewards(r.Context(), s.HouseholdID)
+			rewards, err := s.Household.Rewards(r.Context(), hhOf(r))
 			if err != nil {
 				s.serverError(w, r, err)
 				return
@@ -233,7 +233,7 @@ func (s *Server) loadPerson(w http.ResponseWriter, r *http.Request) (dbq.Person,
 		http.NotFound(w, r)
 		return dbq.Person{}, false
 	}
-	p, err := s.Household.Person(r.Context(), s.HouseholdID, id)
+	p, err := s.Household.Person(r.Context(), hhOf(r), id)
 	if errors.Is(err, household.ErrNotFound) {
 		http.NotFound(w, r)
 		return dbq.Person{}, false
@@ -310,7 +310,7 @@ func (s *Server) handlePersonCreate(w http.ResponseWriter, r *http.Request) {
 		s.renderPerson(w, r, http.StatusUnprocessableEntity, f, errs, "")
 		return
 	}
-	p, err := s.Household.CreatePerson(r.Context(), s.HouseholdID, actor(r).Person.ID, in)
+	p, err := s.Household.CreatePerson(r.Context(), hhOf(r), actor(r).Person.ID, in)
 	if err != nil {
 		_ = s.Avatars.Remove(newPhoto)
 		if errs, ok := validationErrors(err); ok {
@@ -328,7 +328,7 @@ func (s *Server) handlePersonCreate(w http.ResponseWriter, r *http.Request) {
 // back) gets their copies of Everyone chores without waiting for the hourly
 // run. A failure is only logged: the hourly run catches up.
 func (s *Server) fillChores(r *http.Request) {
-	if _, err := s.Chores.Materialise(r.Context(), s.HouseholdID, s.boardDay(r), chores.Window); err != nil {
+	if _, err := s.Chores.Materialise(r.Context(), hhOf(r), s.boardDay(r), chores.Window); err != nil {
 		s.Log.ErrorContext(r.Context(), "materialise chores", slog.Any("err", err))
 	}
 }
@@ -349,7 +349,7 @@ func (s *Server) handlePersonUpdate(w http.ResponseWriter, r *http.Request) {
 		s.renderPerson(w, r, http.StatusUnprocessableEntity, f, errs, "")
 		return
 	}
-	p, err := s.Household.UpdatePerson(r.Context(), s.HouseholdID, actor(r).Person.ID, cur.ID, in)
+	p, err := s.Household.UpdatePerson(r.Context(), hhOf(r), actor(r).Person.ID, cur.ID, in)
 	if err != nil {
 		_ = s.Avatars.Remove(newPhoto)
 		if errs, ok := validationErrors(err); ok {
@@ -388,15 +388,15 @@ func (s *Server) savePersonGoal(r *http.Request, p dbq.Person, goal *int64) (dbq
 		goal != nil && p.GoalRewardID != nil && *goal == *p.GoalRewardID:
 		return p, nil
 	case goal == nil:
-		if err := s.Chores.ClearGoal(ctx, s.HouseholdID, p.ID); err != nil {
+		if err := s.Chores.ClearGoal(ctx, hhOf(r), p.ID); err != nil {
 			return p, err
 		}
 	default:
-		if _, err := s.Chores.SetGoal(ctx, s.HouseholdID, p.ID, *goal); err != nil {
+		if _, err := s.Chores.SetGoal(ctx, hhOf(r), p.ID, *goal); err != nil {
 			return p, err
 		}
 	}
-	return s.Household.Person(ctx, s.HouseholdID, p.ID)
+	return s.Household.Person(ctx, hhOf(r), p.ID)
 }
 
 func (s *Server) handlePersonArchive(w http.ResponseWriter, r *http.Request) {
@@ -404,7 +404,7 @@ func (s *Server) handlePersonArchive(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	err := s.Household.ArchivePerson(r.Context(), s.HouseholdID, actor(r).Person.ID, p.ID)
+	err := s.Household.ArchivePerson(r.Context(), hhOf(r), actor(r).Person.ID, p.ID)
 	if msg, ok := conflictMessage(err); ok {
 		s.renderPerson(w, r, http.StatusConflict, s.personFormFor(r, p), nil, msg)
 		return
@@ -427,7 +427,7 @@ func (s *Server) handlePersonRestore(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := s.Household.RestorePerson(r.Context(), s.HouseholdID, actor(r).Person.ID, p.ID); err != nil {
+	if err := s.Household.RestorePerson(r.Context(), hhOf(r), actor(r).Person.ID, p.ID); err != nil {
 		s.serverError(w, r, err)
 		return
 	}
@@ -463,7 +463,7 @@ func (s *Server) credentialAction(w http.ResponseWriter, r *http.Request, flash 
 		s.serverError(w, r, err)
 		return
 	}
-	p, err = s.Household.Person(r.Context(), s.HouseholdID, p.ID)
+	p, err = s.Household.Person(r.Context(), hhOf(r), p.ID)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -483,13 +483,13 @@ func (s *Server) handlePersonSetPIN(w http.ResponseWriter, r *http.Request) {
 			f.errs.Add("pin_confirm", "The PINs don't match.")
 			return nil
 		}
-		return s.Household.SetPIN(r.Context(), s.HouseholdID, actor(r).Person.ID, p.ID, f.str("pin"), keepToken(r, p.ID))
+		return s.Household.SetPIN(r.Context(), hhOf(r), actor(r).Person.ID, p.ID, f.str("pin"), keepToken(r, p.ID))
 	})
 }
 
 func (s *Server) handlePersonClearPIN(w http.ResponseWriter, r *http.Request) {
 	s.credentialAction(w, r, "PIN removed.", func(p dbq.Person, _ *form) error {
-		return s.Household.ClearPIN(r.Context(), s.HouseholdID, actor(r).Person.ID, p.ID, keepToken(r, p.ID))
+		return s.Household.ClearPIN(r.Context(), hhOf(r), actor(r).Person.ID, p.ID, keepToken(r, p.ID))
 	})
 }
 
@@ -499,13 +499,13 @@ func (s *Server) handlePersonSetLogin(w http.ResponseWriter, r *http.Request) {
 			f.errs.Add("password_confirm", "The passwords don't match.")
 			return nil
 		}
-		return s.Household.SetLogin(r.Context(), s.HouseholdID, actor(r).Person.ID, p.ID, f.str("email"), f.raw("password"), keepToken(r, p.ID))
+		return s.Household.SetLogin(r.Context(), hhOf(r), actor(r).Person.ID, p.ID, f.str("email"), f.raw("password"), keepToken(r, p.ID))
 	})
 }
 
 func (s *Server) handlePersonClearLogin(w http.ResponseWriter, r *http.Request) {
 	s.credentialAction(w, r, "Sign-in removed.", func(p dbq.Person, _ *form) error {
-		return s.Household.ClearLogin(r.Context(), s.HouseholdID, actor(r).Person.ID, p.ID, keepToken(r, p.ID))
+		return s.Household.ClearLogin(r.Context(), hhOf(r), actor(r).Person.ID, p.ID, keepToken(r, p.ID))
 	})
 }
 

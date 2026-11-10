@@ -244,7 +244,7 @@ func (s *Server) handleBankRequest(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad amount", http.StatusBadRequest)
 		return
 	}
-	if _, err := s.Chores.RequestTransfer(r.Context(), s.HouseholdID, p.ID, pence); err != nil {
+	if _, err := s.Chores.RequestTransfer(r.Context(), hhOf(r), p.ID, pence); err != nil {
 		msg, known := boardErrorText(err)
 		if !known {
 			s.serverError(w, r, err)
@@ -252,7 +252,7 @@ func (s *Server) handleBankRequest(w http.ResponseWriter, r *http.Request) {
 		}
 		setToast(w, toast{Message: msg, Error: true})
 	} else {
-		s.events.publish(s.HouseholdID, boardClient(r.Header.Get(boardClientHeader)))
+		s.events.publish(hhOf(r), boardClient(r.Header.Get(boardClientHeader)))
 		setToast(w, toast{Message: "Asked. A grown-up will move it to your bank."})
 	}
 	s.renderMyMoney(w, r, p, token)
@@ -269,7 +269,7 @@ func (s *Server) handleBankCancel(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	switch err := s.Chores.CancelTransfer(r.Context(), s.HouseholdID, p.ID, id); {
+	switch err := s.Chores.CancelTransfer(r.Context(), hhOf(r), p.ID, id); {
 	case errors.Is(err, chores.ErrNotFound):
 		http.NotFound(w, r)
 		return
@@ -279,7 +279,7 @@ func (s *Server) handleBankCancel(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	default:
-		s.events.publish(s.HouseholdID, boardClient(r.Header.Get(boardClientHeader)))
+		s.events.publish(hhOf(r), boardClient(r.Header.Get(boardClientHeader)))
 		setToast(w, toast{Message: "Cancelled. The money's yours to spend again."})
 	}
 	s.renderMyMoney(w, r, p, token)
@@ -317,7 +317,7 @@ func (s *Server) moneyPerson(w http.ResponseWriter, r *http.Request) (dbq.Person
 		http.NotFound(w, r)
 		return dbq.Person{}, false
 	}
-	p, err := s.Household.Person(r.Context(), s.HouseholdID, id)
+	p, err := s.Household.Person(r.Context(), hhOf(r), id)
 	if errors.Is(err, household.ErrNotFound) || (err == nil && p.ArchivedAt != nil) {
 		http.NotFound(w, r)
 		return dbq.Person{}, false
@@ -355,26 +355,26 @@ func (s *Server) renderMyMoney(w http.ResponseWriter, r *http.Request, p dbq.Per
 func (s *Server) myMoney(r *http.Request, p dbq.Person, base, token string) (myMoneyView, error) {
 	ctx := r.Context()
 	loc := s.Locale
-	loc.Location = s.Settings.Location(ctx, s.HouseholdID)
-	sum, err := s.Chores.PersonSummary(ctx, s.HouseholdID, p.ID, loc.StartOfWeek(s.now()))
+	loc.Location = s.Settings.Location(ctx, hhOf(r))
+	sum, err := s.Chores.PersonSummary(ctx, hhOf(r), p.ID, loc.StartOfWeek(s.now()))
 	if err != nil {
 		return myMoneyView{}, err
 	}
 	v := myMoneyView{Summary: sum, Page: moneyHistoryView{Base: base, Token: token}}
 	if s.moduleOn(ctx, modRewards) {
-		if v.Waiting, err = s.Chores.WaitingClaims(ctx, s.HouseholdID, p.ID); err != nil {
+		if v.Waiting, err = s.Chores.WaitingClaims(ctx, hhOf(r), p.ID); err != nil {
 			return myMoneyView{}, err
 		}
 	} else {
 		v.Goal = nil
 	}
-	if v.Bank, err = s.Chores.BankStatus(ctx, s.HouseholdID, p.ID, s.now().Add(-declinedShown)); err != nil {
+	if v.Bank, err = s.Chores.BankStatus(ctx, hhOf(r), p.ID, s.now().Add(-declinedShown)); err != nil {
 		return myMoneyView{}, err
 	}
-	if v.InBank, err = s.Chores.PersonBank(ctx, s.HouseholdID, p.ID); err != nil {
+	if v.InBank, err = s.Chores.PersonBank(ctx, hhOf(r), p.ID); err != nil {
 		return myMoneyView{}, err
 	}
-	v.Page.History, v.Page.Next, err = s.Chores.History(ctx, s.HouseholdID, p.ID, s.now().AddDate(0, 0, -moneyHistoryDays), 0)
+	v.Page.History, v.Page.Next, err = s.Chores.History(ctx, hhOf(r), p.ID, s.now().AddDate(0, 0, -moneyHistoryDays), 0)
 	return v, err
 }
 
@@ -386,7 +386,7 @@ func (s *Server) renderMoneyHistory(w http.ResponseWriter, r *http.Request, p db
 		return
 	}
 	v := moneyHistoryView{Base: base, Token: token}
-	v.History, v.Next, err = s.Chores.History(r.Context(), s.HouseholdID, p.ID, time.Time{}, before)
+	v.History, v.Next, err = s.Chores.History(r.Context(), hhOf(r), p.ID, time.Time{}, before)
 	if errors.Is(err, chores.ErrNotFound) {
 		http.NotFound(w, r)
 		return

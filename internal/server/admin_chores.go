@@ -144,12 +144,12 @@ func (p choresPage) EditURL(id int64) string {
 
 func (s *Server) handleChores(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	list, err := s.Chores.Chores(ctx, s.HouseholdID)
+	list, err := s.Chores.Chores(ctx, hhOf(r))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	people, err := s.Household.People(ctx, s.HouseholdID)
+	people, err := s.Household.People(ctx, hhOf(r))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -163,7 +163,7 @@ func (s *Server) handleChores(w http.ResponseWriter, r *http.Request) {
 	if id, err := strconv.ParseInt(page.Q.Person, 10, 64); err == nil {
 		page.Person = byID[id]
 	}
-	shared, err := s.Chores.SharedPeople(ctx, s.HouseholdID)
+	shared, err := s.Chores.SharedPeople(ctx, hhOf(r))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -310,11 +310,11 @@ func (f choreForm) HasPerson(id int64) bool { return slices.Contains(f.PeopleIDs
 func (f choreForm) HasDay(d time.Weekday) bool { return slices.Contains(f.Days, d) }
 
 func (s *Server) newChoreForm(r *http.Request) (choreForm, error) {
-	people, err := s.Household.People(r.Context(), s.HouseholdID)
+	people, err := s.Household.People(r.Context(), hhOf(r))
 	if err != nil {
 		return choreForm{}, err
 	}
-	set, err := s.Settings.Get(r.Context(), s.HouseholdID)
+	set, err := s.Settings.Get(r.Context(), hhOf(r))
 	if err != nil {
 		return choreForm{}, err
 	}
@@ -346,7 +346,7 @@ func (s *Server) choreFormFor(r *http.Request, c dbq.Chore) (choreForm, error) {
 		f.AssigneeID = *c.AssigneeID
 	}
 	if c.Mode == chores.ModeShared || c.Mode == chores.ModeEach {
-		if f.PeopleIDs, err = s.Chores.ChorePeople(r.Context(), s.HouseholdID, c.ID); err != nil {
+		if f.PeopleIDs, err = s.Chores.ChorePeople(r.Context(), hhOf(r), c.ID); err != nil {
 			return f, err
 		}
 	}
@@ -401,7 +401,7 @@ func (s *Server) loadChore(w http.ResponseWriter, r *http.Request) (dbq.Chore, b
 		http.NotFound(w, r)
 		return dbq.Chore{}, false
 	}
-	c, err := s.Chores.Chore(r.Context(), s.HouseholdID, id)
+	c, err := s.Chores.Chore(r.Context(), hhOf(r), id)
 	if errors.Is(err, chores.ErrNotFound) || (err == nil && c.ArchivedAt != nil) {
 		http.NotFound(w, r)
 		return dbq.Chore{}, false
@@ -544,7 +544,7 @@ func (s *Server) handleChoreCreate(w http.ResponseWriter, r *http.Request) {
 		s.renderChore(w, r, http.StatusOK, f, nil, suggestionFlash(e, "chore"))
 		return
 	}
-	_, err = s.Chores.CreateChore(r.Context(), s.HouseholdID, actor(r).Person.ID, in, s.boardDay(r))
+	_, err = s.Chores.CreateChore(r.Context(), hhOf(r), actor(r).Person.ID, in, s.boardDay(r))
 	if errs, ok := validationErrors(err); ok {
 		s.renderChore(w, r, http.StatusUnprocessableEntity, f, errs, "")
 		return
@@ -579,7 +579,7 @@ func (s *Server) handleChoreUpdate(w http.ResponseWriter, r *http.Request) {
 		s.renderChore(w, r, http.StatusOK, f, nil, suggestionFlash(e, "chore"))
 		return
 	}
-	c, err := s.Chores.UpdateChore(r.Context(), s.HouseholdID, actor(r).Person.ID, cur.ID, in, s.boardDay(r))
+	c, err := s.Chores.UpdateChore(r.Context(), hhOf(r), actor(r).Person.ID, cur.ID, in, s.boardDay(r))
 	if errs, ok := validationErrors(err); ok {
 		s.renderChore(w, r, http.StatusUnprocessableEntity, f, errs, "")
 		return
@@ -607,11 +607,11 @@ func (s *Server) handleChoreArchive(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad form", http.StatusBadRequest)
 		return
 	}
-	if err := s.Chores.ArchiveChore(r.Context(), s.HouseholdID, actor(r).Person.ID, c.ID, s.boardDay(r)); err != nil {
+	if err := s.Chores.ArchiveChore(r.Context(), hhOf(r), actor(r).Person.ID, c.ID, s.boardDay(r)); err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	people, err := s.Household.People(r.Context(), s.HouseholdID)
+	people, err := s.Household.People(r.Context(), hhOf(r))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -621,7 +621,7 @@ func (s *Server) handleChoreArchive(w http.ResponseWriter, r *http.Request) {
 
 // boardDay is the household's current board day (after the reset time).
 func (s *Server) boardDay(r *http.Request) time.Time {
-	set, err := s.Settings.Get(r.Context(), s.HouseholdID)
+	set, err := s.Settings.Get(r.Context(), hhOf(r))
 	if err != nil {
 		return s.now()
 	}

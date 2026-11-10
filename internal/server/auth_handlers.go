@@ -40,7 +40,7 @@ func newSetupForm() setupForm {
 }
 
 func (s *Server) handleSetupForm(w http.ResponseWriter, r *http.Request) {
-	if s.setupDone.Load() {
+	if hh := hhOf(r); hh == 0 || s.isSetUp(hh) {
 		http.NotFound(w, r)
 		return
 	}
@@ -48,7 +48,7 @@ func (s *Server) handleSetupForm(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
-	if s.setupDone.Load() {
+	if hh := hhOf(r); hh == 0 || s.isSetUp(hh) {
 		http.NotFound(w, r)
 		return
 	}
@@ -89,7 +89,7 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	p, err := s.Household.Setup(ctx, s.HouseholdID, household.SetupInput{
+	p, err := s.Household.Setup(ctx, hhOf(r), household.SetupInput{
 		HouseholdName: data.HouseholdName,
 		Person:        household.PersonInput{Name: data.Name, Colour: data.Colour, Avatar: av},
 		Email:         data.Email,
@@ -101,7 +101,7 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if errors.Is(err, household.ErrSetupDone) {
-		s.setupDone.Store(true)
+		s.markSetUp(hhOf(r))
 		redirect(w, r, "/")
 		return
 	}
@@ -109,16 +109,16 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	s.setupDone.Store(true)
-	s.Settings.Invalidate(s.HouseholdID)
+	s.markSetUp(hhOf(r))
+	s.Settings.Invalidate(hhOf(r))
 	// A new household starts with each module's default, so it isn't asked
 	// to choose. If this fails it is asked in Admin instead.
-	if err := s.Modules.SetDefaults(ctx, s.HouseholdID, &p.ID); err != nil {
+	if err := s.Modules.SetDefaults(ctx, hhOf(r), &p.ID); err != nil {
 		s.Log.ErrorContext(ctx, "set default modules", slog.Any("err", err))
 	}
 
 	if data.UseAsDisplay {
-		devToken, dev, err := s.Auth.RegisterDisplay(ctx, s.HouseholdID, data.DisplayName, p.ID)
+		devToken, dev, err := s.Auth.RegisterDisplay(ctx, hhOf(r), data.DisplayName, p.ID)
 		if err != nil {
 			s.serverError(w, r, err)
 			return
@@ -170,7 +170,16 @@ func (s *Server) handleSignIn(w http.ResponseWriter, r *http.Request) {
 	}
 	f := newForm(r)
 	data := signInForm{Email: f.str("email")}
-	token, _, err := s.Auth.SignIn(r.Context(), data.Email, f.raw("password"), r.UserAgent(), s.clientAddr(r))
+	token, p, err := s.Auth.SignIn(r.Context(), data.Email, f.raw("password"), r.UserAgent(), s.clientAddr(r))
+	if hh := hhOf(r); err == nil && hh != 0 && p.HouseholdID != hh {
+		// Right password, but this server (or address) is for another
+		// household: answer as for a wrong password.
+		if endErr := s.Auth.EndSession(r.Context(), token); endErr != nil {
+			s.serverError(w, r, endErr)
+			return
+		}
+		err = auth.ErrBadCredentials
+	}
 	if err != nil {
 		v := s.view(r, "Sign in", data)
 		switch {
@@ -216,7 +225,7 @@ type unlockAdult struct {
 }
 
 func (s *Server) unlockAdults(r *http.Request) ([]unlockAdult, error) {
-	people, err := s.Household.People(r.Context(), s.HouseholdID)
+	people, err := s.Household.People(r.Context(), hhOf(r))
 	if err != nil {
 		return nil, err
 	}

@@ -20,17 +20,17 @@ const adjustmentHistory = 30 * 24 * time.Hour
 func (s *Server) loadPointsPanel(r *http.Request, f *personForm) error {
 	ctx := r.Context()
 	loc := s.Locale
-	loc.Location = s.Settings.Location(ctx, s.HouseholdID)
-	sum, err := s.Chores.PersonSummary(ctx, s.HouseholdID, f.ID, loc.StartOfWeek(s.now()))
+	loc.Location = s.Settings.Location(ctx, hhOf(r))
+	sum, err := s.Chores.PersonSummary(ctx, hhOf(r), f.ID, loc.StartOfWeek(s.now()))
 	if err != nil {
 		return err
 	}
 	f.Points.Points, f.Points.HeldPoints = sum.Points, sum.HeldPoints
 	f.Points.Pence, f.Points.HeldPence = sum.Pence, sum.HeldPence
-	if f.Points.Suggestions, err = s.Chores.ReasonSuggestions(ctx, s.HouseholdID); err != nil {
+	if f.Points.Suggestions, err = s.Chores.ReasonSuggestions(ctx, hhOf(r)); err != nil {
 		return err
 	}
-	f.Points.History, err = s.Chores.Adjustments(ctx, s.HouseholdID, f.ID, s.now().Add(-adjustmentHistory), 20)
+	f.Points.History, err = s.Chores.Adjustments(ctx, hhOf(r), f.ID, s.now().Add(-adjustmentHistory), 20)
 	return err
 }
 
@@ -98,7 +98,7 @@ func (s *Server) handleAdjustPoints(w http.ResponseWriter, r *http.Request) {
 	if in.Direction == "take" {
 		signed = -n
 	}
-	entry, err := s.Chores.AdjustPoints(r.Context(), s.HouseholdID, adult.ID, p.ID, signed, in.Reason)
+	entry, err := s.Chores.AdjustPoints(r.Context(), hhOf(r), adult.ID, p.ID, signed, in.Reason)
 	if errs, ok := validationErrors(err); ok {
 		again(http.StatusUnprocessableEntity, errs, "")
 		return
@@ -149,7 +149,7 @@ func (s *Server) handleUndoAdjustment(w http.ResponseWriter, r *http.Request) {
 		}
 		s.renderPerson(w, r, status, s.personFormFor(r, p), nil, flash)
 	}
-	err = s.Chores.UndoAdjustment(r.Context(), s.HouseholdID, adult.ID, entryID)
+	err = s.Chores.UndoAdjustment(r.Context(), hhOf(r), adult.ID, entryID)
 	switch {
 	case errors.Is(err, chores.ErrUndoExpired):
 		reply(http.StatusConflict, "That can't be undone any more.")

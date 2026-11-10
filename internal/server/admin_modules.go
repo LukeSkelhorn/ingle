@@ -24,7 +24,7 @@ type moduleRow struct {
 }
 
 func (s *Server) handleModules(w http.ResponseWriter, r *http.Request) {
-	st, err := s.Modules.State(r.Context(), s.HouseholdID)
+	st, err := s.Modules.State(r.Context(), hhOf(r))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -53,7 +53,7 @@ func (s *Server) handleModulesUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	st, err := s.Modules.State(ctx, s.HouseholdID)
+	st, err := s.Modules.State(ctx, hhOf(r))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -70,7 +70,7 @@ func (s *Server) handleModulesUpdate(w http.ResponseWriter, r *http.Request) {
 		s.renderModules(w, r, http.StatusOK, want, st.Chosen, s.moduleNames(c.AlsoOff), "")
 		return
 	}
-	if err := s.Modules.Set(ctx, s.HouseholdID, &actor(r).Person.ID, c.Final); err != nil {
+	if err := s.Modules.Set(ctx, hhOf(r), &actor(r).Person.ID, c.Final); err != nil {
 		s.serverError(w, r, err)
 		return
 	}

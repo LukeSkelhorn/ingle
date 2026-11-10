@@ -156,6 +156,9 @@ func newHarnessWith(t *testing.T, extra ...module.Module) *harness {
 type device struct {
 	h *harness
 	c *http.Client
+	// host, when set, is sent as the Host header (the tenancy tests tell
+	// households apart by it).
+	host string
 }
 
 func (h *harness) device() *device {
@@ -180,6 +183,9 @@ type resp struct {
 
 func (d *device) do(req *http.Request) resp {
 	d.h.t.Helper()
+	if d.host != "" {
+		req.Host = d.host
+	}
 	r, err := d.c.Do(req)
 	if err != nil {
 		d.h.t.Fatalf("%s %s: %v", req.Method, req.URL.Path, err)

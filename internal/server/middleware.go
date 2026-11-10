@@ -21,7 +21,38 @@ const (
 // until revoked under Admin › Devices).
 const deviceCookieAge = 10 * 365 * 24 * time.Hour
 
-type ctxKey struct{}
+type (
+	ctxKey       struct{}
+	householdKey struct{}
+)
+
+// hhOf returns the household r is for, or 0 when none is known: an open
+// page on a server with many households and nobody signed in.
+func hhOf(r *http.Request) int64 { return householdIn(r.Context()) }
+
+// householdIn returns the household stored in ctx by identify, or 0.
+func householdIn(ctx context.Context) int64 {
+	id, _ := ctx.Value(householdKey{}).(int64)
+	return id
+}
+
+// withHousehold returns ctx for the household id.
+func withHousehold(ctx context.Context, id int64) context.Context {
+	return context.WithValue(ctx, householdKey{}, id)
+}
+
+// resolveHousehold asks the ResolveHousehold hook which household r is
+// for. Without the hook it's the server's one household.
+func (s *Server) resolveHousehold(r *http.Request) (int64, error) {
+	if s.ResolveHousehold == nil {
+		return s.HouseholdID, nil
+	}
+	id, ok, err := s.ResolveHousehold(r)
+	if err != nil || !ok {
+		return 0, err
+	}
+	return id, nil
+}
 
 // identity is who is making the request, resolved once per request.
 type identity struct {
@@ -34,7 +65,9 @@ func identityFrom(ctx context.Context) identity {
 	return id
 }
 
-// identify resolves the display and session cookies.
+// identify resolves the household and the display and session cookies.
+// The household is the one the resolver names, or else the display's or
+// session's own. A cookie for another household is cleared.
 func (s *Server) identify(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if isOpenAsset(r.URL.Path) {
@@ -43,6 +76,11 @@ func (s *Server) identify(next http.Handler) http.Handler {
 		}
 		ctx := r.Context()
 		var id identity
+		hh, err := s.resolveHousehold(r)
+		if err != nil {
+			s.serverError(w, r, err)
+			return
+		}
 
 		if c, err := r.Cookie(deviceCookie); err == nil {
 			dev, err := s.Auth.Display(ctx, c.Value)
@@ -50,10 +88,11 @@ func (s *Server) identify(next http.Handler) http.Handler {
 				s.serverError(w, r, err)
 				return
 			}
-			if dev == nil || dev.HouseholdID != s.HouseholdID {
+			if dev == nil || (hh != 0 && dev.HouseholdID != hh) {
 				s.clearCookie(w, r, deviceCookie)
 			} else {
 				id.Device = dev
+				hh = dev.HouseholdID
 			}
 		}
 		if c, err := r.Cookie(sessionCookie); err == nil {
@@ -68,30 +107,34 @@ func (s *Server) identify(next http.Handler) http.Handler {
 				_ = s.Auth.EndSession(ctx, c.Value)
 				sess = nil
 			}
-			if sess == nil || sess.Person.HouseholdID != s.HouseholdID {
+			if sess == nil || (hh != 0 && sess.Person.HouseholdID != hh) {
 				s.clearCookie(w, r, sessionCookie)
 			} else {
 				id.Session = sess
+				hh = sess.Person.HouseholdID
 			}
 		}
-		next.ServeHTTP(w, r.WithContext(context.WithValue(ctx, ctxKey{}, id)))
+		ctx = withHousehold(context.WithValue(ctx, ctxKey{}, id), hh)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
-// requireSetup sends every page to /setup until an adult can sign in.
+// requireSetup sends every page to /setup until an adult can sign in. A
+// request with no household has nothing to set up.
 func (s *Server) requireSetup(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if s.setupDone.Load() || isOpenAsset(r.URL.Path) {
+		hh := hhOf(r)
+		if hh == 0 || s.isSetUp(hh) || isOpenAsset(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
-		needs, err := s.Household.NeedsSetup(r.Context(), s.HouseholdID)
+		needs, err := s.Household.NeedsSetup(r.Context(), hh)
 		if err != nil {
 			s.serverError(w, r, err)
 			return
 		}
 		if !needs {
-			s.setupDone.Store(true)
+			s.markSetUp(hh)
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -102,6 +145,16 @@ func (s *Server) requireSetup(next http.Handler) http.Handler {
 		redirect(w, r, "/setup")
 	})
 }
+
+// isSetUp reports whether household hh is known to be set up.
+func (s *Server) isSetUp(hh int64) bool {
+	_, ok := s.setupDone.Load(hh)
+	return ok
+}
+
+// markSetUp latches household hh as set up; it never goes back because the
+// last adult who can sign in can't be archived or stripped.
+func (s *Server) markSetUp(hh int64) { s.setupDone.Store(hh, struct{}{}) }
 
 // requireViewer allows household displays and signed-in adults.
 func (s *Server) requireViewer(next http.Handler) http.Handler {
@@ -182,7 +235,7 @@ func (s *Server) view(r *http.Request, title string, data any) view {
 	v := view{Title: title, Data: data, Version: s.version()}
 	screensaverSeconds, calendarSeconds := 0, 0
 	if s.Settings != nil {
-		if set, err := s.Settings.Get(r.Context(), s.HouseholdID); err == nil {
+		if set, err := s.Settings.Get(r.Context(), hhOf(r)); err == nil {
 			v.Household = set.HouseholdName
 			v.Viewer.IdleSeconds = int(set.AdminIdle().Seconds())
 			screensaverSeconds = int(set.ScreensaverIdle().Seconds())
