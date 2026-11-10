@@ -26,6 +26,18 @@ type (
 	householdKey struct{}
 )
 
+// HouseholdOf returns the household r is for, or 0 when none is known, for
+// handlers added through Deps.Routes.
+func HouseholdOf(r *http.Request) int64 { return hhOf(r) }
+
+// RequireAdmin wraps a handler added through Deps.Routes so only a
+// signed-in adult of the request's household reaches it.
+func (s *Server) RequireAdmin(h http.Handler) http.Handler { return s.requireAdmin(h) }
+
+// RequireViewer wraps a handler added through Deps.Routes so only a
+// household display or signed-in adult reaches it.
+func (s *Server) RequireViewer(h http.Handler) http.Handler { return s.requireViewer(h) }
+
 // hhOf returns the household r is for, or 0 when none is known: an open
 // page on a server with many households and nobody signed in.
 func hhOf(r *http.Request) int64 { return householdIn(r.Context()) }

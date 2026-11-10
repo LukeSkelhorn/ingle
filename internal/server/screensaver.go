@@ -139,7 +139,7 @@ func (s *Server) handlePhoto(w http.ResponseWriter, r *http.Request) {
 	}
 	name := r.PathValue("name")
 	var (
-		f   *os.File
+		f   io.ReadSeekCloser
 		err error
 	)
 	switch r.PathValue("kind") {
@@ -155,21 +155,26 @@ func (s *Server) handlePhoto(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer f.Close()
-	info, err := f.Stat()
-	if err != nil {
-		http.NotFound(w, r)
-		return
+	// A blob store other than disk may not know when a file was written;
+	// uploads don't need it, as their names are never reused.
+	var modTime time.Time
+	if st, ok := f.(interface{ Stat() (os.FileInfo, error) }); ok {
+		if info, err := st.Stat(); err == nil {
+			modTime = info.ModTime()
+			if r.PathValue("kind") != "u" {
+				// Folder photos can change on disk; revalidate by ETag.
+				w.Header().Set("ETag", fmt.Sprintf(`"%x-%x"`, info.ModTime().UnixNano(), info.Size()))
+			}
+		}
 	}
 	if r.PathValue("kind") == "u" {
 		// Upload names are random and never reused.
 		w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
 	} else {
-		// Folder photos can change on disk; revalidate by ETag.
 		w.Header().Set("Cache-Control", "private, no-cache")
-		w.Header().Set("ETag", fmt.Sprintf(`"%x-%x"`, info.ModTime().UnixNano(), info.Size()))
 	}
 	w.Header().Set("Content-Type", "image/jpeg")
-	http.ServeContent(w, r, "", info.ModTime(), f)
+	http.ServeContent(w, r, "", modTime, f)
 }
 
 // Admin › Photos.

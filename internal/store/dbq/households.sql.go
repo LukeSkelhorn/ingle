@@ -48,6 +48,33 @@ func (q *Queries) GetHousehold(ctx context.Context, id int64) (Household, error)
 	return i, err
 }
 
+const listHouseholdIDs = `-- name: ListHouseholdIDs :many
+SELECT id FROM households ORDER BY id
+`
+
+func (q *Queries) ListHouseholdIDs(ctx context.Context) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, listHouseholdIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateHouseholdName = `-- name: UpdateHouseholdName :exec
 UPDATE households SET name = ? WHERE id = ?
 `

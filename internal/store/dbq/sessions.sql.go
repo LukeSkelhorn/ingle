@@ -50,17 +50,19 @@ func (q *Queries) DeleteDisplaySessions(ctx context.Context, householdID int64) 
 
 const deleteExpiredSessions = `-- name: DeleteExpiredSessions :execrows
 DELETE FROM sessions
-WHERE (kind = 'personal' AND last_seen_at < ?1)
-   OR (kind = 'display' AND last_seen_at < ?2)
+WHERE household_id = ?1
+  AND ((kind = 'personal' AND last_seen_at < ?2)
+    OR (kind = 'display' AND last_seen_at < ?3))
 `
 
 type DeleteExpiredSessionsParams struct {
+	HouseholdID    int64 `json:"household_id"`
 	PersonalBefore int64 `json:"personal_before"`
 	DisplayBefore  int64 `json:"display_before"`
 }
 
 func (q *Queries) DeleteExpiredSessions(ctx context.Context, arg DeleteExpiredSessionsParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, deleteExpiredSessions, arg.PersonalBefore, arg.DisplayBefore)
+	result, err := q.db.ExecContext(ctx, deleteExpiredSessions, arg.HouseholdID, arg.PersonalBefore, arg.DisplayBefore)
 	if err != nil {
 		return 0, err
 	}

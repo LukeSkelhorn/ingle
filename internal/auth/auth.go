@@ -374,6 +374,7 @@ func (s *Service) Sweep(ctx context.Context, householdID int64) (int64, error) {
 	}
 	now := s.now()
 	return s.st.Q.DeleteExpiredSessions(ctx, dbq.DeleteExpiredSessionsParams{
+		HouseholdID:    householdID,
 		PersonalBefore: now.Add(-PersonalSessionTTL).Unix(),
 		DisplayBefore:  now.Add(-set.AdminIdle()).Unix(),
 	})

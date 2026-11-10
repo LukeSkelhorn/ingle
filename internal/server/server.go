@@ -42,6 +42,12 @@ type Deps struct {
 	// Households lists the households the module loops run for. Nil means
 	// just HouseholdID.
 	Households func(ctx context.Context) ([]int64, error)
+	// Routes adds a program's own routes (e.g. Hosted's sign-up and
+	// billing) behind the same cross-origin check and identity as Ingle's.
+	// Wrap them with RequireAdmin or RequireViewer as needed.
+	Routes func(s *Server, mux *http.ServeMux)
+	// AdminLinks are extra links in the Admin bar, after the modules'.
+	AdminLinks []module.NavItem
 	Auth       *auth.Service
 	Settings   *settings.Service
 	Chores     *chores.Service
@@ -214,6 +220,10 @@ func (s *Server) Handler() http.Handler {
 	// Modules mount their own routes, hidden while they're off.
 	for _, m := range s.Modules.Registry().All() {
 		m.Routes(moduleRouter{s: s, mux: mux, id: m.ID()})
+	}
+
+	if s.Routes != nil {
+		s.Routes(s, mux)
 	}
 
 	// Outermost first: reject cross-origin writes, identify the caller, then
