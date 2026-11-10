@@ -6,6 +6,10 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ## [Unreleased]
 
+### Added
+
+- **For developers: a public `app` package.** `github.com/lukeskelhorn/ingle/app` starts an Ingle server (`app.Run`), checks one (`app.Healthcheck`) and writes a backup (`app.Backup`), configured by the same `INGLE_*` settings. `cmd/ingle` is now a thin wrapper around it, so other Go programs can run Ingle by importing the core as a module. Nothing changes for people running Ingle. ([DOM-58](https://linear.app/skeltech/issue/DOM-58))
+
 ## [v0.3.1] - 2026-11-09
 
 ### Fixed
