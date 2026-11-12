@@ -132,7 +132,9 @@ func TestHouseholdCodeAndPhone(t *testing.T) {
 	wall := h.setUp()
 	phone := h.phone()
 
-	expect(t, phone.get("/admin/settings"), http.StatusOK, "No code yet")
+	// The code is typed twice on Ingle's keypad, not the tablet's keyboard.
+	expect(t, phone.get("/admin/settings"), http.StatusOK, "No code yet",
+		`name="code"`, `name="code_confirm"`, "data-pinpad-set", "/static/pinpad.js")
 	expect(t, phone.post("/admin/settings/unlock-code", url.Values{"code": {"1357"}, "code_confirm": {"1358"}}),
 		http.StatusUnprocessableEntity, "The codes don&#39;t match.")
 	expect(t, phone.post("/admin/settings/unlock-code", url.Values{"code": {"12"}, "code_confirm": {"12"}}),

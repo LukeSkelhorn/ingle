@@ -522,6 +522,15 @@ input, select, textarea { -webkit-user-select: text; user-select: text; }
 .pinpad__key:active { background: var(--line); }
 .pinpad__key--muted { color: var(--muted); }
 .pinpad__key--go { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.pinpad__dot.is-shown { width: auto; min-width: 16px; height: auto; border: 0; background: none; font-size: 1.3rem; line-height: 24px; }
+.pinpad__dot.is-shown:not(.is-filled) { width: 16px; height: 16px; margin-top: 4px; border: 2px solid var(--fg); }
+
+/* Setting a PIN on the pad (admin, setup) */
+.pinset [hidden] { display: none; }
+.pinset__pad { align-items: flex-start; width: fit-content; outline: none; }
+.pinset__pad .pinpad__dots, .pinset__pad .pinpad__msg, .pinset__prompt { align-self: stretch; text-align: center; }
+.pinset__prompt { margin: 0; font-weight: 600; }
+.pinset__show { align-self: center; }
 
 /* Admin shell */
 .admin__bar {

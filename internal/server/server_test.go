@@ -288,6 +288,7 @@ var setupValues = url.Values{
 	"password":         {"correct horse battery"},
 	"password_confirm": {"correct horse battery"},
 	"pin":              {"2468"},
+	"pin_confirm":      {"2468"},
 	"use_as_display":   {"1"},
 	"display_name":     {"Kitchen"},
 }
@@ -360,7 +361,8 @@ func TestEverythingGoesToSetupFirst(t *testing.T) {
 	for _, p := range []string{"/", "/admin", "/signin", "/admin/unlock", "/clock"} {
 		expectRedirect(t, d.get(p), "/setup")
 	}
-	expect(t, d.get("/setup"), http.StatusOK, "Welcome to Ingle", `name="pin"`)
+	// The PIN is typed twice on Ingle's keypad, not the tablet's keyboard.
+	expect(t, d.get("/setup"), http.StatusOK, "Welcome to Ingle", `name="pin"`, `name="pin_confirm"`, "data-pinpad-set", "/static/pinpad.js")
 }
 
 func TestSetupValidation(t *testing.T) {
@@ -375,6 +377,9 @@ func TestSetupValidation(t *testing.T) {
 	expect(t, d.post("/setup", bad), http.StatusUnprocessableEntity, "The passwords don&#39;t match.")
 
 	bad.Set("password_confirm", bad.Get("password"))
+	expect(t, d.post("/setup", bad), http.StatusUnprocessableEntity, "The PINs don&#39;t match.")
+
+	bad.Set("pin_confirm", "12")
 	expect(t, d.post("/setup", bad), http.StatusUnprocessableEntity, "Use 4 to 6 digits.")
 	// Still not set up.
 	expectRedirect(t, d.get("/"), "/setup")

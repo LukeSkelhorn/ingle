@@ -38,12 +38,11 @@
         <input type="password" name="password_confirm" required minlength="10" maxlength="128" autocomplete="new-password">
         {{template "err" index .Errors "password_confirm"}}
       </label>
-      <label class="field">
-        <span>PIN (4–6 digits)</span>
-        <input type="password" name="pin" required inputmode="numeric" pattern="[0-9]{4,6}" minlength="4" maxlength="6" autocomplete="off">
+      <div class="field">
+        <span>PIN</span>
         <small class="muted">Unlocks admin on the household display, so the kids can't change settings.</small>
-        {{template "err" index .Errors "pin"}}
-      </label>
+        {{template "pinpad_set" (dict "Name" "pin" "Confirm" "pin_confirm" "Label" "Choose a PIN (4–6 digits)" "Again" "Confirm PIN" "Err" (or (index .Errors "pin") (index .Errors "pin_confirm")) "Submit" false)}}
+      </div>
     </fieldset>
 
     <fieldset class="stack">
@@ -61,5 +60,6 @@
 
     <button class="btn btn--primary btn--block" type="submit">Set up Ingle</button>
   </form>
+  <script src="{{asset "pinpad.js"}}"></script>
 </main>
 {{end}}

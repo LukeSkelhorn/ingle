@@ -75,6 +75,9 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 	if f.raw("password") != f.raw("password_confirm") {
 		f.errs.Add("password_confirm", "The passwords don't match.")
 	}
+	if f.str("pin") != f.str("pin_confirm") {
+		f.errs.Add("pin_confirm", "The PINs don't match.")
+	}
 	if data.UseAsDisplay && (data.DisplayName == "" || len([]rune(data.DisplayName)) > 50) {
 		f.errs.Add("display_name", "Name this display, e.g. Kitchen.")
 	}
