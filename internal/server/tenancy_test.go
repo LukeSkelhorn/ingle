@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/lukeskelhorn/ingle/internal/module"
+	"github.com/lukeskelhorn/ingle/internal/store"
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
@@ -29,11 +30,11 @@ func newTwoHouseholds(t *testing.T) *twoHouseholds {
 	t.Helper()
 	h := newHarness(t)
 	ctx := t.Context()
-	b, err := h.st.Q.CreateHousehold(ctx, dbq.CreateHouseholdParams{Name: "Home", CreatedAt: h.clock().Unix()})
+	b, err := h.st.Q.CreateHousehold(store.AsSystem(ctx), dbq.CreateHouseholdParams{Name: "Home", CreatedAt: h.clock().Unix()})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := h.srv.Settings.Ensure(ctx, b.ID, h.srv.Locale.Location); err != nil {
+	if err := h.srv.Settings.Ensure(store.WithHousehold(ctx, b.ID), b.ID, h.srv.Locale.Location); err != nil {
 		t.Fatal(err)
 	}
 	hosts := map[string]int64{"a.test": h.hh, "b.test": b.ID}
@@ -82,7 +83,7 @@ func (x *twoHouseholds) on(host string) *device {
 
 func (x *twoHouseholds) personIn(hh int64, name string) dbq.Person {
 	x.h.t.Helper()
-	for _, p := range must(x.h.st.Q.ListPeople(x.h.t.Context(), hh)) {
+	for _, p := range must(x.h.st.Q.ListPeople(store.WithHousehold(x.h.t.Context(), hh), hh)) {
 		if p.Name == name {
 			return p
 		}
@@ -93,7 +94,7 @@ func (x *twoHouseholds) personIn(hh int64, name string) dbq.Person {
 
 func (x *twoHouseholds) choreIn(hh int64, title string) dbq.Chore {
 	x.h.t.Helper()
-	for _, c := range must(x.h.st.Q.ListChores(x.h.t.Context(), hh)) {
+	for _, c := range must(x.h.st.Q.ListChores(store.WithHousehold(x.h.t.Context(), hh), hh)) {
 		if c.Title == title {
 			return c
 		}

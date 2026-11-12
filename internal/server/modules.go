@@ -9,6 +9,7 @@ import (
 
 	"github.com/lukeskelhorn/ingle/internal/calendar"
 	"github.com/lukeskelhorn/ingle/internal/module"
+	"github.com/lukeskelhorn/ingle/internal/store"
 )
 
 // Module IDs. They are stored in the database, so never change one.
@@ -111,7 +112,7 @@ func (s *Server) kickLoops() {
 // households lists the households the module loops run for.
 func (s *Server) households(ctx context.Context) ([]int64, error) {
 	if s.Households != nil {
-		return s.Households(ctx)
+		return s.Households(store.AsSystem(ctx))
 	}
 	if s.HouseholdID == 0 {
 		return nil, nil

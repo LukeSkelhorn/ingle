@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"image"
 	"image/color"
 	"image/png"
@@ -72,6 +73,10 @@ func (h *harness) advance(d time.Duration) {
 	h.now = h.now.Add(d)
 }
 
+// ctx is the test's context, scoped to the harness's household, for
+// calling services directly (requests get theirs from the middleware).
+func (h *harness) ctx() context.Context { return store.WithHousehold(h.t.Context(), h.hh) }
+
 func newHarness(t *testing.T) *harness {
 	t.Helper()
 	return newHarnessWith(t)
@@ -82,7 +87,8 @@ func newHarnessWith(t *testing.T, extra ...module.Module) *harness {
 	t.Helper()
 	ctx := t.Context()
 	dir := t.TempDir()
-	db := storetest.Open(t, filepath.Join(dir, "ingle.db"))
+	// Scoped: on Postgres, row-level security applies, as in production.
+	db := storetest.OpenScoped(t, filepath.Join(dir, "ingle.db"))
 	st := store.New(db)
 
 	uk := locale.UK()
@@ -94,6 +100,7 @@ func newHarnessWith(t *testing.T, extra ...module.Module) *harness {
 		t.Fatal(err)
 	}
 	h.hh = hh.ID
+	ctx = store.WithHousehold(ctx, hh.ID)
 	set := settings.New(st)
 	if err := set.Ensure(ctx, hh.ID, uk.Location); err != nil {
 		t.Fatal(err)
@@ -197,7 +204,7 @@ func (d *device) do(req *http.Request) resp {
 
 func (d *device) get(path string) resp {
 	d.h.t.Helper()
-	req, err := http.NewRequestWithContext(d.h.t.Context(), http.MethodGet, d.h.ts.URL+path, http.NoBody)
+	req, err := http.NewRequestWithContext(d.h.ctx(), http.MethodGet, d.h.ts.URL+path, http.NoBody)
 	if err != nil {
 		d.h.t.Fatal(err)
 	}
@@ -216,7 +223,7 @@ func (d *device) post(path string, form url.Values) resp {
 		}
 		form = f
 	}
-	req, err := http.NewRequestWithContext(d.h.t.Context(), http.MethodPost, d.h.ts.URL+path, strings.NewReader(form.Encode()))
+	req, err := http.NewRequestWithContext(d.h.ctx(), http.MethodPost, d.h.ts.URL+path, strings.NewReader(form.Encode()))
 	if err != nil {
 		d.h.t.Fatal(err)
 	}
@@ -241,7 +248,7 @@ func (d *device) postMultipart(path string, fields map[string]string, fileField,
 		_, _ = fw.Write(file)
 	}
 	_ = mw.Close()
-	req, err := http.NewRequestWithContext(d.h.t.Context(), http.MethodPost, d.h.ts.URL+path, &buf)
+	req, err := http.NewRequestWithContext(d.h.ctx(), http.MethodPost, d.h.ts.URL+path, &buf)
 	if err != nil {
 		d.h.t.Fatal(err)
 	}
@@ -535,7 +542,7 @@ func TestCrossOriginPostRejected(t *testing.T) {
 	phone := h.device()
 	expectRedirect(t, phone.post("/setup", setupValues), "/admin")
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, h.ts.URL+"/admin/rewards",
+	req, err := http.NewRequestWithContext(h.ctx(), http.MethodPost, h.ts.URL+"/admin/rewards",
 		strings.NewReader(url.Values{"title": {"Sweets"}, "cost_points": {"5"}}.Encode()))
 	if err != nil {
 		t.Fatal(err)
@@ -544,7 +551,7 @@ func TestCrossOriginPostRejected(t *testing.T) {
 	req.Header.Set("Origin", "https://evil.example")
 	req.Header.Set("Sec-Fetch-Site", "cross-site")
 	expect(t, phone.do(req), http.StatusForbidden)
-	n, err := h.st.Q.ListRewards(t.Context(), h.hh)
+	n, err := h.st.Q.ListRewards(h.ctx(), h.hh)
 	if err != nil || len(n) != 0 {
 		t.Fatalf("rewards = %v, %v; want none", n, err)
 	}
@@ -763,7 +770,7 @@ func TestRewardsAdmin(t *testing.T) {
 	expectRedirect(t, phone.post("/admin/rewards", url.Values{"title": {"Comic"}, "money": {"2.50"}}), "/admin/rewards")
 	expect(t, phone.get("/admin/rewards"), http.StatusOK, "Film night pick", "50 pts", "Comic", "£2.50")
 
-	rewards, err := h.st.Q.ListRewards(t.Context(), h.hh)
+	rewards, err := h.st.Q.ListRewards(h.ctx(), h.hh)
 	if err != nil || len(rewards) != 2 {
 		t.Fatalf("rewards = %v, %v", rewards, err)
 	}
@@ -802,7 +809,7 @@ func TestDevicesAdmin(t *testing.T) {
 	// Register a second display from another browser, then revoke it from the phone.
 	hall := h.setUpDisplayLocked()
 	expectRedirect(t, hall.get("/admin"), "/admin/unlock")
-	devices, err := h.st.Q.ListDevices(t.Context(), h.hh)
+	devices, err := h.st.Q.ListDevices(h.ctx(), h.hh)
 	if err != nil || len(devices) != 2 {
 		t.Fatalf("devices = %v, %v", devices, err)
 	}
@@ -828,7 +835,7 @@ func TestHTMXRedirect(t *testing.T) {
 	h := newHarness(t)
 	h.setUp()
 	d := h.device()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, h.ts.URL+"/clock", http.NoBody)
+	req, err := http.NewRequestWithContext(h.ctx(), http.MethodGet, h.ts.URL+"/clock", http.NoBody)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -850,7 +857,7 @@ func expectPersonCreated(t *testing.T, r resp) {
 
 func (h *harness) person(name string) dbq.Person {
 	h.t.Helper()
-	for _, list := range [][]dbq.Person{must(h.st.Q.ListPeople(h.t.Context(), h.hh)), must(h.st.Q.ListArchivedPeople(h.t.Context(), h.hh))} {
+	for _, list := range [][]dbq.Person{must(h.st.Q.ListPeople(h.ctx(), h.hh)), must(h.st.Q.ListArchivedPeople(h.ctx(), h.hh))} {
 		for _, p := range list {
 			if p.Name == name {
 				return p
@@ -863,7 +870,7 @@ func (h *harness) person(name string) dbq.Person {
 
 func (h *harness) chore(title string) dbq.Chore {
 	h.t.Helper()
-	for _, c := range must(h.st.Q.ListChores(h.t.Context(), h.hh)) {
+	for _, c := range must(h.st.Q.ListChores(h.ctx(), h.hh)) {
 		if c.Title == title {
 			return c
 		}
@@ -874,7 +881,7 @@ func (h *harness) chore(title string) dbq.Chore {
 
 func (h *harness) dueDates(choreID int64) []string {
 	h.t.Helper()
-	rows, err := h.st.SQL().QueryContext(h.t.Context(),
+	rows, err := h.st.SQL().QueryContext(h.ctx(),
 		"SELECT due_on FROM chore_occurrences WHERE chore_id = ? AND status = 'open' ORDER BY due_on", choreID)
 	if err != nil {
 		h.t.Fatal(err)

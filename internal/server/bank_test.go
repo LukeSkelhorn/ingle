@@ -15,7 +15,7 @@ func kidWithMoney(t *testing.T, h *harness, phone *device, name, pin string, pen
 	t.Helper()
 	id := addKid(t, h, phone, name)
 	expect(t, phone.post("/admin/people/"+id+"/pin", url.Values{"pin": {pin}, "pin_confirm": {pin}}), http.StatusOK)
-	if _, err := h.st.Q.InsertLedgerEntry(t.Context(), dbq.InsertLedgerEntryParams{
+	if _, err := h.st.Q.InsertLedgerEntry(h.ctx(), dbq.InsertLedgerEntryParams{
 		HouseholdID: h.hh, PersonID: h.person(name).ID, Pence: pence, Kind: "manual", Note: "Pocket money",
 		CreatedAt: h.clock().Unix(),
 	}); err != nil {
@@ -39,7 +39,7 @@ func openMoney(t *testing.T, wall *device, id, pin string) (resp, string) {
 // pendingTransfer is the id of name's waiting bank request.
 func pendingTransfer(t *testing.T, h *harness, name string) string {
 	t.Helper()
-	rows, err := h.st.Q.PendingTransfersForPerson(t.Context(), dbq.PendingTransfersForPersonParams{HouseholdID: h.hh, PersonID: h.person(name).ID})
+	rows, err := h.st.Q.PendingTransfersForPerson(h.ctx(), dbq.PendingTransfersForPersonParams{HouseholdID: h.hh, PersonID: h.person(name).ID})
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("pending transfers = %+v, %v", rows, err)
 	}

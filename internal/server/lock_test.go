@@ -88,7 +88,7 @@ func TestLockedDisplayShowsNothingPersonal(t *testing.T) {
 			t.Errorf("GET %s = %d, want 423", p, r.status)
 		}
 	}
-	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, h.ts.URL+"/board", http.NoBody)
+	req, _ := http.NewRequestWithContext(h.ctx(), http.MethodGet, h.ts.URL+"/board", http.NoBody)
 	req.Header.Set("HX-Request", "true")
 	if r := wall.do(req); r.status != http.StatusLocked || r.header.Get("HX-Redirect") != "/" {
 		t.Errorf("htmx /board while locked = %d %q", r.status, r.header.Get("HX-Redirect"))
@@ -172,11 +172,11 @@ func TestHouseholdCodeAndPhone(t *testing.T) {
 func TestNoLockWithoutAWayBackIn(t *testing.T) {
 	h := newHarness(t)
 	wall := h.setUp()
-	adults, err := h.st.Q.ListUnlockPINs(t.Context(), h.hh)
+	adults, err := h.st.Q.ListUnlockPINs(h.ctx(), h.hh)
 	if err != nil || len(adults) != 1 {
 		t.Fatalf("adults = %v, %v", adults, err)
 	}
-	if err := h.st.Q.ClearPersonPIN(t.Context(), dbq.ClearPersonPINParams{HouseholdID: h.hh, ID: adults[0].ID}); err != nil {
+	if err := h.st.Q.ClearPersonPIN(h.ctx(), dbq.ClearPersonPINParams{HouseholdID: h.hh, ID: adults[0].ID}); err != nil {
 		t.Fatal(err)
 	}
 	board := wall.get("/")
@@ -203,7 +203,7 @@ func TestScheduleLocksDisplays(t *testing.T) {
 	}), http.StatusOK, "Settings saved.", `value="3" checked`)
 	tick := func() {
 		t.Helper()
-		if err := h.lock.Tick(t.Context(), h.hh); err != nil {
+		if err := h.lock.Tick(h.ctx(), h.hh); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -229,7 +229,7 @@ func TestIdleLockCountsTaps(t *testing.T) {
 	}), http.StatusOK, "Settings saved.")
 	tick := func() {
 		t.Helper()
-		if err := h.lock.Tick(t.Context(), h.hh); err != nil {
+		if err := h.lock.Tick(h.ctx(), h.hh); err != nil {
 			t.Fatal(err)
 		}
 	}

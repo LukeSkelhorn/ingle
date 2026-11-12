@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/lukeskelhorn/ingle/internal/auth"
+	"github.com/lukeskelhorn/ingle/internal/store"
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
@@ -22,8 +23,7 @@ const (
 const deviceCookieAge = 10 * 365 * 24 * time.Hour
 
 type (
-	ctxKey       struct{}
-	householdKey struct{}
+	ctxKey struct{}
 )
 
 // HouseholdOf returns the household r is for, or 0 when none is known, for
@@ -43,14 +43,12 @@ func (s *Server) RequireViewer(h http.Handler) http.Handler { return s.requireVi
 func hhOf(r *http.Request) int64 { return householdIn(r.Context()) }
 
 // householdIn returns the household stored in ctx by identify, or 0.
-func householdIn(ctx context.Context) int64 {
-	id, _ := ctx.Value(householdKey{}).(int64)
-	return id
-}
+func householdIn(ctx context.Context) int64 { return store.HouseholdFrom(ctx) }
 
-// withHousehold returns ctx for the household id.
+// withHousehold returns ctx for the household id. On Postgres, every query
+// made with it sees that household's rows only.
 func withHousehold(ctx context.Context, id int64) context.Context {
-	return context.WithValue(ctx, householdKey{}, id)
+	return store.WithHousehold(ctx, id)
 }
 
 // resolveHousehold asks the ResolveHousehold hook which household r is
