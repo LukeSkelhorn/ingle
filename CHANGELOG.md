@@ -26,6 +26,7 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ### Fixed
 
+- **Setting a PIN on a tablet:** setting a PIN or the household code brought up the tablet's full keyboard, and you could type letters into the box. They're now typed twice on Ingle's own number keypad, the one used to unlock, with a **Show digits** button to check what you typed. This covers Admin › People › PIN (adults' and kids'), Admin › Settings › Household unlock code and the PIN in first-run setup. First-run setup now asks for the PIN twice too. ([DOM-63](https://linear.app/skeltech/issue/DOM-63))
 - **Signing out idle displays:** with more than one household in a database, the hourly clean-up of expired sign-ins used one household's admin timeout for every household's displays. Each household now uses its own. Self-hosted Ingle has a single household, so it was never affected. ([DOM-69](https://linear.app/skeltech/issue/DOM-69))
 
 ## [v0.3.2] - 2026-11-10

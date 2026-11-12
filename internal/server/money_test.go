@@ -44,7 +44,10 @@ func TestKidMoneyPIN(t *testing.T) {
 	expect(t, r, http.StatusOK, "Alfie's money", "Ask a grown-up to set your PIN")
 	notContains(t, r, "pinpad__keys")
 
-	// A grown-up sets it in Admin › People.
+	// A grown-up sets it in Admin › People, typing it twice on Ingle's
+	// keypad.
+	expect(t, phone.get("/admin/people/"+alfie), http.StatusOK,
+		`name="pin"`, `name="pin_confirm"`, "data-pinpad-set", "/static/pinpad.js")
 	expect(t, phone.post("/admin/people/"+alfie+"/pin", url.Values{"pin": {"1357"}, "pin_confirm": {"1357"}}), http.StatusOK, "PIN saved.", "A PIN is set.")
 	expect(t, wall.get("/board/money/"+alfie), http.StatusOK, "Enter your PIN", `data-pinpad data-length="4"`)
 	expect(t, wall.get("/"), http.StatusOK, "/static/pinpad.js")

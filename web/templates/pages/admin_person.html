@@ -155,18 +155,9 @@
     <p class="muted">Opens {{.Data.Name}}'s My money on a household display, and nothing else: it can't open admin or unlock the displays. They can type it in themselves while you watch. {{if .Data.HasPIN}}A PIN is set.{{else}}No PIN set.{{end}}</p>
     {{end}}
     <form class="stack" method="post" action="/admin/people/{{.Data.ID}}/pin">
-      <label class="field field--short">
-        <span>New PIN (4–6 digits)</span>
-        <input type="password" name="pin" required inputmode="numeric" pattern="[0-9]{4,6}" minlength="4" maxlength="6" autocomplete="off">
-        {{template "err" index .Errors "pin"}}
-      </label>
-      <label class="field field--short">
-        <span>Confirm PIN</span>
-        <input type="password" name="pin_confirm" required inputmode="numeric" pattern="[0-9]{4,6}" minlength="4" maxlength="6" autocomplete="off">
-        {{template "err" index .Errors "pin_confirm"}}
-      </label>
-      <button class="btn" type="submit">{{if .Data.HasPIN}}Change PIN{{else}}Set PIN{{end}}</button>
+      {{template "pinpad_set" (dict "Name" "pin" "Confirm" "pin_confirm" "Label" "New PIN (4–6 digits)" "Again" "Confirm PIN" "Err" (or (index .Errors "pin") (index .Errors "pin_confirm")) "Submit" true "Button" (or (and .Data.HasPIN "Change PIN") "Set PIN"))}}
     </form>
+    <script src="{{asset "pinpad.js"}}"></script>
     {{if .Data.HasPIN}}
     <form method="post" action="/admin/people/{{.Data.ID}}/pin/clear"><button class="btn btn--danger" type="submit">Remove PIN</button></form>
     {{end}}

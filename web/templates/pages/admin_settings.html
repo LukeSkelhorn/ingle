@@ -66,14 +66,9 @@
     <p class="muted">A locked display shows photos and the clock only. Anyone can unlock it with this code (share it with the kids) or with an adult's PIN. Unlocking the board never opens admin.</p>
     <p>{{if .Data.HasUnlockCode}}✓ A code is set.{{else}}No code yet. Only adult PINs unlock the displays.{{end}}</p>
     <form class="stack" method="post" action="/admin/settings/unlock-code">
-      <div class="row">
-        <label class="field"><span>{{if .Data.HasUnlockCode}}New code{{else}}Code{{end}} (4 to 6 digits)</span>
-          <input name="code" type="password" inputmode="numeric" pattern="[0-9]{4,6}" autocomplete="off" required>{{template "err" index .Errors "code"}}</label>
-        <label class="field"><span>Code again</span>
-          <input name="code_confirm" type="password" inputmode="numeric" pattern="[0-9]{4,6}" autocomplete="off" required>{{template "err" index .Errors "code_confirm"}}</label>
-      </div>
-      <button class="btn btn--primary" type="submit">Save code</button>
+      {{template "pinpad_set" (dict "Name" "code" "Confirm" "code_confirm" "Label" (printf "%s (4 to 6 digits)" (or (and .Data.HasUnlockCode "New code") "Code")) "Again" "Code again" "Err" (or (index .Errors "code") (index .Errors "code_confirm")) "Submit" true "Button" "Save code")}}
     </form>
+    <script src="{{asset "pinpad.js"}}"></script>
     {{if .Data.HasUnlockCode}}
     <form method="post" action="/admin/settings/unlock-code/clear">
       <button class="btn btn--danger" type="submit">Remove code</button>
