@@ -120,7 +120,7 @@ func TestMyMoneyHistory(t *testing.T) {
 	expect(t, phone.post("/admin/people/"+isla+"/pin", url.Values{"pin": {"2468"}, "pin_confirm": {"2468"}}), http.StatusOK)
 	expectRedirect(t, wall.post("/admin/lock", nil), "/")
 
-	ctx := t.Context()
+	ctx := h.ctx()
 	kid := h.person("Alfie")
 	// Forty old bonuses, a recent one, a goal and a claim waiting for a
 	// grown-up.

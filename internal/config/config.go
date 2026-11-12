@@ -54,10 +54,14 @@ type Config struct {
 	// DatabaseURL, when set, is a postgres:// URL used instead of the
 	// SQLite file at DBPath (Hosted). DBPath's folder still holds avatars.
 	DatabaseURL string
-	Location    *time.Location
-	DateFormat  string
-	WeekStart   time.Weekday
-	Currency    string
+	// DatabaseMigrateURL is the tables' owner, which runs migrations, when
+	// DatabaseURL is a role that only reads and writes rows. Empty means
+	// DatabaseURL runs them.
+	DatabaseMigrateURL string
+	Location           *time.Location
+	DateFormat         string
+	WeekStart          time.Weekday
+	Currency           string
 	// PhotosDir is an optional read-only folder of photos (e.g. a NAS
 	// share) mixed into the screensaver slideshow. Empty means none.
 	PhotosDir string
@@ -123,6 +127,11 @@ func load(getenv func(string) string) (Config, error) {
 		return Config{}, fmt.Errorf(Prefix + "DATABASE_URL: want a postgres:// URL")
 	}
 
+	migrateURL := get("DATABASE_MIGRATE_URL", "")
+	if migrateURL != "" && dbURL == "" {
+		return Config{}, fmt.Errorf(Prefix + "DATABASE_MIGRATE_URL needs " + Prefix + "DATABASE_URL")
+	}
+
 	defKeep := strconv.Itoa(DefaultBackupKeep)
 	if dbURL != "" {
 		// Backups copy the SQLite file. On Postgres, the database service
@@ -144,19 +153,20 @@ func load(getenv func(string) string) (Config, error) {
 
 	dbPath := legacyDB(get("DB_PATH", DefaultDBPath))
 	return Config{
-		Addr:           get("ADDR", DefaultAddr),
-		DBPath:         dbPath,
-		DatabaseURL:    dbURL,
-		Location:       loc,
-		DateFormat:     get("DATE_FORMAT", DefaultDateFormat),
-		WeekStart:      ws,
-		Currency:       strings.ToUpper(get("CURRENCY", DefaultCurrency)),
-		PhotosDir:      get("PHOTOS_DIR", ""),
-		TrustedProxies: proxies,
-		BackupDir:      get("BACKUP_DIR", filepath.Join(filepath.Dir(dbPath), "backups")),
-		BackupKeep:     keep,
-		BackupAt:       at,
-		Legacy:         legacy,
+		Addr:               get("ADDR", DefaultAddr),
+		DBPath:             dbPath,
+		DatabaseURL:        dbURL,
+		DatabaseMigrateURL: migrateURL,
+		Location:           loc,
+		DateFormat:         get("DATE_FORMAT", DefaultDateFormat),
+		WeekStart:          ws,
+		Currency:           strings.ToUpper(get("CURRENCY", DefaultCurrency)),
+		PhotosDir:          get("PHOTOS_DIR", ""),
+		TrustedProxies:     proxies,
+		BackupDir:          get("BACKUP_DIR", filepath.Join(filepath.Dir(dbPath), "backups")),
+		BackupKeep:         keep,
+		BackupAt:           at,
+		Legacy:             legacy,
 	}, nil
 }
 

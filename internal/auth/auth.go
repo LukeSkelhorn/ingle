@@ -127,13 +127,15 @@ func (s *Service) Display(ctx context.Context, token string) (*dbq.Device, error
 	if token == "" {
 		return nil, nil
 	}
-	dev, err := s.st.Q.GetDeviceByToken(ctx, HashToken(token))
+	// The token says which household this is, so the lookup comes first.
+	dev, err := s.st.Q.GetDeviceByToken(store.AsSystem(ctx), HashToken(token))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get device: %w", err)
 	}
+	ctx = store.WithHousehold(ctx, dev.HouseholdID)
 	if now := s.now(); now.Sub(time.Unix(dev.LastSeenAt, 0)) >= touchInterval {
 		if err := s.st.Q.TouchDevice(ctx, dbq.TouchDeviceParams{LastSeenAt: now.Unix(), ID: dev.ID}); err != nil {
 			return nil, fmt.Errorf("touch device: %w", err)
@@ -197,7 +199,7 @@ func (s *Service) SignIn(ctx context.Context, email, password, userAgent, client
 	// Emails are stored lower case. SQLite compares them without case anyway;
 	// Postgres doesn't.
 	lookup := strings.ToLower(email)
-	p, err := s.st.Q.GetPersonByEmail(ctx, &lookup)
+	p, err := s.st.Q.GetPersonByEmail(store.AsSystem(ctx), &lookup)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return "", dbq.Person{}, fmt.Errorf("get person: %w", err)
 	}
@@ -233,6 +235,7 @@ func (s *Service) createSession(ctx context.Context, p dbq.Person, kind string, 
 	if len(userAgent) > 200 {
 		userAgent = userAgent[:200]
 	}
+	ctx = store.WithHousehold(ctx, p.HouseholdID)
 	token := NewToken()
 	now := s.now()
 	err := s.st.WithTx(ctx, func(q *dbq.Queries) error {
@@ -272,7 +275,7 @@ func (s *Service) Session(ctx context.Context, token string, device *dbq.Device)
 		return nil, nil
 	}
 	hash := HashToken(token)
-	row, err := s.st.Q.GetSessionByToken(ctx, hash)
+	row, err := s.st.Q.GetSessionByToken(store.AsSystem(ctx), hash)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -280,6 +283,7 @@ func (s *Service) Session(ctx context.Context, token string, device *dbq.Device)
 		return nil, fmt.Errorf("get session: %w", err)
 	}
 	sess, p := row.Session, row.Person
+	ctx = store.WithHousehold(ctx, sess.HouseholdID)
 	now := s.now()
 	lastSeen := time.Unix(sess.LastSeenAt, 0)
 
@@ -317,7 +321,15 @@ func (s *Service) EndSession(ctx context.Context, token string) error {
 	if token == "" {
 		return nil
 	}
-	return s.st.Q.DeleteSession(ctx, HashToken(token))
+	hash := HashToken(token)
+	row, err := s.st.Q.GetSessionByToken(store.AsSystem(ctx), hash)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("get session: %w", err)
+	}
+	return s.st.Q.DeleteSession(store.WithHousehold(ctx, row.Session.HouseholdID), hash)
 }
 
 // RevokeSession ends another personal session by its token hash.

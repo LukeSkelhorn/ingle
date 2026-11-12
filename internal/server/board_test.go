@@ -45,11 +45,11 @@ func (h *harness) occurrence(title string) dbq.ChoreOccurrence {
 	h.t.Helper()
 	c := h.chore(title)
 	var id int64
-	if err := h.st.SQL().QueryRowContext(h.t.Context(),
+	if err := h.st.SQL().QueryRowContext(h.ctx(),
 		"SELECT id FROM chore_occurrences WHERE chore_id = ? AND due_on = '2026-07-01'", c.ID).Scan(&id); err != nil {
 		h.t.Fatal(err)
 	}
-	return must(h.st.Q.GetOccurrence(h.t.Context(), dbq.GetOccurrenceParams{HouseholdID: h.hh, ID: id}))
+	return must(h.st.Q.GetOccurrence(h.ctx(), dbq.GetOccurrenceParams{HouseholdID: h.hh, ID: id}))
 }
 
 func toastOf(t *testing.T, r resp) toast {
@@ -149,7 +149,7 @@ func TestBoardCompleteAndUndo(t *testing.T) {
 	if strings.Contains(section(r.body, "Alfie"), "chore--done") {
 		t.Error("still done after undo")
 	}
-	if b := must(h.st.Q.BalanceForPerson(t.Context(), dbq.BalanceForPersonParams{HouseholdID: h.hh, PersonID: h.person("Alfie").ID})); b.Points != 0 {
+	if b := must(h.st.Q.BalanceForPerson(h.ctx(), dbq.BalanceForPersonParams{HouseholdID: h.hh, PersonID: h.person("Alfie").ID})); b.Points != 0 {
 		t.Errorf("points after undo = %d", b.Points)
 	}
 
@@ -226,7 +226,7 @@ func TestBoardEvents(t *testing.T) {
 	h, wall, phone := boardHousehold(t)
 	occ := h.occurrence("Feed the cat")
 
-	ctx, cancel := context.WithCancel(t.Context())
+	ctx, cancel := context.WithCancel(h.ctx())
 	t.Cleanup(cancel)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, h.ts.URL+"/board/events?client=phone1", http.NoBody)
 	if err != nil {
@@ -268,7 +268,7 @@ func TestBoardEvents(t *testing.T) {
 	}
 
 	// The phone's own tap doesn't echo back to it…
-	req, err = http.NewRequestWithContext(t.Context(), http.MethodPost, h.ts.URL+"/board/occurrences/"+itoa(occ.ID)+"/complete", http.NoBody)
+	req, err = http.NewRequestWithContext(h.ctx(), http.MethodPost, h.ts.URL+"/board/occurrences/"+itoa(occ.ID)+"/complete", http.NoBody)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -300,7 +300,7 @@ func TestBoardAdultReverse(t *testing.T) {
 	occ := h.occurrence("Feed the cat")
 	alfie := h.person("Alfie")
 	balance := func() int64 {
-		return must(h.st.Q.BalanceForPerson(t.Context(), dbq.BalanceForPersonParams{HouseholdID: h.hh, PersonID: alfie.ID})).Points
+		return must(h.st.Q.BalanceForPerson(h.ctx(), dbq.BalanceForPersonParams{HouseholdID: h.hh, PersonID: alfie.ID})).Points
 	}
 
 	r := wall.post("/board/occurrences/"+itoa(occ.ID)+"/complete", nil)
@@ -328,7 +328,7 @@ func TestBoardAdultReverse(t *testing.T) {
 	expect(t, wall.get(review), http.StatusOK, "Feed the cat", "Alfie", "Reverse", "2 pts")
 
 	// A phone is listening; reversing tells it.
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(h.ctx(), 5*time.Second)
 	defer cancel()
 	events := openEvents(t, ctx, phone)
 	r = wall.post(reverse, nil)
@@ -384,7 +384,7 @@ func TestAdminCompletions(t *testing.T) {
 	}
 
 	expect(t, phone.post("/admin/completions/"+pending[0]+"/approve", nil), http.StatusOK, "Approved.")
-	balance := must(h.st.Q.BalanceForPerson(t.Context(), dbq.BalanceForPersonParams{HouseholdID: h.hh, PersonID: alfie.ID}))
+	balance := must(h.st.Q.BalanceForPerson(h.ctx(), dbq.BalanceForPersonParams{HouseholdID: h.hh, PersonID: alfie.ID}))
 	if balance.Points != 5 {
 		t.Errorf("points = %d after approve, want 5", balance.Points)
 	}
@@ -392,7 +392,7 @@ func TestAdminCompletions(t *testing.T) {
 
 	r = phone.post("/admin/completions/"+reversible[0]+"/reverse", nil)
 	expect(t, r, http.StatusOK, "Reversed", "Not counted · Mum")
-	balance = must(h.st.Q.BalanceForPerson(t.Context(), dbq.BalanceForPersonParams{HouseholdID: h.hh, PersonID: alfie.ID}))
+	balance = must(h.st.Q.BalanceForPerson(h.ctx(), dbq.BalanceForPersonParams{HouseholdID: h.hh, PersonID: alfie.ID}))
 	if balance.Points != 3 {
 		t.Errorf("points = %d after reverse, want 3", balance.Points)
 	}
@@ -467,7 +467,7 @@ func TestPersonSheet(t *testing.T) {
 	} {
 		expectRedirect(t, phone.post("/admin/rewards", v), "/admin/rewards")
 	}
-	rewards := must(h.st.Q.ListRewards(t.Context(), h.hh))
+	rewards := must(h.st.Q.ListRewards(h.ctx(), h.hh))
 	for _, rw := range rewards {
 		if rw.Title == "Sweets" {
 			expectRedirect(t, phone.post("/admin/rewards/"+itoa(rw.ID)+"/archive", nil), "/admin/rewards")
@@ -476,7 +476,7 @@ func TestPersonSheet(t *testing.T) {
 
 	// 40 pts and £1 from last week (it's Wednesday 1 July; the week began
 	// Monday 29 June), plus Feed the cat (2 pts) today.
-	if _, err := h.st.Q.InsertLedgerEntry(t.Context(), dbq.InsertLedgerEntryParams{
+	if _, err := h.st.Q.InsertLedgerEntry(h.ctx(), dbq.InsertLedgerEntryParams{
 		HouseholdID: h.hh, PersonID: alfie.ID, Points: 40, Pence: 100, Kind: "completion",
 		CreatedAt: time.Date(2026, 6, 28, 12, 0, 0, 0, time.UTC).Unix(),
 	}); err != nil {
@@ -525,7 +525,7 @@ func TestClaimRewardFromTheBoard(t *testing.T) {
 	expectRedirect(t, phone.post("/admin/rewards", url.Values{"title": {"Screen time"}, "cost_points": {"30"}}), "/admin/rewards")
 	expectRedirect(t, phone.post("/admin/rewards", url.Values{"title": {"Lego set"}, "cost_points": {"500"}}), "/admin/rewards")
 	var screen, lego int64
-	for _, rw := range must(h.st.Q.ListRewards(t.Context(), h.hh)) {
+	for _, rw := range must(h.st.Q.ListRewards(h.ctx(), h.hh)) {
 		switch rw.Title {
 		case "Screen time":
 			screen = rw.ID
@@ -534,7 +534,7 @@ func TestClaimRewardFromTheBoard(t *testing.T) {
 		}
 	}
 	claim := "/board/rewards/" + itoa(screen) + "/claim"
-	if _, err := h.st.Q.InsertLedgerEntry(t.Context(), dbq.InsertLedgerEntryParams{
+	if _, err := h.st.Q.InsertLedgerEntry(h.ctx(), dbq.InsertLedgerEntryParams{
 		HouseholdID: h.hh, PersonID: alfie.ID, Points: 70, Kind: "completion", CreatedAt: 1,
 	}); err != nil {
 		t.Fatal(err)
@@ -561,7 +561,7 @@ func TestClaimRewardFromTheBoard(t *testing.T) {
 		t.Errorf("unaffordable toast = %+v", tt)
 	}
 
-	waiting := must(h.st.Q.ListPendingRedemptions(t.Context(), h.hh))
+	waiting := must(h.st.Q.ListPendingRedemptions(h.ctx(), h.hh))
 	if len(waiting) != 1 {
 		t.Fatalf("waiting = %d", len(waiting))
 	}
@@ -578,7 +578,7 @@ func TestClaimRewardFromTheBoard(t *testing.T) {
 
 	// Claim again, then unlock on the wall: the sheet offers review.
 	expect(t, wall.post(claim, url.Values{"person": {itoa(alfie.ID)}}), http.StatusOK, "🎁 1 waiting")
-	id = itoa(must(h.st.Q.ListPendingRedemptions(t.Context(), h.hh))[0].ID)
+	id = itoa(must(h.st.Q.ListPendingRedemptions(h.ctx(), h.hh))[0].ID)
 	review = "/board/redemptions/" + id + "/review"
 	expectRedirect(t, wall.post("/admin/unlock", url.Values{"person": {itoa(h.person("Mum").ID)}, "pin": {"2468"}}), "/admin")
 	expect(t, wall.get(sheet), http.StatusOK, `hx-get="`+review+`"`)
@@ -593,7 +593,7 @@ func TestClaimRewardFromTheBoard(t *testing.T) {
 	if tt := toastOf(t, r); !strings.Contains(tt.Message, "Enjoy, Alfie") {
 		t.Errorf("toast = %+v", tt)
 	}
-	if n := len(must(h.st.Q.ListPendingRedemptions(t.Context(), h.hh))); n != 0 {
+	if n := len(must(h.st.Q.ListPendingRedemptions(h.ctx(), h.hh))); n != 0 {
 		t.Errorf("%d claims waiting after an adult claimed", n)
 	}
 
@@ -605,8 +605,8 @@ func TestAdminRewardClaims(t *testing.T) {
 	h, wall, phone := boardHousehold(t)
 	alfie := h.person("Alfie")
 	expectRedirect(t, phone.post("/admin/rewards", url.Values{"title": {"Screen time"}, "cost_points": {"30"}}), "/admin/rewards")
-	screen := must(h.st.Q.ListRewards(t.Context(), h.hh))[0]
-	if _, err := h.st.Q.InsertLedgerEntry(t.Context(), dbq.InsertLedgerEntryParams{
+	screen := must(h.st.Q.ListRewards(h.ctx(), h.hh))[0]
+	if _, err := h.st.Q.InsertLedgerEntry(h.ctx(), dbq.InsertLedgerEntryParams{
 		HouseholdID: h.hh, PersonID: alfie.ID, Points: 70, Kind: "completion", CreatedAt: 1,
 	}); err != nil {
 		t.Fatal(err)
@@ -616,7 +616,7 @@ func TestAdminRewardClaims(t *testing.T) {
 		expect(t, wall.post(claim, url.Values{"person": {itoa(alfie.ID)}}), http.StatusOK)
 	}
 	expect(t, phone.get("/admin"), http.StatusOK, "<strong>2</strong><span>Waiting for approval")
-	pending := must(h.st.Q.ListPendingRedemptions(t.Context(), h.hh))
+	pending := must(h.st.Q.ListPendingRedemptions(h.ctx(), h.hh))
 	expect(t, phone.get("/admin/completions"), http.StatusOK, "Rewards waiting", "Screen time",
 		"/admin/rewards/claims/"+itoa(pending[0].ID)+"/approve")
 
@@ -640,7 +640,7 @@ func TestSaveForAReward(t *testing.T) {
 	expectRedirect(t, phone.post("/admin/rewards", url.Values{"title": {"Sweets"}, "cost_points": {"10"}}), "/admin/rewards")
 	expect(t, phone.post("/admin/rewards", url.Values{"title": {"Odd"}, "emoji": {"x"}, "cost_points": {"1"}}), http.StatusUnprocessableEntity, "Use a single emoji")
 	var lego, sweets int64
-	for _, rw := range must(h.st.Q.ListRewards(t.Context(), h.hh)) {
+	for _, rw := range must(h.st.Q.ListRewards(h.ctx(), h.hh)) {
 		switch rw.Title {
 		case "Lego set":
 			lego = rw.ID
@@ -648,7 +648,7 @@ func TestSaveForAReward(t *testing.T) {
 			sweets = rw.ID
 		}
 	}
-	if _, err := h.st.Q.InsertLedgerEntry(t.Context(), dbq.InsertLedgerEntryParams{
+	if _, err := h.st.Q.InsertLedgerEntry(h.ctx(), dbq.InsertLedgerEntryParams{
 		HouseholdID: h.hh, PersonID: alfie.ID, Points: 60, Kind: "completion", CreatedAt: 1,
 	}); err != nil {
 		t.Fatal(err)
@@ -680,7 +680,7 @@ func TestSaveForAReward(t *testing.T) {
 	expect(t, wall.post(goal, url.Values{"reward": {"9999"}}), http.StatusConflict)
 
 	// Reached: Claim on the column, and a key to celebrate once.
-	if _, err := h.st.Q.InsertLedgerEntry(t.Context(), dbq.InsertLedgerEntryParams{
+	if _, err := h.st.Q.InsertLedgerEntry(h.ctx(), dbq.InsertLedgerEntryParams{
 		HouseholdID: h.hh, PersonID: alfie.ID, Points: 40, Kind: "completion", CreatedAt: 1,
 	}); err != nil {
 		t.Fatal(err)
@@ -701,7 +701,7 @@ func TestSaveForAReward(t *testing.T) {
 	if !strings.Contains(col, "goal--waiting") || strings.Contains(col, "data-celebrate") {
 		t.Errorf("claimed goal should wait without celebrating: %s", col)
 	}
-	pending := must(h.st.Q.ListPendingRedemptions(t.Context(), h.hh))
+	pending := must(h.st.Q.ListPendingRedemptions(h.ctx(), h.hh))
 	expect(t, phone.post("/admin/rewards/claims/"+itoa(pending[0].ID)+"/approve", nil), http.StatusOK)
 	if strings.Contains(section(wall.get("/board").body, "Alfie"), `class="goal`) {
 		t.Error("goal still shown after approval")
@@ -723,7 +723,7 @@ func TestAdminPersonGoal(t *testing.T) {
 	h, _, phone := boardHousehold(t)
 	alfie := h.person("Alfie")
 	expectRedirect(t, phone.post("/admin/rewards", url.Values{"title": {"Lego set"}, "emoji": {"🧱"}, "cost_points": {"100"}}), "/admin/rewards")
-	lego := must(h.st.Q.ListRewards(t.Context(), h.hh))[0]
+	lego := must(h.st.Q.ListRewards(h.ctx(), h.hh))[0]
 	page := "/admin/people/" + itoa(alfie.ID)
 	expect(t, phone.get(page), http.StatusOK, "Saving for", `<option value="`+itoa(lego.ID)+`">🧱 Lego set (100 pts)</option>`)
 
@@ -889,7 +889,7 @@ func TestBoardOnTheDay(t *testing.T) {
 		t.Error("Missed still shown after marking both")
 	}
 	for p, want := range map[int64]int64{alfie.ID: 3, isla.ID: 1} {
-		if b := must(h.st.Q.BalanceForPerson(t.Context(), dbq.BalanceForPersonParams{HouseholdID: h.hh, PersonID: p})); b.Points != want {
+		if b := must(h.st.Q.BalanceForPerson(h.ctx(), dbq.BalanceForPersonParams{HouseholdID: h.hh, PersonID: p})); b.Points != want {
 			t.Errorf("person %d points = %d, want %d", p, b.Points, want)
 		}
 	}
@@ -940,7 +940,7 @@ func TestMissedDismiss(t *testing.T) {
 	expect(t, phone.post("/admin/completions/missed/dismiss", nil), http.StatusBadRequest, "Nothing to dismiss.")
 	expect(t, phone.post("/admin/completions/missed/restore", url.Values{"id": {"x"}}), http.StatusBadRequest, "Nothing to undo.")
 	expect(t, phone.post("/admin/completions/missed/restore", url.Values{"id": {itoa(bins.ID), itoa(milk.ID)}}), http.StatusOK, "Bins out", "Milk out")
-	if b := must(h.st.Q.BalanceForPerson(t.Context(), dbq.BalanceForPersonParams{HouseholdID: h.hh, PersonID: alfie.ID})); b.Points != 0 {
+	if b := must(h.st.Q.BalanceForPerson(h.ctx(), dbq.BalanceForPersonParams{HouseholdID: h.hh, PersonID: alfie.ID})); b.Points != 0 {
 		t.Errorf("points = %d, want 0", b.Points)
 	}
 }
@@ -953,7 +953,7 @@ func TestAdjustPointsFromPeopleList(t *testing.T) {
 	id := itoa(alfie.ID)
 	balance := func() int64 {
 		t.Helper()
-		return must(h.st.Q.BalanceForPerson(t.Context(), dbq.BalanceForPersonParams{HouseholdID: h.hh, PersonID: alfie.ID})).Points
+		return must(h.st.Q.BalanceForPerson(h.ctx(), dbq.BalanceForPersonParams{HouseholdID: h.hh, PersonID: alfie.ID})).Points
 	}
 
 	// The list: each row has a balance and a ⋯ menu; no pop-up yet.
@@ -991,7 +991,7 @@ func TestAdjustPointsFromPeopleList(t *testing.T) {
 		t.Fatalf("balance = %d, want 5", b)
 	}
 	var entry int64
-	if err := h.st.SQL().QueryRowContext(t.Context(), "SELECT MAX(id) FROM ledger_entries WHERE kind = 'manual'").Scan(&entry); err != nil {
+	if err := h.st.SQL().QueryRowContext(h.ctx(), "SELECT MAX(id) FROM ledger_entries WHERE kind = 'manual'").Scan(&entry); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(r.body, `action="/admin/people/`+id+`/points/`+itoa(entry)+`/undo"`) {
@@ -1017,7 +1017,7 @@ func TestAdjustPointsAdmin(t *testing.T) {
 	page := "/admin/people/" + itoa(alfie.ID)
 	balance := func() int64 {
 		t.Helper()
-		return must(h.st.Q.BalanceForPerson(t.Context(), dbq.BalanceForPersonParams{HouseholdID: h.hh, PersonID: alfie.ID})).Points
+		return must(h.st.Q.BalanceForPerson(h.ctx(), dbq.BalanceForPersonParams{HouseholdID: h.hh, PersonID: alfie.ID})).Points
 	}
 	expect(t, phone.get(page), http.StatusOK, "Adjust points", `name="amount" value="5" checked`, "Alfie has <strong class=\"points-balance\">0 pts</strong>")
 
@@ -1031,7 +1031,7 @@ func TestAdjustPointsAdmin(t *testing.T) {
 		t.Fatalf("balance = %d, want -5", b)
 	}
 	var entry int64
-	if err := h.st.SQL().QueryRowContext(t.Context(), "SELECT MAX(id) FROM ledger_entries WHERE kind = 'manual'").Scan(&entry); err != nil {
+	if err := h.st.SQL().QueryRowContext(h.ctx(), "SELECT MAX(id) FROM ledger_entries WHERE kind = 'manual'").Scan(&entry); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(r.body, `action="/admin/people/`+itoa(alfie.ID)+`/points/`+itoa(entry)+`/undo"`) {
@@ -1118,7 +1118,7 @@ func TestChoreTimes(t *testing.T) {
 		t.Errorf("06:30 column: %s", col)
 	}
 	var morning int64
-	if err := h.st.SQL().QueryRowContext(t.Context(),
+	if err := h.st.SQL().QueryRowContext(h.ctx(),
 		"SELECT id FROM chore_occurrences WHERE chore_id = ? AND due_on = '2026-07-01' AND due_time = '07:30'", teeth.ID).Scan(&morning); err != nil {
 		t.Fatal(err)
 	}
@@ -1187,7 +1187,7 @@ func TestEachChore(t *testing.T) {
 
 	copyOf := func(p dbq.Person) int64 {
 		var id int64
-		if err := h.st.SQL().QueryRowContext(t.Context(),
+		if err := h.st.SQL().QueryRowContext(h.ctx(),
 			"SELECT id FROM chore_occurrences WHERE chore_id = ? AND due_on = '2026-07-01' AND assignee_id = ?", teeth.ID, p.ID).Scan(&id); err != nil {
 			t.Fatal(err)
 		}
@@ -1209,7 +1209,7 @@ func TestEachChore(t *testing.T) {
 	// Archiving Isla takes her copies still to do with her, and her off Exercise.
 	expectRedirect(t, phone.post("/admin/people/"+itoa(isla.ID)+"/archive", nil), "/admin/people")
 	var left int
-	if err := h.st.SQL().QueryRowContext(t.Context(),
+	if err := h.st.SQL().QueryRowContext(h.ctx(),
 		"SELECT count(*) FROM chore_occurrences WHERE for_person = ? AND status = 'open'", isla.ID).Scan(&left); err != nil {
 		t.Fatal(err)
 	}

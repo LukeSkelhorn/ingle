@@ -42,7 +42,7 @@ func (d *device) postFiles(path, field string, files map[string][]byte) resp {
 		_, _ = fw.Write(data)
 	}
 	_ = mw.Close()
-	req, err := http.NewRequestWithContext(d.h.t.Context(), http.MethodPost, d.h.ts.URL+path, &buf)
+	req, err := http.NewRequestWithContext(d.h.ctx(), http.MethodPost, d.h.ts.URL+path, &buf)
 	if err != nil {
 		d.h.t.Fatal(err)
 	}
@@ -175,7 +175,7 @@ func TestPhotosAdmin(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(h.photoDir, "garden.jpg"), testJPEG(t, 120, 80), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.lib.Rescan(t.Context()); err != nil {
+	if err := h.lib.Rescan(h.ctx()); err != nil {
 		t.Fatal(err)
 	}
 	slides = slidesOf(t, wall)

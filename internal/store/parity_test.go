@@ -29,7 +29,7 @@ func TestSchemaParity(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer lite.Close()
-	pg, err := store.Open(ctx, storetest.Schema(t, base))
+	pg, err := store.OpenPostgres(ctx, store.PostgresOptions{URL: storetest.Schema(t, base), AllowUnscoped: true})
 	if err != nil {
 		t.Fatal(err)
 	}

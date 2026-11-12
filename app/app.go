@@ -196,11 +196,16 @@ func build(ctx context.Context, opts Options) (*core, error) {
 			slog.Any("settings", cfg.Legacy))
 	}
 
-	db, err := store.Open(ctx, cfg.DSN())
+	db, err := openDB(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
 	c.db = db
+	if bypass, err := store.CanBypassRLS(ctx, db); err != nil {
+		return nil, err
+	} else if bypass {
+		log.Warn("the database role can bypass row-level security, so households aren't kept apart by the database: connect as a role that isn't a superuser and hasn't BYPASSRLS")
+	}
 	ok := false
 	defer func() {
 		if !ok {
@@ -216,6 +221,7 @@ func build(ctx context.Context, opts Options) (*core, error) {
 		if err != nil {
 			return nil, err
 		}
+		ctx := store.WithHousehold(ctx, household.ID)
 		// INGLE_TZ seeds the timezone for a new household; after that it
 		// is changed under Admin › Settings.
 		if err := c.set.Ensure(ctx, household.ID, cfg.Location); err != nil {
@@ -225,7 +231,9 @@ func build(ctx context.Context, opts Options) (*core, error) {
 		c.households = func(context.Context) ([]int64, error) { return []int64{single}, nil }
 		c.backupLoc = func() *time.Location { return c.set.Location(ctx, single) }
 	} else {
-		c.households = st.Q.ListHouseholdIDs
+		c.households = func(ctx context.Context) ([]int64, error) {
+			return st.Q.ListHouseholdIDs(store.AsSystem(ctx))
+		}
 		c.backupLoc = func() *time.Location { return cfg.Location }
 	}
 
@@ -308,8 +316,8 @@ func (c *core) runJobs(ctx context.Context) {
 
 // eachHousehold runs fn for every household, logging a failure to list
 // them.
-func eachHousehold(ctx context.Context, log *slog.Logger, households func(context.Context) ([]int64, error), fn func(householdID int64)) {
-	ids, err := households(ctx)
+func eachHousehold(ctx context.Context, log *slog.Logger, households func(context.Context) ([]int64, error), fn func(ctx context.Context, householdID int64)) {
+	ids, err := households(store.AsSystem(ctx))
 	if err != nil {
 		if ctx.Err() == nil {
 			log.Error("list households", slog.Any("err", err))
@@ -320,7 +328,8 @@ func eachHousehold(ctx context.Context, log *slog.Logger, households func(contex
 		if ctx.Err() != nil {
 			return
 		}
-		fn(id)
+		// On Postgres, fn sees this household's rows only.
+		fn(store.WithHousehold(ctx, id), id)
 	}
 }
 
@@ -352,6 +361,14 @@ func Healthcheck(ctx context.Context) error {
 	return nil
 }
 
+// openDB opens the database cfg names and runs pending migrations.
+func openDB(ctx context.Context, cfg config.Config) (*sql.DB, error) {
+	if cfg.DatabaseURL != "" {
+		return store.OpenPostgres(ctx, store.PostgresOptions{URL: cfg.DatabaseURL, MigrateURL: cfg.DatabaseMigrateURL})
+	}
+	return store.Open(ctx, cfg.DBPath)
+}
+
 // Backup writes one backup of the database and returns its path, e.g.
 // before an upgrade.
 func Backup(ctx context.Context) (string, error) {
@@ -359,7 +376,7 @@ func Backup(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	db, err := store.Open(ctx, cfg.DSN())
+	db, err := openDB(ctx, cfg)
 	if err != nil {
 		return "", err
 	}
@@ -379,7 +396,7 @@ func Backup(ctx context.Context) (string, error) {
 // appear) from the household's current board day, and sweeps expired
 // sessions.
 func maintenanceLoop(ctx context.Context, log *slog.Logger, set *settings.Service, svc *chores.Service, authSvc *auth.Service, households func(context.Context) ([]int64, error)) {
-	one := func(householdID int64) {
+	one := func(ctx context.Context, householdID int64) {
 		log := log.With(slog.Int64("household", householdID))
 		s, err := set.Get(ctx, householdID)
 		if err != nil {
@@ -419,7 +436,7 @@ func lockLoop(ctx context.Context, log *slog.Logger, svc *lock.Service, househol
 	t := time.NewTicker(time.Minute)
 	defer t.Stop()
 	for {
-		eachHousehold(ctx, log, households, func(householdID int64) {
+		eachHousehold(ctx, log, households, func(ctx context.Context, householdID int64) {
 			if err := svc.Tick(ctx, householdID); err != nil && ctx.Err() == nil {
 				log.Error("lock tick", slog.Int64("household", householdID), slog.Any("err", err))
 			}

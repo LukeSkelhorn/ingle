@@ -43,7 +43,7 @@ func TestModulesPage(t *testing.T) {
 		`value="rewards" checked`, `value="photos" checked`, `value="calendar" checked`, "its data is kept")
 
 	// A household from before modules: everything on, and it's asked.
-	if _, err := h.st.SQL().ExecContext(t.Context(), "DELETE FROM household_modules"); err != nil {
+	if _, err := h.st.SQL().ExecContext(h.ctx(), "DELETE FROM household_modules"); err != nil {
 		t.Fatal(err)
 	}
 	h.srv.Modules.Invalidate(h.hh)
@@ -66,15 +66,15 @@ func TestRewardsModuleOff(t *testing.T) {
 	alfie := h.person("Alfie")
 	sheet := "/board/people/" + itoa(alfie.ID)
 	expectRedirect(t, phone.post("/admin/rewards", url.Values{"title": {"Screen time"}, "cost_points": {"30"}}), "/admin/rewards")
-	reward := must(h.st.Q.ListRewards(t.Context(), h.hh))[0]
-	if _, err := h.st.Q.InsertLedgerEntry(t.Context(), dbq.InsertLedgerEntryParams{
+	reward := must(h.st.Q.ListRewards(h.ctx(), h.hh))[0]
+	if _, err := h.st.Q.InsertLedgerEntry(h.ctx(), dbq.InsertLedgerEntryParams{
 		HouseholdID: h.hh, PersonID: alfie.ID, Points: 70, Kind: "completion", CreatedAt: 1,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	expect(t, wall.post("/board/rewards/"+itoa(reward.ID)+"/claim", url.Values{"person": {itoa(alfie.ID)}}),
 		http.StatusOK, "🎁 1 waiting")
-	claim := itoa(must(h.st.Q.ListPendingRedemptions(t.Context(), h.hh))[0].ID)
+	claim := itoa(must(h.st.Q.ListPendingRedemptions(h.ctx(), h.hh))[0].ID)
 	expect(t, phone.get("/admin/completions"), http.StatusOK, "Rewards waiting")
 
 	setModules(t, phone, "photos", "calendar")
@@ -182,7 +182,7 @@ func TestModuleRequirements(t *testing.T) {
 	expect(t, phone.get("/admin/modules"), http.StatusOK, "Pocket money", "Needs Rewards.")
 
 	// Its loop doesn't run while it's off, and runs as soon as it's on.
-	ctx, cancel := context.WithCancel(t.Context())
+	ctx, cancel := context.WithCancel(h.ctx())
 	done := make(chan struct{})
 	go func() { h.srv.RunModuleLoops(ctx); close(done) }()
 	t.Cleanup(func() { cancel(); <-done })
