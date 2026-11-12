@@ -527,10 +527,8 @@ input, select, textarea { -webkit-user-select: text; user-select: text; }
 
 /* Setting a PIN on the pad (admin, setup) */
 .pinset [hidden] { display: none; }
-.pinset__pad { align-items: flex-start; width: fit-content; outline: none; }
-.pinset__pad .pinpad__dots, .pinset__pad .pinpad__msg, .pinset__prompt { align-self: stretch; text-align: center; }
+.pinset__pad { outline: none; text-align: center; }
 .pinset__prompt { margin: 0; font-weight: 600; }
-.pinset__show { align-self: center; }
 
 /* Admin shell */
 .admin__bar {
