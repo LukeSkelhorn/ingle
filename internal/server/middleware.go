@@ -162,8 +162,9 @@ func (s *Server) isSetUp(hh int64) bool {
 	return ok
 }
 
-// markSetUp latches household hh as set up; it never goes back because the
-// last adult who can sign in can't be archived or stripped.
+// markSetUp latches household hh as set up. It only goes back when the
+// household is deleted (the last adult who can sign in can't be archived
+// or stripped).
 func (s *Server) markSetUp(hh int64) { s.setupDone.Store(hh, struct{}{}) }
 
 // requireViewer allows household displays and signed-in adults.

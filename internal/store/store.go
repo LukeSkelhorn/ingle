@@ -246,6 +246,23 @@ func (s *Store) WithTx(ctx context.Context, fn func(q *dbq.Queries) error) error
 	return nil
 }
 
+// WithSQLTx is WithTx for hand-written SQL (with ? placeholders), e.g.
+// statements over every table.
+func (s *Store) WithSQLTx(ctx context.Context, fn func(db dbq.DBTX) error) error {
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	if err := fn(s.conn(tx)); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
+	}
+	return nil
+}
+
 // EnsureHousehold returns the first household, creating one called name if
 // the database has none. Self-hosted installs have exactly one household.
 func (s *Store) EnsureHousehold(ctx context.Context, name string, now time.Time) (dbq.Household, error) {

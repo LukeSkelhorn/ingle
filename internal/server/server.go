@@ -24,6 +24,7 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/photos"
 	"github.com/lukeskelhorn/ingle/internal/settings"
 	"github.com/lukeskelhorn/ingle/internal/store"
+	"github.com/lukeskelhorn/ingle/internal/takeout"
 	"github.com/lukeskelhorn/ingle/web"
 )
 
@@ -59,6 +60,9 @@ type Deps struct {
 	// Modules is which features each household has on. New fills in an
 	// empty one if it is nil, and registers Ingle's modules in it.
 	Modules *module.Service
+	// Takeout exports and deletes the household (Admin › Settings). Nil
+	// hides both.
+	Takeout *takeout.Service
 	Locale  locale.Locale
 	Log     *slog.Logger
 	// TrustedProxies are reverse proxies whose X-Forwarded-For is believed.
@@ -216,6 +220,10 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /admin/settings", admin(s.handleSettingsUpdate))
 	mux.Handle("POST /admin/settings/unlock-code", admin(s.handleUnlockCodeSet))
 	mux.Handle("POST /admin/settings/unlock-code/clear", admin(s.handleUnlockCodeClear))
+	if s.Takeout != nil {
+		mux.Handle("GET /admin/household/export", admin(s.handleHouseholdExport))
+		mux.Handle("POST /admin/household/delete", admin(s.handleHouseholdDelete))
+	}
 
 	// Modules mount their own routes, hidden while they're off.
 	for _, m := range s.Modules.Registry().All() {
