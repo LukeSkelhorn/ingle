@@ -9,6 +9,7 @@ import (
 
 	"github.com/lukeskelhorn/ingle/internal/store"
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/store/storetest"
 )
 
 var london = mustLoad("Europe/London")
@@ -34,11 +35,7 @@ type fixture struct {
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	ctx := t.Context()
-	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "ingle.db"))
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db := storetest.Open(t, filepath.Join(t.TempDir(), "ingle.db"))
 
 	st := store.New(db)
 	now := time.Date(2026, 11, 2, 9, 0, 0, 0, london)

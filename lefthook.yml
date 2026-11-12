@@ -16,5 +16,5 @@ pre-commit:
       glob: "{go.mod,go.sum,*.go}"
       run: go mod tidy -diff
     sqlc:
-      glob: "{sqlc.yaml,internal/store/queries/*.sql,internal/store/migrations/*.sql,internal/store/dbq/*.go}"
+      glob: "{sqlc.yaml,internal/store/queries/*.sql,internal/store/migrations/**/*.sql,internal/store/dbq/*.go}"
       run: sqlc diff

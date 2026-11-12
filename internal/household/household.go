@@ -587,11 +587,10 @@ func uniqueErr(err error) error {
 	if err == nil {
 		return nil
 	}
-	msg := err.Error()
 	switch {
-	case strings.Contains(msg, "UNIQUE constraint failed") && strings.Contains(msg, "people.name"):
+	case store.IsUnique(err, "people", "name"):
 		return valid.Errors{"name": "Someone in the household already has that name."}
-	case strings.Contains(msg, "UNIQUE constraint failed") && strings.Contains(msg, "people.email"):
+	case store.IsUnique(err, "people", "email"):
 		return valid.Errors{"email": "That email is already in use."}
 	}
 	return err

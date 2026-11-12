@@ -18,6 +18,7 @@ import (
 
 	"github.com/lukeskelhorn/ingle/internal/store"
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/store/storetest"
 )
 
 type fixture struct {
@@ -34,11 +35,7 @@ func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	ctx := t.Context()
 	data := t.TempDir()
-	db, err := store.Open(ctx, filepath.Join(data, "ingle.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db := storetest.Open(t, filepath.Join(data, "ingle.db"))
 	st := store.New(db)
 	h, err := st.EnsureHousehold(ctx, "Home", time.Unix(1, 0))
 	if err != nil {
@@ -152,7 +149,7 @@ func TestUploadAndDelete(t *testing.T) {
 		t.Errorf("second Delete = %v, want ErrNotFound", err)
 	}
 	var n int
-	if err := f.st.DB.QueryRowContext(ctx, `SELECT count(*) FROM activity WHERE verb IN ('photo.added', 'photo.removed')`).Scan(&n); err != nil || n != 2 {
+	if err := f.st.SQL().QueryRowContext(ctx, `SELECT count(*) FROM activity WHERE verb IN ('photo.added', 'photo.removed')`).Scan(&n); err != nil || n != 2 {
 		t.Errorf("activity rows = %d, %v; want 2", n, err)
 	}
 }

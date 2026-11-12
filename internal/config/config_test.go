@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -75,6 +76,20 @@ func TestLoadOverrides(t *testing.T) {
 	}
 }
 
+func TestLoadPostgres(t *testing.T) {
+	env := map[string]string{"INGLE_DATABASE_URL": "postgres://ingle:secret@db:5432/ingle"}
+	cfg, err := load(func(k string) string { return env[k] })
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.DSN() != env["INGLE_DATABASE_URL"] || cfg.BackupKeep != 0 {
+		t.Errorf("DSN = %q, BackupKeep = %d", cfg.DSN(), cfg.BackupKeep)
+	}
+	if got := cfg.DBLabel(); strings.Contains(got, "secret") {
+		t.Errorf("DBLabel = %q, shows the password", got)
+	}
+}
+
 func TestLoadInvalid(t *testing.T) {
 	for _, tc := range []map[string]string{
 		{"INGLE_TZ": "Not/AZone"},
@@ -82,6 +97,8 @@ func TestLoadInvalid(t *testing.T) {
 		{"INGLE_TRUSTED_PROXIES": "caddy"},
 		{"INGLE_BACKUP_KEEP": "-1"},
 		{"INGLE_BACKUP_AT": "3am"},
+		{"INGLE_DATABASE_URL": "mysql://x"},
+		{"INGLE_DATABASE_URL": "postgres://db/ingle", "INGLE_BACKUP_KEEP": "7"},
 	} {
 		if _, err := load(func(k string) string { return tc[k] }); err == nil {
 			t.Errorf("load(%v) succeeded, want error", tc)

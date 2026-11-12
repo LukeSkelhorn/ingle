@@ -9,6 +9,7 @@ package config
 import (
 	"fmt"
 	"net/netip"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -48,12 +49,15 @@ const (
 
 // Config is the resolved runtime configuration.
 type Config struct {
-	Addr       string
-	DBPath     string
-	Location   *time.Location
-	DateFormat string
-	WeekStart  time.Weekday
-	Currency   string
+	Addr   string
+	DBPath string
+	// DatabaseURL, when set, is a postgres:// URL used instead of the
+	// SQLite file at DBPath (Hosted). DBPath's folder still holds avatars.
+	DatabaseURL string
+	Location    *time.Location
+	DateFormat  string
+	WeekStart   time.Weekday
+	Currency    string
 	// PhotosDir is an optional read-only folder of photos (e.g. a NAS
 	// share) mixed into the screensaver slideshow. Empty means none.
 	PhotosDir string
@@ -114,10 +118,24 @@ func load(getenv func(string) string) (Config, error) {
 		return Config{}, err
 	}
 
-	keepS := get("BACKUP_KEEP", strconv.Itoa(DefaultBackupKeep))
+	dbURL := get("DATABASE_URL", "")
+	if dbURL != "" && !strings.HasPrefix(dbURL, "postgres://") && !strings.HasPrefix(dbURL, "postgresql://") {
+		return Config{}, fmt.Errorf(Prefix + "DATABASE_URL: want a postgres:// URL")
+	}
+
+	defKeep := strconv.Itoa(DefaultBackupKeep)
+	if dbURL != "" {
+		// Backups copy the SQLite file. On Postgres, the database service
+		// backs up (point-in-time recovery).
+		defKeep = "0"
+	}
+	keepS := get("BACKUP_KEEP", defKeep)
 	keep, err := strconv.Atoi(keepS)
 	if err != nil || keep < 0 || keep > 365 {
 		return Config{}, fmt.Errorf(Prefix+"BACKUP_KEEP %q: want a number from 0 to 365", keepS)
+	}
+	if dbURL != "" && keep > 0 {
+		return Config{}, fmt.Errorf(Prefix + "BACKUP_KEEP: backups are for SQLite; with " + Prefix + "DATABASE_URL, leave it unset or 0 and use the database's own backups")
 	}
 	at := get("BACKUP_AT", DefaultBackupAt)
 	if _, err := time.Parse("15:04", at); err != nil || len(at) != 5 {
@@ -128,6 +146,7 @@ func load(getenv func(string) string) (Config, error) {
 	return Config{
 		Addr:           get("ADDR", DefaultAddr),
 		DBPath:         dbPath,
+		DatabaseURL:    dbURL,
 		Location:       loc,
 		DateFormat:     get("DATE_FORMAT", DefaultDateFormat),
 		WeekStart:      ws,
@@ -139,6 +158,26 @@ func load(getenv func(string) string) (Config, error) {
 		BackupAt:       at,
 		Legacy:         legacy,
 	}, nil
+}
+
+// DSN is what store.Open opens: the Postgres URL if set, else the SQLite
+// file.
+func (c Config) DSN() string {
+	if c.DatabaseURL != "" {
+		return c.DatabaseURL
+	}
+	return c.DBPath
+}
+
+// DBLabel names the database for logs without its password.
+func (c Config) DBLabel() string {
+	if c.DatabaseURL == "" {
+		return c.DBPath
+	}
+	if u, err := url.Parse(c.DatabaseURL); err == nil {
+		return u.Redacted()
+	}
+	return "postgres"
 }
 
 // legacyDB keeps an install from before the rename on its database: if

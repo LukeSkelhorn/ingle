@@ -45,7 +45,7 @@ func (h *harness) occurrence(title string) dbq.ChoreOccurrence {
 	h.t.Helper()
 	c := h.chore(title)
 	var id int64
-	if err := h.st.DB.QueryRowContext(h.t.Context(),
+	if err := h.st.SQL().QueryRowContext(h.t.Context(),
 		"SELECT id FROM chore_occurrences WHERE chore_id = ? AND due_on = '2026-07-01'", c.ID).Scan(&id); err != nil {
 		h.t.Fatal(err)
 	}
@@ -991,7 +991,7 @@ func TestAdjustPointsFromPeopleList(t *testing.T) {
 		t.Fatalf("balance = %d, want 5", b)
 	}
 	var entry int64
-	if err := h.st.DB.QueryRowContext(t.Context(), "SELECT MAX(id) FROM ledger_entries WHERE kind = 'manual'").Scan(&entry); err != nil {
+	if err := h.st.SQL().QueryRowContext(t.Context(), "SELECT MAX(id) FROM ledger_entries WHERE kind = 'manual'").Scan(&entry); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(r.body, `action="/admin/people/`+id+`/points/`+itoa(entry)+`/undo"`) {
@@ -1031,7 +1031,7 @@ func TestAdjustPointsAdmin(t *testing.T) {
 		t.Fatalf("balance = %d, want -5", b)
 	}
 	var entry int64
-	if err := h.st.DB.QueryRowContext(t.Context(), "SELECT MAX(id) FROM ledger_entries WHERE kind = 'manual'").Scan(&entry); err != nil {
+	if err := h.st.SQL().QueryRowContext(t.Context(), "SELECT MAX(id) FROM ledger_entries WHERE kind = 'manual'").Scan(&entry); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(r.body, `action="/admin/people/`+itoa(alfie.ID)+`/points/`+itoa(entry)+`/undo"`) {
@@ -1118,7 +1118,7 @@ func TestChoreTimes(t *testing.T) {
 		t.Errorf("06:30 column: %s", col)
 	}
 	var morning int64
-	if err := h.st.DB.QueryRowContext(t.Context(),
+	if err := h.st.SQL().QueryRowContext(t.Context(),
 		"SELECT id FROM chore_occurrences WHERE chore_id = ? AND due_on = '2026-07-01' AND due_time = '07:30'", teeth.ID).Scan(&morning); err != nil {
 		t.Fatal(err)
 	}
@@ -1187,7 +1187,7 @@ func TestEachChore(t *testing.T) {
 
 	copyOf := func(p dbq.Person) int64 {
 		var id int64
-		if err := h.st.DB.QueryRowContext(t.Context(),
+		if err := h.st.SQL().QueryRowContext(t.Context(),
 			"SELECT id FROM chore_occurrences WHERE chore_id = ? AND due_on = '2026-07-01' AND assignee_id = ?", teeth.ID, p.ID).Scan(&id); err != nil {
 			t.Fatal(err)
 		}
@@ -1209,7 +1209,7 @@ func TestEachChore(t *testing.T) {
 	// Archiving Isla takes her copies still to do with her, and her off Exercise.
 	expectRedirect(t, phone.post("/admin/people/"+itoa(isla.ID)+"/archive", nil), "/admin/people")
 	var left int
-	if err := h.st.DB.QueryRowContext(t.Context(),
+	if err := h.st.SQL().QueryRowContext(t.Context(),
 		"SELECT count(*) FROM chore_occurrences WHERE for_person = ? AND status = 'open'", isla.ID).Scan(&left); err != nil {
 		t.Fatal(err)
 	}

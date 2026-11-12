@@ -123,7 +123,7 @@ func Run(ctx context.Context, opts Options) error {
 	cfg, log := c.cfg, c.log
 	errCh := make(chan error, 1)
 	go func() {
-		log.Info("ingle listening", slog.String("version", c.version), slog.String("addr", cfg.Addr), slog.String("db", cfg.DBPath), slog.String("tz", cfg.Location.String()),
+		log.Info("ingle listening", slog.String("version", c.version), slog.String("addr", cfg.Addr), slog.String("db", cfg.DBLabel()), slog.String("tz", cfg.Location.String()),
 			slog.String("photos_dir", cfg.PhotosDir), slog.String("backup_dir", cfg.BackupDir), slog.Int("backup_keep", cfg.BackupKeep),
 			slog.Int("trusted_proxies", len(cfg.TrustedProxies)), slog.Bool("many_households", opts.ResolveHousehold != nil),
 			slog.Bool("jobs", opts.Jobs == JobsHere))
@@ -155,7 +155,7 @@ func RunJobs(ctx context.Context, opts Options) error {
 		return err
 	}
 	defer c.db.Close()
-	c.log.Info("ingle jobs running", slog.String("version", c.version), slog.String("db", c.cfg.DBPath))
+	c.log.Info("ingle jobs running", slog.String("version", c.version), slog.String("db", c.cfg.DBLabel()))
 	c.runJobs(ctx)
 	return nil
 }
@@ -196,7 +196,7 @@ func build(ctx context.Context, opts Options) (*core, error) {
 			slog.Any("settings", cfg.Legacy))
 	}
 
-	db, err := store.Open(ctx, cfg.DBPath)
+	db, err := store.Open(ctx, cfg.DSN())
 	if err != nil {
 		return nil, err
 	}
@@ -359,11 +359,14 @@ func Backup(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	db, err := store.Open(ctx, cfg.DBPath)
+	db, err := store.Open(ctx, cfg.DSN())
 	if err != nil {
 		return "", err
 	}
 	defer db.Close()
+	if store.EngineOf(db) != store.SQLite {
+		return "", errors.New("backups are for SQLite; use the Postgres service's own backups")
+	}
 	path, err := backup.Run(ctx, db, filepath.Dir(cfg.DBPath), cfg.BackupDir, cfg.BackupKeep, time.Now())
 	if err != nil {
 		return "", err

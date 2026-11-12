@@ -194,7 +194,10 @@ func (s *Service) SignIn(ctx context.Context, email, password, userAgent, client
 	if blocked, _ := s.addrLimiter.Blocked(addrKey); blocked {
 		return "", dbq.Person{}, ErrLockedOut
 	}
-	p, err := s.st.Q.GetPersonByEmail(ctx, &email)
+	// Emails are stored lower case. SQLite compares them without case anyway;
+	// Postgres doesn't.
+	lookup := strings.ToLower(email)
+	p, err := s.st.Q.GetPersonByEmail(ctx, &lookup)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return "", dbq.Person{}, fmt.Errorf("get person: %w", err)
 	}

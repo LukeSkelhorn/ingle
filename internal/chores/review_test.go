@@ -43,7 +43,7 @@ func TestReverseApproved(t *testing.T) {
 	}
 	// The original credit stays; a compensating adjustment sits beside it.
 	var credits, adjustments int
-	if err := f.st.DB.QueryRowContext(ctx,
+	if err := f.st.SQL().QueryRowContext(ctx,
 		`SELECT
 		   (SELECT count(*) FROM ledger_entries WHERE completion_id = ?),
 		   (SELECT count(*) FROM ledger_entries WHERE kind = 'adjustment' AND points = -5 AND pence = -50 AND created_by = ? AND note = 'Reversed: Hoover')`,
@@ -89,7 +89,7 @@ func TestReversePendingRejects(t *testing.T) {
 		t.Errorf("status = %s, want open", o.Status)
 	}
 	var n int
-	if err := f.st.DB.QueryRowContext(ctx, `SELECT count(*) FROM ledger_entries`).Scan(&n); err != nil {
+	if err := f.st.SQL().QueryRowContext(ctx, `SELECT count(*) FROM ledger_entries`).Scan(&n); err != nil {
 		t.Fatal(err)
 	}
 	if n != 0 {

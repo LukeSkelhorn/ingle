@@ -43,7 +43,7 @@ func TestModulesPage(t *testing.T) {
 		`value="rewards" checked`, `value="photos" checked`, `value="calendar" checked`, "its data is kept")
 
 	// A household from before modules: everything on, and it's asked.
-	if _, err := h.st.DB.ExecContext(t.Context(), "DELETE FROM household_modules"); err != nil {
+	if _, err := h.st.SQL().ExecContext(t.Context(), "DELETE FROM household_modules"); err != nil {
 		t.Fatal(err)
 	}
 	h.srv.Modules.Invalidate(h.hh)

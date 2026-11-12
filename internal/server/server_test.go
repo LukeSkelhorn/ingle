@@ -31,6 +31,7 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/settings"
 	"github.com/lukeskelhorn/ingle/internal/store"
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/store/storetest"
 	"github.com/lukeskelhorn/ingle/web"
 )
 
@@ -81,11 +82,7 @@ func newHarnessWith(t *testing.T, extra ...module.Module) *harness {
 	t.Helper()
 	ctx := t.Context()
 	dir := t.TempDir()
-	db, err := store.Open(ctx, filepath.Join(dir, "ingle.db"))
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db := storetest.Open(t, filepath.Join(dir, "ingle.db"))
 	st := store.New(db)
 
 	uk := locale.UK()
@@ -877,7 +874,7 @@ func (h *harness) chore(title string) dbq.Chore {
 
 func (h *harness) dueDates(choreID int64) []string {
 	h.t.Helper()
-	rows, err := h.st.DB.QueryContext(h.t.Context(),
+	rows, err := h.st.SQL().QueryContext(h.t.Context(),
 		"SELECT due_on FROM chore_occurrences WHERE chore_id = ? AND status = 'open' ORDER BY due_on", choreID)
 	if err != nil {
 		h.t.Fatal(err)

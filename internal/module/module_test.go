@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/lukeskelhorn/ingle/internal/store"
+	"github.com/lukeskelhorn/ingle/internal/store/storetest"
 )
 
 type fake struct {
@@ -116,11 +117,7 @@ func TestPlan(t *testing.T) {
 
 func TestService(t *testing.T) {
 	ctx := t.Context()
-	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "ingle.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db := storetest.Open(t, filepath.Join(t.TempDir(), "ingle.db"))
 	st := store.New(db)
 	hh, err := st.EnsureHousehold(ctx, "Home", time.Unix(1, 0))
 	if err != nil {

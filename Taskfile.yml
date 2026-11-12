@@ -12,7 +12,7 @@ vars:
   LEGACY_IMAGE: ghcr.io/lukeskelhorn/domus
   PLATFORMS: linux/amd64,linux/arm64
   BUILDER: ingle-multiarch
-  MIGRATIONS: internal/store/migrations
+  MIGRATIONS: internal/store/migrations/sqlite
   # The version baked into builds: VERSION=v1.2.3 when releasing, otherwise
   # what git describe says (e.g. v0.1.0-3-gabc123-dirty), or "dev".
   BUILD_VERSION:
@@ -43,7 +43,7 @@ tasks:
 
   build:
     desc: Build the ingle binary
-    sources: ["**/*.go", "web/**/*", "internal/store/migrations/*.sql", "internal/store/queries/*.sql", "go.mod", "go.sum"]
+    sources: ["**/*.go", "web/**/*", "internal/store/migrations/**/*.sql", "internal/store/queries/*.sql", "go.mod", "go.sum"]
     generates: ["{{.BIN}}"]
     cmds:
       - CGO_ENABLED=0 go build -trimpath -ldflags="{{.LDFLAGS}}" -o {{.BIN}} ./cmd/ingle
@@ -61,6 +61,27 @@ tasks:
 
   test:
     desc: Run tests with the race detector
+    cmds:
+      - go test -race ./...
+
+  pg:up:
+    desc: Start a local Postgres in Docker on port 55432 (for Hosted support; self-hosted uses SQLite)
+    status:
+      - docker ps --format '{{"{{.Names}}"}}' | grep -qx ingle-pg
+    cmds:
+      - docker rm -f ingle-pg >/dev/null 2>&1 || true
+      - docker run -d --name ingle-pg -p 127.0.0.1:55432:5432 -e POSTGRES_USER=ingle -e POSTGRES_PASSWORD=ingle -e POSTGRES_DB=ingle -v ingle-pg:/var/lib/postgresql/data postgres:17
+      - until docker exec ingle-pg pg_isready -U ingle -q; do sleep 0.5; done
+
+  pg:down:
+    desc: Stop the local Postgres (keeps its data volume)
+    cmds:
+      - docker rm -f ingle-pg
+
+  test:pg:
+    desc: Run the tests on Postgres as well as SQLite (needs `task pg:up`)
+    env:
+      INGLE_TEST_PG_URL: '{{.INGLE_TEST_PG_URL | default "postgres://ingle:ingle@127.0.0.1:55432/ingle?sslmode=disable"}}'
     cmds:
       - go test -race ./...
 

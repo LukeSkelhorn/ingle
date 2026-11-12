@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/lukeskelhorn/ingle/internal/store"
+	"github.com/lukeskelhorn/ingle/internal/store/storetest"
 	"github.com/lukeskelhorn/ingle/internal/valid"
 )
 
@@ -42,11 +43,7 @@ func TestBoardDay(t *testing.T) {
 
 func TestServiceUpdate(t *testing.T) {
 	ctx := t.Context()
-	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "ingle.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db := storetest.Open(t, filepath.Join(t.TempDir(), "ingle.db"))
 	st := store.New(db)
 	h, err := st.EnsureHousehold(ctx, "Home", time.Now())
 	if err != nil {
