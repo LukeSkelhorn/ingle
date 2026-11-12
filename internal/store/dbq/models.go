@@ -104,6 +104,12 @@ type Household struct {
 	CreatedAt int64  `json:"created_at"`
 }
 
+type HouseholdKey struct {
+	HouseholdID int64  `json:"household_id"`
+	WrappedKey  []byte `json:"wrapped_key"`
+	CreatedAt   int64  `json:"created_at"`
+}
+
 type HouseholdLock struct {
 	HouseholdID     int64  `json:"household_id"`
 	Locked          int64  `json:"locked"`

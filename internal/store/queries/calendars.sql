@@ -6,11 +6,11 @@ RETURNING *;
 -- name: ListCalendarFeeds :many
 SELECT * FROM calendar_feeds WHERE household_id = ? ORDER BY name, id;
 
--- name: ListAllCalendarFeeds :many
-SELECT * FROM calendar_feeds ORDER BY household_id, id;
-
 -- name: GetCalendarFeed :one
 SELECT * FROM calendar_feeds WHERE household_id = ? AND id = ?;
 
 -- name: DeleteCalendarFeed :execrows
 DELETE FROM calendar_feeds WHERE household_id = ? AND id = ?;
+
+-- name: SetCalendarFeedURL :exec
+UPDATE calendar_feeds SET url = ? WHERE household_id = ? AND id = ?;

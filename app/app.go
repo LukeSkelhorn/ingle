@@ -30,6 +30,7 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/lock"
 	"github.com/lukeskelhorn/ingle/internal/module"
 	"github.com/lukeskelhorn/ingle/internal/photos"
+	"github.com/lukeskelhorn/ingle/internal/secrets"
 	"github.com/lukeskelhorn/ingle/internal/server"
 	"github.com/lukeskelhorn/ingle/internal/settings"
 	"github.com/lukeskelhorn/ingle/internal/store"
@@ -249,7 +250,12 @@ func build(ctx context.Context, opts Options) (*core, error) {
 	if opts.PhotoBlobs != nil {
 		library.SetBlobs(opts.PhotoBlobs)
 	}
+	keys, err := secrets.New(st, cfg.MasterKey)
+	if err != nil {
+		return nil, err
+	}
 	cals := calendar.New(st, c.set.Location, nil, log)
+	cals.SetSecrets(keys)
 	c.auth = auth.New(st, c.set)
 	c.chores = chores.New(st, c.set.Location)
 	c.chores.SetDayStart(c.set.DayStart)

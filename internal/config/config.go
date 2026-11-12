@@ -16,6 +16,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lukeskelhorn/ingle/internal/secrets"
+
 	// Embed the IANA timezone database so Europe/London resolves even in
 	// minimal container images without /usr/share/zoneinfo.
 	_ "time/tzdata"
@@ -58,10 +60,14 @@ type Config struct {
 	// DatabaseURL is a role that only reads and writes rows. Empty means
 	// DatabaseURL runs them.
 	DatabaseMigrateURL string
-	Location           *time.Location
-	DateFormat         string
-	WeekStart          time.Weekday
-	Currency           string
+	// MasterKey (INGLE_MASTER_KEY, base64) encrypts each household's
+	// secrets, such as calendar links. Optional on SQLite; required with
+	// DatabaseURL. Nil means secrets are stored as they are.
+	MasterKey  []byte
+	Location   *time.Location
+	DateFormat string
+	WeekStart  time.Weekday
+	Currency   string
 	// PhotosDir is an optional read-only folder of photos (e.g. a NAS
 	// share) mixed into the screensaver slideshow. Empty means none.
 	PhotosDir string
@@ -132,6 +138,15 @@ func load(getenv func(string) string) (Config, error) {
 		return Config{}, fmt.Errorf(Prefix + "DATABASE_MIGRATE_URL needs " + Prefix + "DATABASE_URL")
 	}
 
+	var masterKey []byte
+	if v := get("MASTER_KEY", ""); v != "" {
+		if masterKey, err = secrets.ParseMasterKey(v); err != nil {
+			return Config{}, fmt.Errorf(Prefix+"MASTER_KEY: %w", err)
+		}
+	} else if dbURL != "" {
+		return Config{}, fmt.Errorf(Prefix + "MASTER_KEY: with " + Prefix + "DATABASE_URL, set a key to encrypt households' secrets (make one with: openssl rand -base64 32)")
+	}
+
 	defKeep := strconv.Itoa(DefaultBackupKeep)
 	if dbURL != "" {
 		// Backups copy the SQLite file. On Postgres, the database service
@@ -157,6 +172,7 @@ func load(getenv func(string) string) (Config, error) {
 		DBPath:             dbPath,
 		DatabaseURL:        dbURL,
 		DatabaseMigrateURL: migrateURL,
+		MasterKey:          masterKey,
 		Location:           loc,
 		DateFormat:         get("DATE_FORMAT", DefaultDateFormat),
 		WeekStart:          ws,

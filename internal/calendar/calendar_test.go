@@ -2,8 +2,10 @@ package calendar
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +14,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/lukeskelhorn/ingle/internal/secrets"
 
 	"github.com/lukeskelhorn/ingle/internal/store"
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
@@ -240,7 +244,7 @@ END:VEVENT
 
 	// A failing refresh keeps the last good events and records the error.
 	status.Store(http.StatusInternalServerError)
-	if err := f.svc.Refresh(ctx); err != nil {
+	if err := f.svc.RefreshHousehold(ctx, f.hh); err != nil {
 		t.Fatal(err)
 	}
 	feeds, _ := f.svc.Feeds(ctx, f.hh)
@@ -293,6 +297,57 @@ END:VEVENT
 		got := f.svc.Upcoming(f.hh, d, d.AddDate(0, 0, 1))
 		if len(got) != 1 || got[0].Feed != "Family" {
 			t.Errorf("Upcoming(%s) = %+v, want Swimming from Family", d.Format("2 Jan"), got)
+		}
+	}
+}
+
+// With a master key, a feed's address is stored encrypted, and one saved
+// before the key was set is encrypted on the next refresh.
+func TestFeedAddressEncrypted(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/calendar")
+		_, _ = io.WriteString(w, "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR\r\n")
+	}))
+	defer srv.Close()
+	f := newFixture(t, srv.Client())
+	ctx := t.Context()
+	secret := srv.URL + "/private-abc123/basic.ics"
+
+	// Saved before there was a key: stored as it is.
+	if _, err := f.svc.AddFeed(ctx, f.hh, f.mum.ID, "Old", secret); err != nil {
+		t.Fatal(err)
+	}
+
+	master := make([]byte, secrets.KeySize)
+	_, _ = rand.Read(master)
+	k, err := secrets.New(f.st, master)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.svc.SetSecrets(k)
+	if _, err := f.svc.AddFeed(ctx, f.hh, f.mum.ID, "New", secret); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.svc.RefreshHousehold(ctx, f.hh); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := f.st.Q.ListCalendarFeeds(ctx, f.hh)
+	if err != nil || len(rows) != 2 {
+		t.Fatalf("feeds = %d, %v", len(rows), err)
+	}
+	for _, r := range rows {
+		if !secrets.IsSealed(r.Url) || strings.Contains(r.Url, "abc123") {
+			t.Errorf("%s stored as %q, want it encrypted", r.Name, r.Url)
+		}
+	}
+	feeds, err := f.svc.Feeds(ctx, f.hh)
+	if err != nil || len(feeds) != 2 {
+		t.Fatalf("Feeds = %v, %v", feeds, err)
+	}
+	for _, fd := range feeds {
+		if fd.Error != "" || fd.FetchedAt.IsZero() || !strings.HasPrefix(fd.Masked, strings.TrimPrefix(srv.URL, "https://")) {
+			t.Errorf("feed %+v: want fetched and masked from the real address", fd)
 		}
 	}
 }

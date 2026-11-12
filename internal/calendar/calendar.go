@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/lukeskelhorn/ingle/internal/household"
+	"github.com/lukeskelhorn/ingle/internal/secrets"
 	"github.com/lukeskelhorn/ingle/internal/store"
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 	"github.com/lukeskelhorn/ingle/internal/valid"
@@ -66,9 +67,17 @@ type Service struct {
 	now    func() time.Time
 	zone   func(ctx context.Context, householdID int64) *time.Location
 
+	// secrets encrypts the feeds' addresses, which are credentials (nil:
+	// stored as they are).
+	secrets *secrets.Keyring
+
 	mu    sync.RWMutex
 	state map[int64]*feedState // by feed id
 }
+
+// SetSecrets encrypts feed addresses with k from now on. Addresses saved
+// before are encrypted on their household's next refresh.
+func (s *Service) SetSecrets(k *secrets.Keyring) { s.secrets = k }
 
 // New returns a Service. zone gives a household's timezone, used for
 // events with floating times (settings.Service.Location fits). client may
@@ -120,7 +129,11 @@ func (s *Service) Feeds(ctx context.Context, householdID int64) ([]Feed, error) 
 	defer s.mu.RUnlock()
 	out := make([]Feed, 0, len(rows))
 	for _, r := range rows {
-		f := Feed{ID: r.ID, Name: r.Name, Colour: r.Colour, Masked: Mask(r.Url)}
+		u, err := s.secrets.Open(ctx, householdID, r.Url)
+		if err != nil {
+			return nil, fmt.Errorf("calendar %d: %w", r.ID, err)
+		}
+		f := Feed{ID: r.ID, Name: r.Name, Colour: r.Colour, Masked: Mask(u)}
 		if st := s.state[r.ID]; st != nil {
 			f.FetchedAt, f.Error = st.fetchedAt, st.err
 		}
@@ -156,12 +169,16 @@ func (s *Service) AddFeed(ctx context.Context, householdID, actorID int64, name,
 		return Feed{}, fmt.Errorf("list calendars: %w", err)
 	}
 	colour := household.Colours[(len(existing)+5)%len(household.Colours)]
+	sealed, err := s.secrets.Seal(ctx, householdID, u)
+	if err != nil {
+		return Feed{}, err
+	}
 	now := s.now()
 	var row dbq.CalendarFeed
 	err = s.st.WithTx(ctx, func(q *dbq.Queries) error {
 		var err error
 		row, err = q.CreateCalendarFeed(ctx, dbq.CreateCalendarFeedParams{
-			HouseholdID: householdID, Name: name, Url: u, Colour: colour,
+			HouseholdID: householdID, Name: name, Url: sealed, Colour: colour,
 			CreatedBy: &actorID, CreatedAt: now.Unix(),
 		})
 		if err != nil {
@@ -176,7 +193,7 @@ func (s *Service) AddFeed(ctx context.Context, householdID, actorID int64, name,
 		return Feed{}, err
 	}
 	s.store(row, events, nil)
-	return Feed{ID: row.ID, Name: row.Name, Colour: row.Colour, Masked: Mask(row.Url), FetchedAt: now}, nil
+	return Feed{ID: row.ID, Name: row.Name, Colour: row.Colour, Masked: Mask(u), FetchedAt: now}, nil
 }
 
 // RemoveFeed deletes a feed and forgets its events.
@@ -203,33 +220,6 @@ func (s *Service) RemoveFeed(ctx context.Context, householdID, actorID, feedID i
 	return nil
 }
 
-// Refresh fetches every feed (of every household). A failed fetch keeps the
-// feed's previous events and records the error for admin.
-func (s *Service) Refresh(ctx context.Context) error {
-	rows, err := s.st.Q.ListAllCalendarFeeds(ctx)
-	if err != nil {
-		return fmt.Errorf("list calendars: %w", err)
-	}
-	live := make(map[int64]bool, len(rows))
-	for _, r := range rows {
-		live[r.ID] = true
-		events, err := s.fetch(ctx, r.HouseholdID, r.Url)
-		if err != nil {
-			// Never log the URL: it's a credential.
-			s.log.WarnContext(ctx, "calendar fetch failed", slog.Int64("feed", r.ID), slog.String("err", err.Error()))
-		}
-		s.store(r, events, err)
-	}
-	s.mu.Lock()
-	for id := range s.state {
-		if !live[id] {
-			delete(s.state, id)
-		}
-	}
-	s.mu.Unlock()
-	return nil
-}
-
 // RefreshHousehold fetches one household's feeds (admin's "Refresh now").
 func (s *Service) RefreshHousehold(ctx context.Context, householdID int64) error {
 	rows, err := s.st.Q.ListCalendarFeeds(ctx, householdID)
@@ -237,8 +227,35 @@ func (s *Service) RefreshHousehold(ctx context.Context, householdID int64) error
 		return fmt.Errorf("list calendars: %w", err)
 	}
 	for _, r := range rows {
-		events, err := s.fetch(ctx, r.HouseholdID, r.Url)
+		u, err := s.secrets.Open(ctx, householdID, r.Url)
+		if err != nil {
+			// Never log the URL: it's a credential.
+			s.log.ErrorContext(ctx, "calendar address", slog.Int64("feed", r.ID), slog.String("err", err.Error()))
+			s.store(r, nil, err)
+			continue
+		}
+		if s.secrets.Enabled() && !secrets.IsSealed(r.Url) {
+			if err := s.seal(ctx, householdID, r.ID, u); err != nil {
+				return err
+			}
+		}
+		events, err := s.fetch(ctx, r.HouseholdID, u)
+		if err != nil {
+			s.log.WarnContext(ctx, "calendar fetch failed", slog.Int64("feed", r.ID), slog.String("err", err.Error()))
+		}
 		s.store(r, events, err)
+	}
+	return nil
+}
+
+// seal encrypts a feed's address saved before there was a master key.
+func (s *Service) seal(ctx context.Context, householdID, feedID int64, u string) error {
+	sealed, err := s.secrets.Seal(ctx, householdID, u)
+	if err != nil {
+		return err
+	}
+	if err := s.st.Q.SetCalendarFeedURL(ctx, dbq.SetCalendarFeedURLParams{Url: sealed, HouseholdID: householdID, ID: feedID}); err != nil {
+		return fmt.Errorf("encrypt calendar %d: %w", feedID, err)
 	}
 	return nil
 }
