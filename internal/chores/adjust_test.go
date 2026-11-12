@@ -97,7 +97,7 @@ func TestAdjustPointsRefuses(t *testing.T) {
 			t.Errorf("AdjustPoints(%d, %q) err = %v, want a %s error", tc.points, tc.note, err, tc.field)
 		}
 	}
-	if _, err := f.st.DB.ExecContext(ctx, "UPDATE people SET archived_at = 1 WHERE id = ?", f.kid2.ID); err != nil {
+	if _, err := f.st.SQL().ExecContext(ctx, "UPDATE people SET archived_at = 1 WHERE id = ?", f.kid2.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.svc.AdjustPoints(ctx, f.hh, f.adult.ID, f.kid2.ID, 5, "Tidied up"); !errors.Is(err, ErrNotFound) {
@@ -139,7 +139,7 @@ func TestUndoAdjustment(t *testing.T) {
 	// Only manual entries can be undone this way.
 	f.earn(f.kid, 4, 0)
 	var id int64
-	if err := f.st.DB.QueryRowContext(ctx, "SELECT MAX(id) FROM ledger_entries WHERE kind = 'completion'").Scan(&id); err != nil {
+	if err := f.st.SQL().QueryRowContext(ctx, "SELECT MAX(id) FROM ledger_entries WHERE kind = 'completion'").Scan(&id); err != nil {
 		t.Fatal(err)
 	}
 	if err := f.svc.UndoAdjustment(ctx, f.hh, f.adult.ID, id); !errors.Is(err, ErrUndoExpired) {

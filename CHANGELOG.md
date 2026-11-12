@@ -6,6 +6,10 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ## [Unreleased]
 
+### Added
+
+- **For developers: Postgres.** Set `INGLE_DATABASE_URL` to a `postgres://` URL to run Ingle on Postgres instead of SQLite. This is for Hosted; self-hosted Ingle stays on SQLite and nothing changes for it. Both use the same queries, and each database has its own migrations. Nightly backups are SQLite only, so use the Postgres service's own backups. `task pg:up` starts a local Postgres and `task test:pg` runs the tests on it. ([DOM-70](https://linear.app/skeltech/issue/DOM-70))
+
 ### Changed
 
 - **For developers: one server, many households.** The server now works out the household for each request instead of using one fixed household, so a program built on the core can serve many households from one process. A request's household comes from a new resolver hook, or else from its display or session. A display or session from another household is signed out, and the right password for another household doesn't sign in. First-run setup, module background jobs (calendar refresh, photo rescan) and the dates shown on pages all follow the request's household too. Self-hosted Ingle still has one household and works as before. ([DOM-69](https://linear.app/skeltech/issue/DOM-69))

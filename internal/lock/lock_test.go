@@ -10,6 +10,7 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/settings"
 	"github.com/lukeskelhorn/ingle/internal/store"
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/store/storetest"
 )
 
 var london, _ = time.LoadLocation("Europe/London")
@@ -43,11 +44,7 @@ func (f *fixture) at(t time.Time) {
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	ctx := t.Context()
-	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "ingle.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db := storetest.Open(t, filepath.Join(t.TempDir(), "ingle.db"))
 	st := store.New(db)
 	h, err := st.EnsureHousehold(ctx, "Home", time.Unix(1, 0))
 	if err != nil {

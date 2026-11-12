@@ -6,4 +6,4 @@ INSERT INTO household_modules (household_id, module_id, enabled, changed_at)
 VALUES (?, ?, ?, ?)
 ON CONFLICT (household_id, module_id) DO UPDATE SET
     enabled = excluded.enabled,
-    changed_at = CASE WHEN enabled = excluded.enabled THEN changed_at ELSE excluded.changed_at END;
+    changed_at = CASE WHEN household_modules.enabled = excluded.enabled THEN household_modules.changed_at ELSE excluded.changed_at END;

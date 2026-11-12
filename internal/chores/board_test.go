@@ -153,10 +153,10 @@ func TestBoardOrderingAndPending(t *testing.T) {
 	f.chore("Morning", choreOpts{assignee: &f.kid.ID, startsOn: "2026-11-02"})
 	f.chore("Checked", choreOpts{assignee: &f.kid.ID, startsOn: "2026-11-02", points: 3, approval: true})
 	for title, at := range map[string]string{"Evening": late, "Morning": early} {
-		if _, err := f.st.DB.ExecContext(ctx, `UPDATE chores SET due_times = ? WHERE title = ?`, at, title); err != nil {
+		if _, err := f.st.SQL().ExecContext(ctx, `UPDATE chores SET due_times = ? WHERE title = ?`, at, title); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := f.st.DB.ExecContext(ctx, `UPDATE chore_occurrences SET due_time = ? WHERE chore_id = (SELECT id FROM chores WHERE title = ?)`, at, title); err != nil {
+		if _, err := f.st.SQL().ExecContext(ctx, `UPDATE chore_occurrences SET due_time = ? WHERE chore_id = (SELECT id FROM chores WHERE title = ?)`, at, title); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -195,7 +195,7 @@ func TestBoardSkipsArchivedOwner(t *testing.T) {
 	ctx := t.Context()
 	f.chore("Old job", choreOpts{assignee: &f.kid.ID, startsOn: "2026-11-02"})
 	f.boardAt("2026-11-02")
-	if _, err := f.st.DB.ExecContext(ctx, `UPDATE people SET archived_at = 1 WHERE id = ?`, f.kid.ID); err != nil {
+	if _, err := f.st.SQL().ExecContext(ctx, `UPDATE people SET archived_at = 1 WHERE id = ?`, f.kid.ID); err != nil {
 		t.Fatal(err)
 	}
 	b := f.boardAt("2026-11-02")

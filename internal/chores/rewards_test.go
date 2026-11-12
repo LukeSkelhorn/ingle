@@ -41,7 +41,7 @@ func (f *fixture) summary(p dbq.Person) Summary {
 func (f *fixture) ledgerRows(p dbq.Person) int {
 	f.t.Helper()
 	var n int
-	if err := f.st.DB.QueryRowContext(f.t.Context(),
+	if err := f.st.SQL().QueryRowContext(f.t.Context(),
 		"SELECT COUNT(*) FROM ledger_entries WHERE person_id = ? AND kind = 'redemption'", p.ID).Scan(&n); err != nil {
 		f.t.Fatal(err)
 	}

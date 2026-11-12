@@ -9,6 +9,7 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/auth"
 	"github.com/lukeskelhorn/ingle/internal/store"
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/store/storetest"
 	"github.com/lukeskelhorn/ingle/internal/valid"
 )
 
@@ -23,11 +24,7 @@ type fixture struct {
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	ctx := t.Context()
-	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "ingle.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db := storetest.Open(t, filepath.Join(t.TempDir(), "ingle.db"))
 	st := store.New(db)
 	h, err := st.EnsureHousehold(ctx, "Home", time.Now())
 	if err != nil {
@@ -85,14 +82,10 @@ func TestSetup(t *testing.T) {
 
 func TestSetupValidation(t *testing.T) {
 	ctx := t.Context()
-	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "ingle.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db := storetest.Open(t, filepath.Join(t.TempDir(), "ingle.db"))
 	st := store.New(db)
 	h, _ := st.EnsureHousehold(ctx, "Home", time.Now())
-	_, err = New(st).Setup(ctx, h.ID, SetupInput{Person: PersonInput{Colour: "blue"}, Email: "nope", Password: "short", PIN: "12a4"})
+	_, err := New(st).Setup(ctx, h.ID, SetupInput{Person: PersonInput{Colour: "blue"}, Email: "nope", Password: "short", PIN: "12a4"})
 	var ve valid.Errors
 	if !errors.As(err, &ve) {
 		t.Fatalf("err = %v", err)

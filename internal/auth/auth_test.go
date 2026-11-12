@@ -10,6 +10,7 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/settings"
 	"github.com/lukeskelhorn/ingle/internal/store"
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
+	"github.com/lukeskelhorn/ingle/internal/store/storetest"
 )
 
 type fixture struct {
@@ -26,11 +27,7 @@ type fixture struct {
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	ctx := t.Context()
-	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "ingle.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db := storetest.Open(t, filepath.Join(t.TempDir(), "ingle.db"))
 	st := store.New(db)
 	f := &fixture{t: t, st: st, now: time.Date(2026, 11, 3, 9, 0, 0, 0, time.UTC)}
 	h, err := st.EnsureHousehold(ctx, "Home", f.now)
@@ -233,7 +230,7 @@ func TestSweepKeepsOtherHouseholds(t *testing.T) {
 		t.Fatal(err)
 	}
 	var n int
-	if err := f.st.DB.QueryRowContext(ctx, "SELECT count(*) FROM sessions WHERE household_id = ?", other.ID).Scan(&n); err != nil {
+	if err := f.st.SQL().QueryRowContext(ctx, "SELECT count(*) FROM sessions WHERE household_id = ?", other.ID).Scan(&n); err != nil {
 		t.Fatal(err)
 	}
 	if n != 1 {

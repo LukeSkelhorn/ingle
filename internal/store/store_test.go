@@ -124,7 +124,7 @@ func TestSchemaConstraints(t *testing.T) {
 func TestMigrationsRoundTrip(t *testing.T) {
 	st := openTest(t)
 	ctx := t.Context()
-	sub, err := fs.Sub(migrations, "migrations")
+	sub, err := fs.Sub(migrations, "migrations/sqlite")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +148,7 @@ func TestMigrationsRoundTrip(t *testing.T) {
 func TestSharedChoresMigrationKeepsData(t *testing.T) {
 	st := openTest(t)
 	ctx := t.Context()
-	sub, err := fs.Sub(migrations, "migrations")
+	sub, err := fs.Sub(migrations, "migrations/sqlite")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -220,7 +220,7 @@ func TestSharedChoresMigrationKeepsData(t *testing.T) {
 func TestManualPointsMigrationKeepsLedger(t *testing.T) {
 	st := openTest(t)
 	ctx := t.Context()
-	sub, err := fs.Sub(migrations, "migrations")
+	sub, err := fs.Sub(migrations, "migrations/sqlite")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -283,7 +283,7 @@ func TestManualPointsMigrationKeepsLedger(t *testing.T) {
 func TestChoreTimesMigration(t *testing.T) {
 	st := openTest(t)
 	ctx := t.Context()
-	sub, err := fs.Sub(migrations, "migrations")
+	sub, err := fs.Sub(migrations, "migrations/sqlite")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -358,7 +358,7 @@ func TestChoreTimesMigration(t *testing.T) {
 func TestEachPersonMigration(t *testing.T) {
 	st := openTest(t)
 	ctx := t.Context()
-	sub, err := fs.Sub(migrations, "migrations")
+	sub, err := fs.Sub(migrations, "migrations/sqlite")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -442,7 +442,7 @@ func TestEachPersonMigration(t *testing.T) {
 func TestV03MigrationsAfterV024(t *testing.T) {
 	st := openTest(t)
 	ctx := t.Context()
-	sub, err := fs.Sub(migrations, "migrations")
+	sub, err := fs.Sub(migrations, "migrations/sqlite")
 	if err != nil {
 		t.Fatal(err)
 	}

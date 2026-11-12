@@ -74,7 +74,7 @@ func TestUpdateChoreReplacesOpenOccurrences(t *testing.T) {
 		t.Fatal(err)
 	}
 	var open int
-	if err := f.st.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM chore_occurrences WHERE chore_id = ? AND status = 'open'", c.ID).Scan(&open); err != nil {
+	if err := f.st.SQL().QueryRowContext(ctx, "SELECT COUNT(*) FROM chore_occurrences WHERE chore_id = ? AND status = 'open'", c.ID).Scan(&open); err != nil {
 		t.Fatal(err)
 	}
 	if open != 0 {

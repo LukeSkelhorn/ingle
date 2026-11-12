@@ -82,7 +82,7 @@ func TestPictureCards(t *testing.T) {
 
 	// A chore's own emoji shows on ordinary cards and the pick sheet too.
 	hoover := h.chore("Hoover the lounge")
-	if _, err := h.st.DB.ExecContext(t.Context(), "UPDATE chores SET emoji = '🧹' WHERE id = ?", hoover.ID); err != nil {
+	if _, err := h.st.SQL().ExecContext(t.Context(), "UPDATE chores SET emoji = '🧹' WHERE id = ?", hoover.ID); err != nil {
 		t.Fatal(err)
 	}
 	occ := h.occurrence("Hoover the lounge")
