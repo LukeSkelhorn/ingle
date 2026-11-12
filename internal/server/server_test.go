@@ -33,6 +33,7 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/store"
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 	"github.com/lukeskelhorn/ingle/internal/store/storetest"
+	"github.com/lukeskelhorn/ingle/internal/takeout"
 	"github.com/lukeskelhorn/ingle/web"
 )
 
@@ -141,6 +142,7 @@ func newHarnessWith(t *testing.T, extra ...module.Module) *harness {
 	srv, err := New(Deps{
 		Store: st, HouseholdID: hh.ID, Auth: h.auth, Settings: set, Chores: choreSvc,
 		Household: hhSvc, Avatars: avatars, Photos: h.lib, Calendars: cals, Lock: h.lock, Locale: uk, Log: log,
+		Takeout: takeout.New(st, nil, h.lib, avatars, log),
 		Version: "v9.8.7",
 	})
 	if err != nil {

@@ -216,6 +216,10 @@ var activityText = map[string]string{
 // Settings.
 
 type settingsForm struct {
+	// CanTakeout shows "Your household's data"; StartsAgain says deleting
+	// leads back to first-run setup (self-hosted).
+	CanTakeout, StartsAgain bool
+
 	HouseholdName          string
 	Timezone               string
 	DayStartsAt            string
@@ -274,6 +278,7 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) renderSettings(w http.ResponseWriter, r *http.Request, status int, f settingsForm, errs map[string]string, flash string) {
 	f.Timezones = timezoneOptions(f.Timezone)
+	f.CanTakeout, f.StartsAgain = s.Takeout != nil, s.ResolveHousehold == nil
 	v := s.view(r, "Settings", f)
 	v.Nav = "settings"
 	v.Errors = errs

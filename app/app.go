@@ -34,6 +34,7 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/server"
 	"github.com/lukeskelhorn/ingle/internal/settings"
 	"github.com/lukeskelhorn/ingle/internal/store"
+	"github.com/lukeskelhorn/ingle/internal/takeout"
 )
 
 // Options are what a program passes to [Run].
@@ -285,6 +286,7 @@ func build(ctx context.Context, opts Options) (*core, error) {
 		Photos:           library,
 		Calendars:        cals,
 		Lock:             c.lock,
+		Takeout:          takeout.New(st, keys, library, avatars, log),
 		// Ingle's modules are registered in a fixed order by server.New.
 		Modules: module.NewService(st, module.NewRegistry()),
 		Locale: locale.Locale{

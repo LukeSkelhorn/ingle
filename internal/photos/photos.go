@@ -412,6 +412,14 @@ func blobNames(name string) (full, thumb string) {
 	return name + ".jpg", name + "_t.jpg"
 }
 
+// RemoveFiles deletes an uploaded photo's files, once its row is gone
+// (e.g. its household was deleted). Failures are logged.
+func (l *Library) RemoveFiles(ctx context.Context, name string) {
+	if uploadRe.MatchString(name) {
+		l.removeBlobs(ctx, name)
+	}
+}
+
 // removeBlobs deletes both files of the upload name, logging failures: the
 // photo's row is already gone, or was never written.
 func (l *Library) removeBlobs(ctx context.Context, name string) {

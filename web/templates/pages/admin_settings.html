@@ -80,5 +80,23 @@
     </form>
     {{end}}
   </section>
+
+  {{if .Data.CanTakeout}}
+  <section class="card stack" id="your-data">
+    <h2>Your household's data</h2>
+    <p class="muted">Download everything Ingle holds for your household: people, chores, points and money, rewards, calendars, settings and photos. Passwords, PINs and sign-in codes aren't included.</p>
+    <p><a class="btn" href="/admin/household/export" download>Download our data</a></p>
+    <form class="stack" method="post" action="/admin/household/delete">
+      <h3>Delete the household</h3>
+      <p class="muted">This deletes everyone and everything in it, including photos, and signs out every display and phone. It can't be undone, so download your data first if you want to keep it.{{if .Data.StartsAgain}} Ingle then starts again at first-run setup.{{end}}</p>
+      <label class="field field--short">
+        <span>Type the household's name, <strong>{{.Data.HouseholdName}}</strong>, to confirm</span>
+        <input name="confirm" autocomplete="off" required>
+        {{template "err" index .Errors "confirm"}}
+      </label>
+      <button class="btn btn--danger" type="submit">Delete the household and everything in it</button>
+    </form>
+  </section>
+  {{end}}
 </main>
 {{end}}

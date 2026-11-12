@@ -200,7 +200,7 @@ func (s *Service) change(ctx context.Context, householdID int64, edit func(*dbq.
 	if err != nil || !changed {
 		return err
 	}
-	s.invalidate(householdID)
+	s.Invalidate(householdID)
 	if locked && s.endSessions != nil {
 		if err := s.endSessions(ctx, householdID); err != nil {
 			return fmt.Errorf("end display sessions: %w", err)
@@ -217,7 +217,9 @@ func (s *Service) write(ctx context.Context, q *dbq.Queries, row dbq.HouseholdLo
 	return nil
 }
 
-func (s *Service) invalidate(householdID int64) {
+// Invalidate drops the cached lock state, e.g. after the rows were
+// deleted.
+func (s *Service) Invalidate(householdID int64) {
 	s.mu.Lock()
 	delete(s.cache, householdID)
 	s.mu.Unlock()
