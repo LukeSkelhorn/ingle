@@ -51,6 +51,7 @@ Set these as environment variables, or copy `.env.example` to `.env`. Task loads
 | `INGLE_ADDR`        | `:8080`           | Listen address                         |
 | `INGLE_DB_PATH`     | `./data/ingle.db` | SQLite database file                   |
 | `INGLE_DATABASE_URL` | (none)           | A `postgres://` URL to use Postgres instead of SQLite. This is for Hosted; self-hosted Ingle doesn't need it. Nightly backups are off with Postgres, so use the database service's own. |
+| `INGLE_MASTER_KEY`  | (none)            | Encrypts each household's secrets (calendar links) in the database. Make one with `openssl rand -base64 32` and keep it outside the database and its backups: without it, those secrets can't be read. It's optional on SQLite and required with `INGLE_DATABASE_URL`. Links saved before it was set are encrypted on the next calendar refresh. |
 | `INGLE_DATABASE_MIGRATE_URL` | (none)   | With Postgres: the tables' owner, which runs migrations. Then `INGLE_DATABASE_URL` can be a role that only reads and writes rows, and it's granted what it needs. |
 | `INGLE_TZ`          | `Europe/London`   | Initial timezone; change it later in Admin › Settings |
 | `INGLE_DATE_FORMAT` | `02/01/2006`      | Go layout; the default is DD/MM/YYYY   |

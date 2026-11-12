@@ -87,41 +87,6 @@ func (q *Queries) GetCalendarFeed(ctx context.Context, arg GetCalendarFeedParams
 	return i, err
 }
 
-const listAllCalendarFeeds = `-- name: ListAllCalendarFeeds :many
-SELECT id, household_id, name, url, colour, created_by, created_at FROM calendar_feeds ORDER BY household_id, id
-`
-
-func (q *Queries) ListAllCalendarFeeds(ctx context.Context) ([]CalendarFeed, error) {
-	rows, err := q.db.QueryContext(ctx, listAllCalendarFeeds)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []CalendarFeed{}
-	for rows.Next() {
-		var i CalendarFeed
-		if err := rows.Scan(
-			&i.ID,
-			&i.HouseholdID,
-			&i.Name,
-			&i.Url,
-			&i.Colour,
-			&i.CreatedBy,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listCalendarFeeds = `-- name: ListCalendarFeeds :many
 SELECT id, household_id, name, url, colour, created_by, created_at FROM calendar_feeds WHERE household_id = ? ORDER BY name, id
 `
@@ -155,4 +120,19 @@ func (q *Queries) ListCalendarFeeds(ctx context.Context, householdID int64) ([]C
 		return nil, err
 	}
 	return items, nil
+}
+
+const setCalendarFeedURL = `-- name: SetCalendarFeedURL :exec
+UPDATE calendar_feeds SET url = ? WHERE household_id = ? AND id = ?
+`
+
+type SetCalendarFeedURLParams struct {
+	Url         string `json:"url"`
+	HouseholdID int64  `json:"household_id"`
+	ID          int64  `json:"id"`
+}
+
+func (q *Queries) SetCalendarFeedURL(ctx context.Context, arg SetCalendarFeedURLParams) error {
+	_, err := q.db.ExecContext(ctx, setCalendarFeedURL, arg.Url, arg.HouseholdID, arg.ID)
+	return err
 }

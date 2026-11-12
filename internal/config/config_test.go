@@ -77,12 +77,12 @@ func TestLoadOverrides(t *testing.T) {
 }
 
 func TestLoadPostgres(t *testing.T) {
-	env := map[string]string{"INGLE_DATABASE_URL": "postgres://ingle:secret@db:5432/ingle"}
+	env := map[string]string{"INGLE_DATABASE_URL": "postgres://ingle:secret@db:5432/ingle", "INGLE_MASTER_KEY": "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="}
 	cfg, err := load(func(k string) string { return env[k] })
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if cfg.DSN() != env["INGLE_DATABASE_URL"] || cfg.BackupKeep != 0 {
+	if cfg.DSN() != env["INGLE_DATABASE_URL"] || cfg.BackupKeep != 0 || len(cfg.MasterKey) != 32 {
 		t.Errorf("DSN = %q, BackupKeep = %d", cfg.DSN(), cfg.BackupKeep)
 	}
 	if got := cfg.DBLabel(); strings.Contains(got, "secret") {
@@ -98,7 +98,9 @@ func TestLoadInvalid(t *testing.T) {
 		{"INGLE_BACKUP_KEEP": "-1"},
 		{"INGLE_BACKUP_AT": "3am"},
 		{"INGLE_DATABASE_URL": "mysql://x"},
-		{"INGLE_DATABASE_URL": "postgres://db/ingle", "INGLE_BACKUP_KEEP": "7"},
+		{"INGLE_DATABASE_URL": "postgres://db/ingle", "INGLE_BACKUP_KEEP": "7", "INGLE_MASTER_KEY": "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="},
+		{"INGLE_DATABASE_URL": "postgres://db/ingle"}, // no master key
+		{"INGLE_MASTER_KEY": "too-short"},
 	} {
 		if _, err := load(func(k string) string { return tc[k] }); err == nil {
 			t.Errorf("load(%v) succeeded, want error", tc)

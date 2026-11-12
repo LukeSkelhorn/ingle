@@ -468,7 +468,7 @@ func TestV03MigrationsAfterV024(t *testing.T) {
 			t.Errorf("%s exists at v0.2.4", name)
 		}
 	}
-	results, err := p.Up(ctx)
+	results, err := p.UpTo(ctx, 18) // v0.3's last; later ones are tested on their own
 	if err != nil {
 		t.Fatalf("Up from v0.2.4: %v", err)
 	}
