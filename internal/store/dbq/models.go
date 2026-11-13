@@ -150,6 +150,7 @@ type HouseholdSetting struct {
 	LockIdleHours          int64   `json:"lock_idle_hours"`
 	UnlockCodeLength       *int64  `json:"unlock_code_length"`
 	CalendarIdleMinutes    int64   `json:"calendar_idle_minutes"`
+	CalendarChores         int64   `json:"calendar_chores"`
 }
 
 type LedgerEntry struct {

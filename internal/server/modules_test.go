@@ -128,7 +128,7 @@ func TestCalendarModuleOff(t *testing.T) {
 	expect(t, phone.post("/admin/calendars", url.Values{"name": {"Family"}, "url": {h.ics.URL + "/basic.ics"}}),
 		http.StatusOK, "Family added.")
 	expect(t, wall.get("/screensaver"), http.StatusOK, "Swimming")
-	expect(t, wall.get("/board/calendar"), http.StatusOK, "Swimming", "Feed the cat")
+	expect(t, wall.get("/board/calendar?chores=1"), http.StatusOK, "Swimming", "Feed the cat")
 
 	setModules(t, phone, "rewards", "photos")
 	expect(t, phone.get("/admin/calendars"), http.StatusNotFound)
@@ -138,7 +138,7 @@ func TestCalendarModuleOff(t *testing.T) {
 	expect(t, r, http.StatusOK, "saver__time")
 	notContains(t, r, "Swimming", "Nothing else on today")
 	// The board calendar stays, with chores only and no nudge to add feeds.
-	r = wall.get("/board/calendar")
+	r = wall.get("/board/calendar?chores=1")
 	expect(t, r, http.StatusOK, "Feed the cat")
 	notContains(t, r, "Swimming", "Add calendar feeds")
 

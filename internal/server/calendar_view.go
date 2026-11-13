@@ -40,10 +40,14 @@ type calView struct {
 	Prev, Next, Today string
 	Self              string // this view, for refreshing in place
 	Week, Month       string // the same range in the other view
-	ShowsToday        bool
-	Weekdays          []string // column headings, from the week start
-	Weeks             [][]calDay
-	HasCalendars      bool
+	// Chores is whether chores show as well as events; ChoresURL is this
+	// view with them the other way.
+	Chores       bool
+	ChoresURL    string
+	ShowsToday   bool
+	Weekdays     []string // column headings, from the week start
+	Weeks        [][]calDay
+	HasCalendars bool
 }
 
 // calDay is one day of the grid.
@@ -150,24 +154,58 @@ func (s *Server) calRange(r *http.Request, loc locale.Locale) calRange {
 	return cr
 }
 
-func calURL(view string, t time.Time) string {
-	return "/board/calendar?" + url.Values{"view": {view}, "from": {t.Format(chores.DateLayout)}}.Encode()
+// calURL is the board calendar's view from t, with or without chores. It
+// always says which, so browsing keeps the board's Chores button as it is.
+func calURL(view string, t time.Time, withChores bool) string {
+	return "/board/calendar?" + url.Values{
+		"view": {view}, "from": {t.Format(chores.DateLayout)}, "chores": {choresParam(withChores)},
+	}.Encode()
+}
+
+func choresParam(on bool) string {
+	if on {
+		return "1"
+	}
+	return "0"
+}
+
+// calChores is whether the calendar shows chores: the board's Chores
+// button (the chores param) if it's been pressed, else the household's
+// setting.
+func (s *Server) calChores(r *http.Request) (bool, error) {
+	switch r.URL.Query().Get("chores") {
+	case "1":
+		return true, nil
+	case "0":
+		return false, nil
+	}
+	set, err := s.Settings.Get(r.Context(), hhOf(r))
+	if err != nil {
+		return false, err
+	}
+	return set.CalendarChores, nil
 }
 
 func (s *Server) handleCalendarView(w http.ResponseWriter, r *http.Request) {
 	loc := s.calendarLocale(r)
 	cr := s.calRange(r, loc)
-	days, err := s.calendarDays(r, loc, cr.gridFrom, cr.gridTo, cr.today)
+	ch, err := s.calChores(r)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	days, err := s.calendarDays(r, loc, cr.gridFrom, cr.gridTo, cr.today, ch)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
 
-	v := calView{View: cr.view, Today: calURL(cr.view, cr.today), Self: calURL(cr.view, cr.anchor)}
-	v.Week = calURL(calWeek, cr.anchor)
-	v.Month = calURL(calMonth, cr.anchor)
+	v := calView{View: cr.view, Today: calURL(cr.view, cr.today, ch), Self: calURL(cr.view, cr.anchor, ch)}
+	v.Chores, v.ChoresURL = ch, calURL(cr.view, cr.anchor, !ch)
+	v.Week = calURL(calWeek, cr.anchor, ch)
+	v.Month = calURL(calMonth, cr.anchor, ch)
 	if cr.view == calMonth && cr.anchor.Year() == cr.today.Year() && cr.anchor.Month() == cr.today.Month() {
-		v.Week = calURL(calWeek, cr.today)
+		v.Week = calURL(calWeek, cr.today, ch)
 	}
 	step := func(n int) time.Time {
 		if cr.view == calMonth {
@@ -176,10 +214,10 @@ func (s *Server) handleCalendarView(w http.ResponseWriter, r *http.Request) {
 		return cr.anchor.AddDate(0, 0, 7*n)
 	}
 	if p := step(-1); !p.Before(cr.first) {
-		v.Prev = calURL(cr.view, p)
+		v.Prev = calURL(cr.view, p, ch)
 	}
 	if n := step(1); !n.After(cr.last) {
-		v.Next = calURL(cr.view, n)
+		v.Next = calURL(cr.view, n, ch)
 	}
 	for i := range 7 {
 		v.Weekdays = append(v.Weekdays, cr.gridFrom.AddDate(0, 0, i).Format("Mon"))
@@ -229,14 +267,17 @@ func weekTitle(from, to time.Time) string {
 }
 
 // calendarDays builds each day from first to last (local midnights) with
-// its events and chores.
-func (s *Server) calendarDays(r *http.Request, loc locale.Locale, first, last, today time.Time) ([]calDay, error) {
+// its holidays, events and, if withChores, chores.
+func (s *Server) calendarDays(r *http.Request, loc locale.Locale, first, last, today time.Time, withChores bool) ([]calDay, error) {
 	ctx := r.Context()
 	z := loc.Location
-	from, to := first.Format(chores.DateLayout), last.Format(chores.DateLayout)
-	cal, err := s.Chores.Calendar(ctx, hhOf(r), today, from, to)
-	if err != nil {
-		return nil, err
+	var cal map[string][]chores.CalChore
+	if withChores {
+		var err error
+		from, to := first.Format(chores.DateLayout), last.Format(chores.DateLayout)
+		if cal, err = s.Chores.Calendar(ctx, hhOf(r), today, from, to); err != nil {
+			return nil, err
+		}
 	}
 	people, err := s.Store.Q.ListPeople(ctx, hhOf(r))
 	if err != nil {
@@ -336,7 +377,12 @@ func (s *Server) handleCalendarDay(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	days, err := s.calendarDays(r, loc, d, d, s.boardDay(r))
+	ch, err := s.calChores(r)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	days, err := s.calendarDays(r, loc, d, d, s.boardDay(r), ch)
 	if err != nil {
 		s.serverError(w, r, err)
 		return

@@ -260,7 +260,18 @@
 
     function resetIdle() {
       clearTimeout(idleTimer);
-      if (calIdleMs > 0 && current() === "calendar") idleTimer = setTimeout(function () { show("chores"); }, calIdleMs);
+      if (calIdleMs > 0 && current() === "calendar") idleTimer = setTimeout(goneIdle, calIdleMs);
+    }
+    // Back to the chores, and the Chores button back to the household's
+    // setting: the next look at the calendar leaves the chores param out.
+    function goneIdle() {
+      var w = cal.querySelector("[data-src]");
+      if (w) {
+        var u = new URL(w.dataset.src, location.href);
+        u.searchParams.delete("chores");
+        w.dataset.src = u.pathname + u.search;
+      }
+      show("chores");
     }
     ["pointerdown", "keydown", "scroll", "wheel"].forEach(function (e) {
       document.addEventListener(e, resetIdle, { passive: true, capture: true });
