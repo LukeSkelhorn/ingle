@@ -90,11 +90,11 @@ func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time
 		kind[p.ID] = p.Kind
 	}
 	// earns is what a chore's copy for person is worth.
-	earns := func(mode string, person *int64, points, pence, adultPoints int64) (int64, int64) {
+	earns := func(person *int64, points, pence, adultPoints int64) (int64, int64) {
 		if person == nil {
 			return points, pence
 		}
-		return Earns(mode, kind[*person], points, pence, adultPoints)
+		return Earns(kind[*person], points, pence, adultPoints)
 	}
 	byOcc := make(map[int64]dbq.ListLiveCompletionsForRangeRow, len(comps))
 	for _, c := range comps {
@@ -130,7 +130,7 @@ func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time
 		if r.Mode == ModeShared {
 			c.People = shared[r.ChoreID]
 		}
-		c.Points, c.Pence = earns(r.Mode, c.PersonID, r.Points, r.Pence, r.AdultPoints)
+		c.Points, c.Pence = earns(c.PersonID, r.Points, r.Pence, r.AdultPoints)
 		comp, done := byOcc[r.ID]
 		if !done && r.AvailableFrom == nil && hols.awayOn(r.DueOn, rowOwners(r, shared)) {
 			continue // on holiday
@@ -221,7 +221,7 @@ func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time
 							if ch.Mode == ModeShared {
 								c.People = shared[ch.ID]
 							}
-							c.Points, c.Pence = earns(ch.Mode, sl.assignee, ch.Points, ch.Pence, ch.AdultPoints)
+							c.Points, c.Pence = earns(sl.assignee, ch.Points, ch.Pence, ch.AdultPoints)
 							add(c)
 						}
 					}
@@ -248,7 +248,7 @@ func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time
 						if ch.Mode == ModeShared {
 							c.People = shared[ch.ID]
 						}
-						c.Points, c.Pence = earns(ch.Mode, sl.assignee, ch.Points, ch.Pence, ch.AdultPoints)
+						c.Points, c.Pence = earns(sl.assignee, ch.Points, ch.Pence, ch.AdultPoints)
 						out[d] = append(out[d], c)
 					}
 				}

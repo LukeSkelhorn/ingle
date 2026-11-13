@@ -116,7 +116,7 @@ func TestChoresListBack(t *testing.T) {
 
 	// "Add a chore for Alfie" pre-fills him and comes back to his list.
 	r := phone.get("/admin/chores/new?" + url.Values{"assignee": {itoa(alfie.ID)}, "back": {back}}.Encode())
-	expect(t, r, http.StatusOK, `value="assigned" checked`, `name="assignee_id" value="`+itoa(alfie.ID)+`" checked`,
+	expect(t, r, http.StatusOK, `value="assigned" checked`, `name="assignee_id" value="`+itoa(alfie.ID)+`" data-kind="child" checked`,
 		`<a href="/admin/chores?person=`+itoa(alfie.ID)+`&amp;sort=money">‹ Chores</a>`,
 		`name="back" value="/admin/chores?person=`+itoa(alfie.ID)+`&amp;sort=money"`)
 	chore := url.Values{

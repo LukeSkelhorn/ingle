@@ -300,6 +300,7 @@ button.chore__main:active { background: var(--line); }
 }
 .picker__person:has(input:checked) { border-color: var(--person); background: var(--bg); }
 .picker__person:has(input:focus-visible) { outline: 2px solid var(--accent); }
+.picker__worth { margin-top: -4px; color: var(--muted); font-size: .85rem; }
 .picker__actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .picker__actions .btn--ghost { grid-column: 1 / -1; }
 .picker__actions > p, .picker__actions .btn--danger { grid-column: 1 / -1; margin: 0; }

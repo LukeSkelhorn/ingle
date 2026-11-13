@@ -120,7 +120,7 @@
     {{end}}
   </section>
   {{end}}{{end}}
-  {{if moduleOn "money"}}
+  {{if and (moduleOn "money") (not $.Data.IsAdult)}}
   <section class="card stack" id="bank">
     <h2>Move to bank</h2>
     <p class="muted">{{$.Data.Name}} has <strong>{{money .Pence}}</strong> to spend{{if .HeldPence}} ({{money .HeldPence}} held){{end}}.

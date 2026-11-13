@@ -153,13 +153,14 @@
   <h2 class="picker__title" tabindex="-1" autofocus>{{with .Card.Emoji}}<span class="picker__emoji" aria-hidden="true">{{.}}</span> {{end}}{{.Card.Title}}</h2>
   <p class="picker__ask">Who's doing this?</p>
   <div class="picker__people">
-    {{range .People}}
+    {{range .People}}{{$worth := worth .Points .Pence}}{{with .Person}}
     <label class="picker__person" style="--person: {{.Colour}}">
       <input class="visually-hidden" type="radio" name="person" value="{{.ID}}">
       {{template "avatar" (avatar . "lg")}}
       <span>{{.Name}}</span>
+      {{with $worth}}<small class="picker__worth">{{.}}</small>{{end}}
     </label>
-    {{end}}
+    {{end}}{{end}}
   </div>
   <div class="picker__actions">
     <button class="btn btn--block" type="button" hx-disabled-elt="this"

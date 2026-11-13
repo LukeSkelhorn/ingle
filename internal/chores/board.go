@@ -61,6 +61,7 @@ type Card struct {
 	DueTime      *string
 	Points       int64
 	Pence        int64
+	AdultPoints  int64 // what an adult earns for it (pool chores' picker)
 	Pool         bool  // a pool chore (claimable, or claimed by this column's person)
 	Claimed      bool  // a pool chore claimed by this column's person
 	Overdue      bool  // due before today and not done
@@ -210,6 +211,11 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 			c.Goal = &goal
 		}
 	}
+	for i := range b.Columns {
+		if c := &b.Columns[i]; c.Person.Kind == "adult" {
+			c.Pence = 0 // adults have points only
+		}
+	}
 
 	for _, r := range rows {
 		if r.Status == "skipped" {
@@ -256,6 +262,7 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 			DueTime:      dueTime,
 			Points:       r.Points,
 			Pence:        r.Pence,
+			AdultPoints:  r.AdultPoints,
 			Pool:         r.Mode == ModePool,
 			Shared:       r.Mode == ModeShared,
 			Overdue:      r.DueOn < today && !done,
@@ -296,6 +303,7 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 				}
 				c := card
 				c.For = id
+				c.Points, c.Pence = Earns(col.Person.Kind, r.Points, r.Pence, r.AdultPoints)
 				for _, other := range ids {
 					if p, ok := byPerson[other]; ok && other != id {
 						c.With = append(c.With, p)
@@ -315,7 +323,7 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 			continue // owner archived since
 		}
 		card.Claimed = card.Pool && !done
-		card.Points, card.Pence = Earns(r.Mode, col.Person.Kind, r.Points, r.Pence, r.AdultPoints)
+		card.Points, card.Pence = Earns(col.Person.Kind, r.Points, r.Pence, r.AdultPoints)
 		col.Cards = append(col.Cards, card)
 		col.TotalToday++
 		if done {

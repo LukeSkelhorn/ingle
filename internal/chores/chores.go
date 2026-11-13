@@ -390,14 +390,11 @@ func canDo(ctx context.Context, q *dbq.Queries, chore dbq.Chore, occ dbq.ChoreOc
 // adult who approved it, if one did.
 func (s *Service) recordCompletion(ctx context.Context, q *dbq.Queries, chore dbq.Chore, occurrenceID, personID int64, status string, reviewer *int64) (dbq.Completion, error) {
 	now := s.now().Unix()
-	points, pence := chore.Points, chore.Pence
-	if chore.Mode == ModeEach {
-		p, err := getPerson(ctx, q, chore.HouseholdID, personID)
-		if err != nil {
-			return dbq.Completion{}, err
-		}
-		points, pence = Earns(chore.Mode, p.Kind, chore.Points, chore.Pence, chore.AdultPoints)
+	p, err := getPerson(ctx, q, chore.HouseholdID, personID)
+	if err != nil {
+		return dbq.Completion{}, err
 	}
+	points, pence := Earns(p.Kind, chore.Points, chore.Pence, chore.AdultPoints)
 	out, err := q.CreateCompletion(ctx, dbq.CreateCompletionParams{
 		HouseholdID:  chore.HouseholdID,
 		OccurrenceID: occurrenceID,

@@ -437,6 +437,44 @@ func TestEachPersonMigration(t *testing.T) {
 	}
 }
 
+// 00024 starts every chore that isn't "each" with adults' points equal to
+// its points, so adults keep earning the same points (now without money).
+func TestAdultPointsMigration(t *testing.T) {
+	st := openTest(t)
+	ctx := t.Context()
+	sub, err := fs.Sub(migrations, "migrations/sqlite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := goose.NewProvider(goose.DialectSQLite3, st.DB, sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.DownTo(ctx, 23); err != nil {
+		t.Fatalf("DownTo(23): %v", err)
+	}
+	for _, q := range []string{
+		`INSERT INTO households (id, name, created_at) VALUES (1, 'Home', 1)`,
+		`INSERT INTO chores (id, household_id, title, mode, starts_on, points, adult_points, created_at, updated_at) VALUES
+		   (1, 1, 'Bins', 'pool', '2026-11-02', 5, 0, 1, 1),
+		   (2, 1, 'Teeth', 'each', '2026-11-02', 2, 1, 1, 1)`,
+	} {
+		if _, err := st.DB.ExecContext(ctx, q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	if _, err := p.Up(ctx); err != nil {
+		t.Fatalf("Up: %v", err)
+	}
+	var got string
+	if err := st.DB.QueryRowContext(ctx, `SELECT group_concat(title || '=' || adult_points, ' ') FROM (SELECT * FROM chores ORDER BY id)`).Scan(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got != "Bins=5 Teeth=1" {
+		t.Errorf("adult points after up: %q, want Bins=5 Teeth=1", got)
+	}
+}
+
 // v0.3's migrations (modules, bank requests, bank balances) come after
 // v0.2.4's 14 and 15, so a database upgraded from v0.2.4 runs just them.
 func TestV03MigrationsAfterV024(t *testing.T) {

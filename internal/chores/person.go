@@ -61,5 +61,10 @@ func (s *Service) PersonSummary(ctx context.Context, householdID, personID int64
 			sum.Goal = &goal
 		}
 	}
+	if p.Kind == "adult" {
+		// Adults have points only; any money from before stays in the
+		// history but isn't a balance.
+		sum.Pence, sum.HeldPence, sum.WeekPence = 0, 0, 0
+	}
 	return sum, nil
 }
