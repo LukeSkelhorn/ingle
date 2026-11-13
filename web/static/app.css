@@ -690,6 +690,7 @@ details.card .list { margin: 8px -20px -20px; }
 .cal__title { margin: 0 6px; font-size: 1.25rem; min-width: 7.5em; text-align: center; font-variant-numeric: tabular-nums; }
 .cal__arrow { width: 48px; padding: 0; font-size: 1.4rem; }
 .cal__arrow:disabled, .cal__today:disabled { opacity: 0.35; cursor: default; }
+.cal__tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .cal__views { display: flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); }
 .cal__views button {
   border: 0; background: none; font: inherit; color: var(--fg); padding: 8px 16px; border-radius: 999px; cursor: pointer; min-height: 40px;

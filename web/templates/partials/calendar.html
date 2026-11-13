@@ -14,9 +14,17 @@
       <button class="btn btn--ghost cal__today" type="button" hx-get="{{.Today}}" hx-target="#calendar" hx-swap="innerHTML"
               {{if .ShowsToday}}disabled{{end}}>Today</button>
     </div>
-    <div class="cal__views" role="group" aria-label="Calendar view">
-      <button type="button" hx-get="{{.Week}}" hx-target="#calendar" hx-swap="innerHTML" aria-pressed="{{if eq .View "week"}}true{{else}}false{{end}}">Week</button>
-      <button type="button" hx-get="{{.Month}}" hx-target="#calendar" hx-swap="innerHTML" aria-pressed="{{if eq .View "month"}}true{{else}}false{{end}}">Month</button>
+    <div class="cal__tools">
+      {{/* Chores are off unless the household's setting or this button
+           turns them on; the board puts the setting back when the
+           calendar goes idle. */}}
+      <div class="cal__views">
+        <button type="button" hx-get="{{.ChoresURL}}" hx-target="#calendar" hx-swap="innerHTML" aria-pressed="{{if .Chores}}true{{else}}false{{end}}">Chores</button>
+      </div>
+      <div class="cal__views" role="group" aria-label="Calendar view">
+        <button type="button" hx-get="{{.Week}}" hx-target="#calendar" hx-swap="innerHTML" aria-pressed="{{if eq .View "week"}}true{{else}}false{{end}}">Week</button>
+        <button type="button" hx-get="{{.Month}}" hx-target="#calendar" hx-swap="innerHTML" aria-pressed="{{if eq .View "month"}}true{{else}}false{{end}}">Month</button>
+      </div>
     </div>
   </div>
 
@@ -27,7 +35,7 @@
     <div class="cal__mweek" role="row">
       {{range .}}
       <button class="cal__cell{{if .Today}} cal__cell--today{{end}}{{if .Outside}} cal__cell--outside{{end}}{{if .Past}} cal__cell--past{{end}}" type="button" role="gridcell"
-              hx-get="/board/calendar/day/{{.Date}}" hx-target="#sheet-body" hx-swap="innerHTML"
+              hx-get="/board/calendar/day/{{.Date}}?chores={{if $.Chores}}1{{else}}0{{end}}" hx-target="#sheet-body" hx-swap="innerHTML"
               aria-label="{{.Label}}{{with .Count}}, {{.}} {{if eq . 1}}thing{{else}}things{{end}}{{end}}"{{if .Today}} aria-current="date"{{end}}>
         <span class="cal__num">{{.Num}}</span>
         <span class="cal__shown">

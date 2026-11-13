@@ -40,6 +40,11 @@
       <small class="muted">On displays, the calendar goes back to the chores after this long untouched. 0 is never.</small>
       {{template "err" index .Errors "calendar_idle_minutes"}}
     </label>
+    <label class="check">
+      <input type="checkbox" name="calendar_chores" value="1"{{if .Data.CalendarChores}} checked{{end}}>
+      <span>Show chores on the calendar
+        <small class="muted">Off, the calendar shows what's on. Anyone at the board can still turn chores on or off with its Chores button.</small></span>
+    </label>
     <fieldset class="field">
       <legend>Lock the displays on a schedule</legend>
       <div class="segmented">
