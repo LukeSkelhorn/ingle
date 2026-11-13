@@ -40,6 +40,11 @@
       <small class="muted">On displays, the calendar goes back to the chores after this long untouched. 0 is never.</small>
       {{template "err" index .Errors "calendar_idle_minutes"}}
     </label>
+    <label class="check">
+      <input type="checkbox" name="calendar_chores" value="1"{{if .Data.CalendarChores}} checked{{end}}>
+      <span>Show chores on the calendar
+        <small class="muted">Off, the calendar shows what's on. Anyone at the board can still turn chores on or off with its Chores button.</small></span>
+    </label>
     <fieldset class="field">
       <legend>Lock the displays on a schedule</legend>
       <div class="segmented">
@@ -61,19 +66,55 @@
     <button class="btn btn--primary" type="submit">Save settings</button>
   </form>
 
+  {{with .Data.Holiday}}
+  <section class="card stack" id="holidays">
+    <h2>Holiday mode</h2>
+    <p class="muted">Pause chores while you're away. Nothing comes due, nothing shows as missed or overdue, and chores start again the morning after. For one person (say, a child at camp), the others carry on with chores they share, and anything up for grabs. Rewards, goals and money still work.</p>
+    {{if .Holidays}}
+    <ul class="holidays">
+      {{range .Holidays}}
+      <li class="holidays__item">
+        <span><strong>{{with .Person}}{{.Name}}{{else}}Everyone{{end}}</strong> · {{.Dates $.Data.Holiday.Today}}{{if .Current $.Data.Holiday.Today}} <span class="tag">On now</span>{{end}}</span>
+        <span class="row">
+          {{if .Current $.Data.Holiday.Today}}
+          <form method="post" action="/admin/settings/holidays/{{.ID}}/end"><button class="btn" type="submit">End now</button></form>
+          {{end}}
+          <form method="post" action="/admin/settings/holidays/{{.ID}}/delete"><button class="btn btn--ghost" type="submit">Remove</button></form>
+        </span>
+      </li>
+      {{end}}
+    </ul>
+    {{else}}
+    <p>No holidays planned.</p>
+    {{end}}
+    <form class="stack" method="post" action="/admin/settings/holidays">
+      <h3>Add a holiday</h3>
+      <div class="row">
+        <label class="field"><span>First day</span><input type="date" name="holiday_from" value="{{.From}}" required>{{template "err" index $.Errors "holiday_from"}}</label>
+        <label class="field"><span>Last day</span><input type="date" name="holiday_to" value="{{.To}}" min="{{.Today}}" required>{{template "err" index $.Errors "holiday_to"}}</label>
+      </div>
+      <label class="field field--short">
+        <span>Who's away</span>
+        <select name="holiday_person">
+          <option value="">Everyone</option>
+          {{range .People}}<option value="{{.ID}}"{{if eq .ID $.Data.Holiday.PersonID}} selected{{end}}>{{.Name}}</option>{{end}}
+        </select>
+        {{template "err" index $.Errors "holiday_person"}}
+      </label>
+      <small class="muted">Leave the first day as today to start it now.</small>
+      <button class="btn btn--primary" type="submit">Add holiday</button>
+    </form>
+  </section>
+  {{end}}
+
   <section class="card stack" id="unlock-code">
     <h2>Household unlock code</h2>
     <p class="muted">A locked display shows photos and the clock only. Anyone can unlock it with this code (share it with the kids) or with an adult's PIN. Unlocking the board never opens admin.</p>
     <p>{{if .Data.HasUnlockCode}}✓ A code is set.{{else}}No code yet. Only adult PINs unlock the displays.{{end}}</p>
     <form class="stack" method="post" action="/admin/settings/unlock-code">
-      <div class="row">
-        <label class="field"><span>{{if .Data.HasUnlockCode}}New code{{else}}Code{{end}} (4 to 6 digits)</span>
-          <input name="code" type="password" inputmode="numeric" pattern="[0-9]{4,6}" autocomplete="off" required>{{template "err" index .Errors "code"}}</label>
-        <label class="field"><span>Code again</span>
-          <input name="code_confirm" type="password" inputmode="numeric" pattern="[0-9]{4,6}" autocomplete="off" required>{{template "err" index .Errors "code_confirm"}}</label>
-      </div>
-      <button class="btn btn--primary" type="submit">Save code</button>
+      {{template "pinpad_set" (dict "Name" "code" "Confirm" "code_confirm" "Label" (printf "%s (4 to 6 digits)" (or (and .Data.HasUnlockCode "New code") "Code")) "Again" "Code again" "Err" (or (index .Errors "code") (index .Errors "code_confirm")) "Submit" true "Button" "Save code")}}
     </form>
+    <script src="{{asset "pinpad.js"}}"></script>
     {{if .Data.HasUnlockCode}}
     <form method="post" action="/admin/settings/unlock-code/clear">
       <button class="btn btn--danger" type="submit">Remove code</button>

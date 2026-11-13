@@ -384,3 +384,38 @@ func TestArchiveLeavesSharedChores(t *testing.T) {
 		t.Errorf("archive Isla = %v, want ErrHasAssignedChores", err)
 	}
 }
+
+// Archiving someone makes their calendars the family's, for good: restoring
+// them doesn't give the calendars back.
+func TestArchiveHandsCalendarsToFamily(t *testing.T) {
+	f := newFixture(t)
+	ctx := t.Context()
+	dad := f.add("Dad", KindAdult)
+	feed := func(name string, owner *int64) int64 {
+		t.Helper()
+		c, err := f.st.Q.CreateCalendarFeed(ctx, dbq.CreateCalendarFeedParams{
+			HouseholdID: f.hh, Name: name, Url: "https://example.com/" + name, Colour: "#46A758", PersonID: owner, CreatedAt: 1,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c.ID
+	}
+	work, mums, family := feed("work", &dad.ID), feed("mums", &f.mum.ID), feed("family", nil)
+
+	if err := f.svc.ArchivePerson(ctx, f.hh, f.mum.ID, dad.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.svc.RestorePerson(ctx, f.hh, f.mum.ID, dad.ID); err != nil {
+		t.Fatal(err)
+	}
+	for id, want := range map[int64]*int64{work: nil, mums: &f.mum.ID, family: nil} {
+		c, err := f.st.Q.GetCalendarFeed(ctx, dbq.GetCalendarFeedParams{HouseholdID: f.hh, ID: id})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if (c.PersonID == nil) != (want == nil) || (want != nil && *c.PersonID != *want) {
+			t.Errorf("%s owner = %v, want %v", c.Name, c.PersonID, want)
+		}
+	}
+}

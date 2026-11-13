@@ -55,6 +55,7 @@ UID:a
 DTSTART;TZID=Europe/London:20261024T090000
 DTEND;TZID=Europe/London:20261024T100000
 SUMMARY:Swimming
+LOCATION: Leisure centre\, pool 2
 END:VEVENT
 `, `BEGIN:VEVENT
 UID:b
@@ -94,6 +95,9 @@ END:VEVENT
 	}
 	if !got[0].AllDay || got[1].AllDay {
 		t.Errorf("all-day flags wrong: %+v", got[:2])
+	}
+	if got[1].Location != "Leisure centre, pool 2" || got[0].Location != "" {
+		t.Errorf("locations = %q, %q", got[0].Location, got[1].Location)
 	}
 	if d := got[1].End.Sub(got[1].Start); d != time.Hour {
 		t.Errorf("Swimming lasts %v", d)
@@ -219,7 +223,7 @@ END:VEVENT
 			status.Store(http.StatusNotFound)
 			want = "404"
 		}
-		_, err := f.svc.AddFeed(ctx, f.hh, f.mum.ID, "Family", srv.URL+path)
+		_, err := f.svc.AddFeed(ctx, f.hh, f.mum.ID, "Family", srv.URL+path, nil)
 		var ve valid.Errors
 		if !errors.As(err, &ve) || !strings.Contains(ve["url"], want) {
 			t.Errorf("AddFeed(%s) = %v, want url error containing %q", path, err, want)
@@ -230,7 +234,7 @@ END:VEVENT
 	}
 	status.Store(http.StatusOK)
 
-	feed, err := f.svc.AddFeed(ctx, f.hh, f.mum.ID, "Family", srv.URL+"/family.ics")
+	feed, err := f.svc.AddFeed(ctx, f.hh, f.mum.ID, "Family", srv.URL+"/family.ics", nil)
 	if err != nil {
 		t.Fatalf("AddFeed: %v", err)
 	}
@@ -289,7 +293,7 @@ END:VEVENT
 	}))
 	defer srv.Close()
 	f := newFixture(t, srv.Client())
-	if _, err := f.svc.AddFeed(t.Context(), f.hh, f.mum.ID, "Family", srv.URL+"/family.ics"); err != nil {
+	if _, err := f.svc.AddFeed(t.Context(), f.hh, f.mum.ID, "Family", srv.URL+"/family.ics", nil); err != nil {
 		t.Fatal(err)
 	}
 	// Now is 24 Oct; 5 weeks back and 13 weeks ahead are both cached.
@@ -314,7 +318,7 @@ func TestFeedAddressEncrypted(t *testing.T) {
 	secret := srv.URL + "/private-abc123/basic.ics"
 
 	// Saved before there was a key: stored as it is.
-	if _, err := f.svc.AddFeed(ctx, f.hh, f.mum.ID, "Old", secret); err != nil {
+	if _, err := f.svc.AddFeed(ctx, f.hh, f.mum.ID, "Old", secret, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -325,7 +329,7 @@ func TestFeedAddressEncrypted(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.svc.SetSecrets(k)
-	if _, err := f.svc.AddFeed(ctx, f.hh, f.mum.ID, "New", secret); err != nil {
+	if _, err := f.svc.AddFeed(ctx, f.hh, f.mum.ID, "New", secret, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := f.svc.RefreshHousehold(ctx, f.hh); err != nil {
@@ -350,4 +354,111 @@ func TestFeedAddressEncrypted(t *testing.T) {
 			t.Errorf("feed %+v: want fetched and masked from the real address", fd)
 		}
 	}
+}
+
+// A calendar can be one person's or the family's; the owner is checked, and
+// editing or archiving changes the cached events straight away.
+func TestFeedOwner(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, ics(`BEGIN:VEVENT
+UID:a
+DTSTART;TZID=Europe/London:20261024T090000
+DTEND;TZID=Europe/London:20261024T100000
+SUMMARY:Meeting
+END:VEVENT
+`))
+	}))
+	defer srv.Close()
+	f := newFixture(t, srv.Client())
+	ctx := t.Context()
+	dad, err := f.st.Q.CreatePerson(ctx, dbq.CreatePersonParams{HouseholdID: f.hh, Name: "Dad", Kind: "adult", Colour: "#E5533D", CreatedAt: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := f.st.Q.CreateHousehold(ctx, dbq.CreateHouseholdParams{Name: "Next door", CreatedAt: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stranger, err := f.st.Q.CreatePerson(ctx, dbq.CreatePersonParams{HouseholdID: other.ID, Name: "Pat", Kind: "adult", Colour: "#E5533D", CreatedAt: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	from, to := day(24), day(25)
+	owner := func() *int64 {
+		t.Helper()
+		got := f.svc.Upcoming(f.hh, from, to)
+		if len(got) != 1 {
+			t.Fatalf("Upcoming = %+v", got)
+		}
+		return got[0].PersonID
+	}
+
+	if _, err := f.svc.AddFeed(ctx, f.hh, f.mum.ID, "Work", srv.URL, &stranger.ID); !hasErr(err, "person") {
+		t.Errorf("AddFeed with another household's person = %v, want a person error", err)
+	}
+	feed, err := f.svc.AddFeed(ctx, f.hh, f.mum.ID, "Work", srv.URL, &dad.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if feed.PersonID == nil || *feed.PersonID != dad.ID {
+		t.Errorf("AddFeed owner = %v, want Dad", feed.PersonID)
+	}
+	if p := owner(); p == nil || *p != dad.ID {
+		t.Errorf("event owner = %v, want Dad", p)
+	}
+	if got := f.svc.Upcoming(f.hh, from, to)[0].FeedID; got != feed.ID {
+		t.Errorf("event feed id = %d, want %d", got, feed.ID)
+	}
+
+	// Edit: the name and owner change, and the events follow.
+	if err := f.svc.UpdateFeed(ctx, f.hh, f.mum.ID, feed.ID, "", &stranger.ID); !hasErr(err, "name") || !hasErr(err, "person") {
+		t.Errorf("UpdateFeed bad = %v", err)
+	}
+	if err := f.svc.UpdateFeed(ctx, other.ID, f.mum.ID, feed.ID, "Theirs", nil); !errors.Is(err, ErrNotFound) {
+		t.Errorf("UpdateFeed from another household = %v, want ErrNotFound", err)
+	}
+	if err := f.svc.UpdateFeed(ctx, f.hh, f.mum.ID, feed.ID, " Mum's work ", &f.mum.ID); err != nil {
+		t.Fatal(err)
+	}
+	if p := owner(); p == nil || *p != f.mum.ID {
+		t.Errorf("event owner after edit = %v, want Mum", p)
+	}
+	if got := f.svc.Upcoming(f.hh, from, to)[0].Feed; got != "Mum's work" {
+		t.Errorf("event feed name = %q", got)
+	}
+	feeds, _ := f.svc.Feeds(ctx, f.hh)
+	if len(feeds) != 1 || feeds[0].Name != "Mum's work" || feeds[0].PersonID == nil || *feeds[0].PersonID != f.mum.ID {
+		t.Errorf("Feeds = %+v", feeds)
+	}
+
+	// Archived people can't be given a calendar, and forgetting someone
+	// makes their calendars the family's.
+	at := int64(2)
+	if err := f.st.Q.ArchivePerson(ctx, dbq.ArchivePersonParams{ArchivedAt: &at, HouseholdID: f.hh, ID: dad.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.svc.UpdateFeed(ctx, f.hh, f.mum.ID, feed.ID, "Work", &dad.ID); !hasErr(err, "person") {
+		t.Errorf("UpdateFeed to an archived person = %v, want a person error", err)
+	}
+	f.svc.ForgetPerson(other.ID, f.mum.ID)
+	if owner() == nil {
+		t.Error("ForgetPerson for another household changed this one")
+	}
+	f.svc.ForgetPerson(f.hh, f.mum.ID)
+	if p := owner(); p != nil {
+		t.Errorf("event owner after ForgetPerson = %v, want the family", *p)
+	}
+
+	// Back to the family.
+	if err := f.svc.UpdateFeed(ctx, f.hh, f.mum.ID, feed.ID, "Work", nil); err != nil {
+		t.Fatal(err)
+	}
+	if feeds, _ := f.svc.Feeds(ctx, f.hh); feeds[0].PersonID != nil {
+		t.Errorf("owner = %v, want the family", *feeds[0].PersonID)
+	}
+}
+
+func hasErr(err error, field string) bool {
+	var ve valid.Errors
+	return errors.As(err, &ve) && ve[field] != ""
 }

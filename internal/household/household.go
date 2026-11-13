@@ -242,7 +242,8 @@ func (s *Service) UpdatePerson(ctx context.Context, householdID, actorID, id int
 // ArchivePerson hides a person from the board, keeping their history. It
 // fails while they have assigned chores, or if they are the last adult who
 // can sign in. They're taken out of any shared chores; one left with a
-// single person becomes that person's assigned chore.
+// single person becomes that person's assigned chore. Their calendars
+// become the family's.
 func (s *Service) ArchivePerson(ctx context.Context, householdID, actorID, id int64) error {
 	now := s.now()
 	return s.st.WithTx(ctx, func(q *dbq.Queries) error {
@@ -268,6 +269,9 @@ func (s *Service) ArchivePerson(ctx context.Context, householdID, actorID, id in
 		at := now.Unix()
 		if err := leaveSharedChores(ctx, q, householdID, id, at); err != nil {
 			return err
+		}
+		if err := q.ClearCalendarFeedPerson(ctx, dbq.ClearCalendarFeedPersonParams{HouseholdID: householdID, PersonID: &id}); err != nil {
+			return fmt.Errorf("hand calendars to the family: %w", err)
 		}
 		if err := q.ArchivePerson(ctx, dbq.ArchivePersonParams{ArchivedAt: &at, HouseholdID: householdID, ID: id}); err != nil {
 			return fmt.Errorf("archive person: %w", err)

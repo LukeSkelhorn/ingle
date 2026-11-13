@@ -64,7 +64,7 @@ func TestServiceUpdate(t *testing.T) {
 	}
 	got, err := svc.Get(ctx, h.ID)
 	if err != nil || got.Location.String() != "Europe/London" || got.AdminIdleMinutes != 2 || got.DayStartsAt != "00:00" ||
-		got.ScreensaverIdle() != 5*time.Minute || got.CalendarIdle() != 2*time.Minute {
+		got.ScreensaverIdle() != 5*time.Minute || got.CalendarIdle() != 2*time.Minute || got.CalendarChores {
 		t.Fatalf("defaults = %+v, %v", got, err)
 	}
 
@@ -79,13 +79,13 @@ func TestServiceUpdate(t *testing.T) {
 
 	if err := svc.Update(ctx, h.ID, mum.ID, Input{
 		HouseholdName: "Smiths", Timezone: "America/New_York", DayStartsAt: "04:30", AdminIdleMinutes: 10, ScreensaverIdleMinutes: 0, CalendarIdleMinutes: 7,
-		LockDays: 0b0111110, LockFrom: "08:45", LockUntil: "15:15", LockIdleHours: 12,
+		CalendarChores: true, LockDays: 0b0111110, LockFrom: "08:45", LockUntil: "15:15", LockIdleHours: 12,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	got, err = svc.Get(ctx, h.ID)
 	if err != nil || got.HouseholdName != "Smiths" || got.Location.String() != "America/New_York" ||
-		got.AdminIdle() != 10*time.Minute || got.DayStartsAt != "04:30" || got.ScreensaverIdle() != 0 || got.CalendarIdle() != 7*time.Minute ||
+		got.AdminIdle() != 10*time.Minute || got.DayStartsAt != "04:30" || got.ScreensaverIdle() != 0 || got.CalendarIdle() != 7*time.Minute || !got.CalendarChores ||
 		got.LockDays != 0b0111110 || got.LockFrom != "08:45" || got.LockUntil != "15:15" || got.LockIdle() != 12*time.Hour {
 		t.Fatalf("after update = %+v, %v", got, err)
 	}

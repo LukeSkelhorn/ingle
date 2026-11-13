@@ -37,11 +37,56 @@
 <div class="pinpad" data-pinpad data-length="{{with .}}{{.}}{{end}}">
   <div class="pinpad__dots" aria-hidden="true"></div>
   <p class="pinpad__msg" role="alert"></p>
-  <div class="pinpad__keys">
-    {{range $k := (list "1" "2" "3" "4" "5" "6" "7" "8" "9")}}<button type="button" class="pinpad__key" data-key="{{$k}}">{{$k}}</button>{{end}}
-    <button type="button" class="pinpad__key pinpad__key--muted" data-back aria-label="Delete">⌫</button>
-    <button type="button" class="pinpad__key" data-key="0">0</button>
-    <button type="button" class="pinpad__key pinpad__key--go" data-go aria-label="Unlock">→</button>
+  {{template "pinpad_keys" "Unlock"}}
+</div>
+{{end}}
+
+{{/* The pad's keys. The argument labels → for screen readers. */}}
+{{define "pinpad_keys"}}
+<div class="pinpad__keys">
+  {{range $k := (list "1" "2" "3" "4" "5" "6" "7" "8" "9")}}<button type="button" class="pinpad__key" data-key="{{$k}}">{{$k}}</button>{{end}}
+  <button type="button" class="pinpad__key pinpad__key--muted" data-back aria-label="Delete">⌫</button>
+  <button type="button" class="pinpad__key" data-key="0">0</button>
+  <button type="button" class="pinpad__key pinpad__key--go" data-go aria-label="{{.}}">→</button>
+</div>
+{{end}}
+
+{{/* Setting a PIN or code on the pad, so a tablet shows numbers and not its
+     keyboard. dict:
+       "Name"    the field
+       "Confirm" the field for typing it again (optional)
+       "Label"   e.g. "New PIN (4–6 digits)"
+       "Again"   e.g. "Confirm PIN"
+       "Err"     the error for either field
+       "Submit"  true: the pad sends the form once both match. false: it only
+                 fills the fields, for a form with more in it (setup).
+       "Button"  the submit button's text, shown only without scripts
+                 (optional; with Submit, the pad's → sends the form).
+     The fields are ordinary password boxes, so it all still works without
+     scripts. /static/pinpad.js (InglePinpad.set) hides them and asks for
+     the PIN on the pad twice. */}}
+{{define "pinpad_set"}}
+<div class="pinset" data-pinpad-set data-submit="{{if .Submit}}1{{end}}" data-label="{{.Label}}" data-again="{{.Again}}">
+  <div class="pinset__fields stack">
+    <label class="field field--short">
+      <span>{{.Label}}</span>
+      <input type="password" name="{{.Name}}" required inputmode="numeric" pattern="[0-9]{4,6}" minlength="4" maxlength="6" autocomplete="off" data-pin-first>
+    </label>
+    {{with .Confirm}}
+    <label class="field field--short">
+      <span>{{$.Again}}</span>
+      <input type="password" name="{{.}}" required inputmode="numeric" pattern="[0-9]{4,6}" minlength="4" maxlength="6" autocomplete="off" data-pin-again>
+    </label>
+    {{end}}
+    {{template "err" .Err}}
+    {{with .Button}}<button class="btn" type="submit">{{.}}</button>{{end}}
+  </div>
+  <div class="pinpad pinset__pad" data-pinpad tabindex="-1" hidden>
+    <p class="pinset__prompt" aria-live="polite"></p>
+    <div class="pinpad__dots" aria-hidden="true"></div>
+    <p class="pinpad__msg" role="alert">{{.Err}}</p>
+    {{template "pinpad_keys" "Next"}}
+    <button type="button" class="btn btn--ghost pinset__show" data-show aria-pressed="false">Show digits</button>
   </div>
 </div>
 {{end}}

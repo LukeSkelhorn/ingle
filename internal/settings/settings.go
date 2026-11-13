@@ -31,6 +31,9 @@ type Settings struct {
 	// CalendarIdleMinutes is how long a display shows the board calendar,
 	// untouched, before going back to the chores; 0 means never.
 	CalendarIdleMinutes int64
+	// CalendarChores is whether the board calendar shows chores as well as
+	// events by default; the board's Chores button overrides it for a while.
+	CalendarChores bool
 	// Lock schedule: on the weekdays in LockDays (bit 0 = Sunday) the
 	// displays lock at LockFrom and unlock at LockUntil (local "HH:MM"; the
 	// window runs overnight when LockFrom > LockUntil). LockDays 0 is off.
@@ -140,6 +143,7 @@ type Input struct {
 	AdminIdleMinutes       int64
 	ScreensaverIdleMinutes int64
 	CalendarIdleMinutes    int64
+	CalendarChores         bool
 	LockDays               int64
 	LockFrom               string
 	LockUntil              string
@@ -276,6 +280,7 @@ func (s *Service) Update(ctx context.Context, householdID, actorID int64, in Inp
 			AdminIdleMinutes:       in.AdminIdleMinutes,
 			ScreensaverIdleMinutes: in.ScreensaverIdleMinutes,
 			CalendarIdleMinutes:    in.CalendarIdleMinutes,
+			CalendarChores:         boolInt(in.CalendarChores),
 			LockDays:               in.LockDays,
 			LockFrom:               in.LockFrom,
 			LockUntil:              in.LockUntil,
@@ -334,6 +339,7 @@ func resolve(name string, row dbq.HouseholdSetting) (Settings, error) {
 		AdminIdleMinutes:       row.AdminIdleMinutes,
 		ScreensaverIdleMinutes: row.ScreensaverIdleMinutes,
 		CalendarIdleMinutes:    row.CalendarIdleMinutes,
+		CalendarChores:         row.CalendarChores == 1,
 		LockDays:               row.LockDays,
 		LockFrom:               row.LockFrom,
 		LockUntil:              row.LockUntil,
@@ -362,4 +368,11 @@ func ParseClock(s string) (time.Duration, error) {
 		return 0, fmt.Errorf("time %q: want HH:MM", s)
 	}
 	return time.Duration(t.Hour())*time.Hour + time.Duration(t.Minute())*time.Minute, nil
+}
+
+func boolInt(b bool) int64 {
+	if b {
+		return 1
+	}
+	return 0
 }

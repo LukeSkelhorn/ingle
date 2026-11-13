@@ -174,6 +174,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /board/calendar", viewer(s.handleCalendarView))
 	mux.Handle("GET /board/calendar/day/{date}", viewer(s.handleCalendarDay))
 	mux.Handle("GET /board/calendar/chores/{id}/{date}", viewer(s.handleCalendarChore))
+	mux.Handle("GET /board/calendar/event", viewer(s.handleCalendarEvent))
+	mux.Handle("GET /board/calendar/calendars", viewer(s.handleCalendarCalendars))
 	mux.Handle("GET /board/pool", viewer(s.handlePoolSheet))
 	mux.Handle("GET /board/occurrences/{id}/pick", viewer(s.handlePick))
 	mux.Handle("POST /board/occurrences/{id}/claim", viewer(s.handleClaim))
@@ -234,6 +236,9 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /admin/settings", admin(s.handleSettingsUpdate))
 	mux.Handle("POST /admin/settings/unlock-code", admin(s.handleUnlockCodeSet))
 	mux.Handle("POST /admin/settings/unlock-code/clear", admin(s.handleUnlockCodeClear))
+	mux.Handle("POST /admin/settings/holidays", admin(s.handleHolidayAdd))
+	mux.Handle("POST /admin/settings/holidays/{id}/end", admin(s.handleHolidayEnd))
+	mux.Handle("POST /admin/settings/holidays/{id}/delete", admin(s.handleHolidayRemove))
 	if s.Takeout != nil {
 		mux.Handle("GET /admin/household/export", admin(s.handleHouseholdExport))
 		mux.Handle("POST /admin/household/delete", admin(s.handleHouseholdDelete))

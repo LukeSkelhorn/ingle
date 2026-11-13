@@ -203,6 +203,7 @@ var activityText = map[string]string{
 	"photo.removed":           "removed a photo",
 	"calendar.added":          "added a calendar",
 	"calendar.removed":        "removed a calendar",
+	"calendar.updated":        "edited a calendar",
 	"lock.code_set":           "set the household unlock code",
 	"lock.code_cleared":       "removed the household unlock code",
 	"board.locked":            "locked the displays",
@@ -211,6 +212,9 @@ var activityText = map[string]string{
 	"board.unlocked":          "unlocked the displays",
 	"board.unlocked_code":     "unlocked the displays with the household code",
 	"board.unlocked_schedule": "unlocked the displays on schedule",
+	"holiday.added":           "added a holiday",
+	"holiday.ended":           "ended a holiday early",
+	"holiday.removed":         "removed a holiday",
 }
 
 // Settings.
@@ -226,12 +230,14 @@ type settingsForm struct {
 	AdminIdleMinutes       int64
 	ScreensaverIdleMinutes int64
 	CalendarIdleMinutes    int64
+	CalendarChores         bool
 	LockDays               int64
 	LockFrom               string
 	LockUntil              string
 	LockIdleHours          int64
 	HasUnlockCode          bool
 	Timezones              []string
+	Holiday                holidayForm
 }
 
 // weekdayOption is one checkbox of the lock schedule.
@@ -259,6 +265,7 @@ func (s *Server) settingsForm(set settings.Settings) settingsForm {
 		AdminIdleMinutes:       set.AdminIdleMinutes,
 		ScreensaverIdleMinutes: set.ScreensaverIdleMinutes,
 		CalendarIdleMinutes:    set.CalendarIdleMinutes,
+		CalendarChores:         set.CalendarChores,
 		LockDays:               set.LockDays,
 		LockFrom:               set.LockFrom,
 		LockUntil:              set.LockUntil,
@@ -279,6 +286,10 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 func (s *Server) renderSettings(w http.ResponseWriter, r *http.Request, status int, f settingsForm, errs map[string]string, flash string) {
 	f.Timezones = timezoneOptions(f.Timezone)
 	f.CanTakeout, f.StartsAgain = s.Takeout != nil, s.ResolveHousehold == nil
+	if err := s.loadHolidays(r, &f.Holiday); err != nil {
+		s.serverError(w, r, err)
+		return
+	}
 	v := s.view(r, "Settings", f)
 	v.Nav = "settings"
 	v.Errors = errs
@@ -299,6 +310,7 @@ func (s *Server) handleSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 		AdminIdleMinutes:       f.int("admin_idle_minutes", "Choose between 1 and 60 minutes."),
 		ScreensaverIdleMinutes: f.int("screensaver_idle_minutes", "Choose between 0 (never) and 120 minutes."),
 		CalendarIdleMinutes:    f.int("calendar_idle_minutes", "Choose between 0 (never) and 60 minutes."),
+		CalendarChores:         f.checked("calendar_chores"),
 		LockDays:               weekdayMask(r.PostForm["lock_day"]),
 		LockFrom:               f.str("lock_from"),
 		LockUntil:              f.str("lock_until"),
@@ -316,6 +328,7 @@ func (s *Server) handleSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 		DayStartsAt: data.DayStartsAt, AdminIdleMinutes: data.AdminIdleMinutes,
 		ScreensaverIdleMinutes: data.ScreensaverIdleMinutes,
 		CalendarIdleMinutes:    data.CalendarIdleMinutes,
+		CalendarChores:         data.CalendarChores,
 		LockDays:               data.LockDays, LockFrom: data.LockFrom, LockUntil: data.LockUntil, LockIdleHours: data.LockIdleHours,
 	})
 	if errs, ok := validationErrors(err); ok {

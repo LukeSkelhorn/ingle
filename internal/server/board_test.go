@@ -1219,7 +1219,7 @@ func TestEachChore(t *testing.T) {
 	expect(t, phone.get("/admin/chores"), http.StatusOK, "Each: Mum · Every day")
 
 	// The calendar sheet opens the copy tapped.
-	expect(t, wall.get("/board/calendar"), http.StatusOK,
+	expect(t, wall.get("/board/calendar?chores=1"), http.StatusOK,
 		`/board/calendar/chores/`+itoa(teeth.ID)+`/2026-07-02?person=`+itoa(mum.ID)+`&amp;at="`)
 	expect(t, wall.get("/board/calendar/chores/"+itoa(teeth.ID)+"/2026-07-02?person="+itoa(alfie.ID)), http.StatusOK, "Alfie", "2 pts · £0.10")
 }

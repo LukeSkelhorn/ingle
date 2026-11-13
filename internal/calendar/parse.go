@@ -13,12 +13,17 @@ import (
 
 // Event is one occurrence of a calendar event.
 type Event struct {
-	Title  string
-	Start  time.Time
-	End    time.Time // exclusive
-	AllDay bool
-	Colour string // the feed's colour; set by the Service
-	Feed   string // the feed's name; set by the Service
+	Title    string
+	Start    time.Time
+	End      time.Time // exclusive
+	AllDay   bool
+	Location string
+	Colour   string // the feed's colour; set by the Service
+	Feed     string // the feed's name; set by the Service
+	FeedID   int64  // set by the Service
+	// PersonID is whose calendar it is, or nil for the family's; set by
+	// the Service. Pages show a person's events in their colour.
+	PersonID *int64
 }
 
 // maxEvents caps how many occurrences one feed contributes to a window, so
@@ -178,7 +183,8 @@ func single(ev ical.Event, loc *time.Location) (Event, bool) {
 	if title == "" {
 		title = "Busy"
 	}
-	return Event{Title: title, Start: start, End: end, AllDay: allDay}, true
+	where, _ := ev.Props.Text(ical.PropLocation)
+	return Event{Title: title, Start: start, End: end, AllDay: allDay, Location: strings.TrimSpace(where)}, true
 }
 
 func isDate(p *ical.Prop) bool {

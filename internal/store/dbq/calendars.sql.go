@@ -9,10 +9,25 @@ import (
 	"context"
 )
 
+const clearCalendarFeedPerson = `-- name: ClearCalendarFeedPerson :exec
+UPDATE calendar_feeds SET person_id = NULL WHERE household_id = ? AND person_id = ?
+`
+
+type ClearCalendarFeedPersonParams struct {
+	HouseholdID int64  `json:"household_id"`
+	PersonID    *int64 `json:"person_id"`
+}
+
+// Turns an archived person's calendars into the family's.
+func (q *Queries) ClearCalendarFeedPerson(ctx context.Context, arg ClearCalendarFeedPersonParams) error {
+	_, err := q.db.ExecContext(ctx, clearCalendarFeedPerson, arg.HouseholdID, arg.PersonID)
+	return err
+}
+
 const createCalendarFeed = `-- name: CreateCalendarFeed :one
-INSERT INTO calendar_feeds (household_id, name, url, colour, created_by, created_at)
-VALUES (?, ?, ?, ?, ?, ?)
-RETURNING id, household_id, name, url, colour, created_by, created_at
+INSERT INTO calendar_feeds (household_id, name, url, colour, person_id, created_by, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?)
+RETURNING id, household_id, name, url, colour, created_by, created_at, person_id
 `
 
 type CreateCalendarFeedParams struct {
@@ -20,6 +35,7 @@ type CreateCalendarFeedParams struct {
 	Name        string `json:"name"`
 	Url         string `json:"url"`
 	Colour      string `json:"colour"`
+	PersonID    *int64 `json:"person_id"`
 	CreatedBy   *int64 `json:"created_by"`
 	CreatedAt   int64  `json:"created_at"`
 }
@@ -30,6 +46,7 @@ func (q *Queries) CreateCalendarFeed(ctx context.Context, arg CreateCalendarFeed
 		arg.Name,
 		arg.Url,
 		arg.Colour,
+		arg.PersonID,
 		arg.CreatedBy,
 		arg.CreatedAt,
 	)
@@ -42,6 +59,7 @@ func (q *Queries) CreateCalendarFeed(ctx context.Context, arg CreateCalendarFeed
 		&i.Colour,
 		&i.CreatedBy,
 		&i.CreatedAt,
+		&i.PersonID,
 	)
 	return i, err
 }
@@ -64,7 +82,7 @@ func (q *Queries) DeleteCalendarFeed(ctx context.Context, arg DeleteCalendarFeed
 }
 
 const getCalendarFeed = `-- name: GetCalendarFeed :one
-SELECT id, household_id, name, url, colour, created_by, created_at FROM calendar_feeds WHERE household_id = ? AND id = ?
+SELECT id, household_id, name, url, colour, created_by, created_at, person_id FROM calendar_feeds WHERE household_id = ? AND id = ?
 `
 
 type GetCalendarFeedParams struct {
@@ -83,12 +101,13 @@ func (q *Queries) GetCalendarFeed(ctx context.Context, arg GetCalendarFeedParams
 		&i.Colour,
 		&i.CreatedBy,
 		&i.CreatedAt,
+		&i.PersonID,
 	)
 	return i, err
 }
 
 const listCalendarFeeds = `-- name: ListCalendarFeeds :many
-SELECT id, household_id, name, url, colour, created_by, created_at FROM calendar_feeds WHERE household_id = ? ORDER BY name, id
+SELECT id, household_id, name, url, colour, created_by, created_at, person_id FROM calendar_feeds WHERE household_id = ? ORDER BY name, id
 `
 
 func (q *Queries) ListCalendarFeeds(ctx context.Context, householdID int64) ([]CalendarFeed, error) {
@@ -108,6 +127,7 @@ func (q *Queries) ListCalendarFeeds(ctx context.Context, householdID int64) ([]C
 			&i.Colour,
 			&i.CreatedBy,
 			&i.CreatedAt,
+			&i.PersonID,
 		); err != nil {
 			return nil, err
 		}
@@ -135,4 +155,28 @@ type SetCalendarFeedURLParams struct {
 func (q *Queries) SetCalendarFeedURL(ctx context.Context, arg SetCalendarFeedURLParams) error {
 	_, err := q.db.ExecContext(ctx, setCalendarFeedURL, arg.Url, arg.HouseholdID, arg.ID)
 	return err
+}
+
+const updateCalendarFeed = `-- name: UpdateCalendarFeed :execrows
+UPDATE calendar_feeds SET name = ?, person_id = ? WHERE household_id = ? AND id = ?
+`
+
+type UpdateCalendarFeedParams struct {
+	Name        string `json:"name"`
+	PersonID    *int64 `json:"person_id"`
+	HouseholdID int64  `json:"household_id"`
+	ID          int64  `json:"id"`
+}
+
+func (q *Queries) UpdateCalendarFeed(ctx context.Context, arg UpdateCalendarFeedParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateCalendarFeed,
+		arg.Name,
+		arg.PersonID,
+		arg.HouseholdID,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }

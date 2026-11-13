@@ -46,14 +46,18 @@ type Feed struct {
 	ID        int64
 	Name      string
 	Colour    string
+	PersonID  *int64 // whose calendar it is; nil for the family's
 	Masked    string // e.g. "calendar.google.com/…"
 	FetchedAt time.Time
 	Error     string
 }
 
 type feedState struct {
+	id          int64
 	householdID int64
 	colour      string
+	name        string
+	personID    *int64
 	events      []Event
 	fetchedAt   time.Time // last success
 	err         string    // last failure, cleared on success
@@ -133,7 +137,7 @@ func (s *Service) Feeds(ctx context.Context, householdID int64) ([]Feed, error) 
 		if err != nil {
 			return nil, fmt.Errorf("calendar %d: %w", r.ID, err)
 		}
-		f := Feed{ID: r.ID, Name: r.Name, Colour: r.Colour, Masked: Mask(u)}
+		f := Feed{ID: r.ID, Name: r.Name, Colour: r.Colour, PersonID: r.PersonID, Masked: Mask(u)}
 		if st := s.state[r.ID]; st != nil {
 			f.FetchedAt, f.Error = st.fetchedAt, st.err
 		}
@@ -144,13 +148,11 @@ func (s *Service) Feeds(ctx context.Context, householdID int64) ([]Feed, error) 
 
 // AddFeed validates and fetches a feed, and saves it only if it could be
 // read, so a mistyped address is caught straight away. Problems are
-// returned as valid.Errors on "name" or "url".
-func (s *Service) AddFeed(ctx context.Context, householdID, actorID int64, name, rawURL string) (Feed, error) {
+// returned as valid.Errors on "name", "url" or "person". personID is whose
+// calendar it is, or nil for the family's.
+func (s *Service) AddFeed(ctx context.Context, householdID, actorID int64, name, rawURL string, personID *int64) (Feed, error) {
 	errs := valid.Errors{}
-	name = strings.TrimSpace(name)
-	if name == "" || len([]rune(name)) > 50 {
-		errs.Add("name", "Enter a name (up to 50 characters).")
-	}
+	name = s.checkFeed(ctx, householdID, name, personID, errs)
 	u, err := NormaliseURL(rawURL)
 	if err != nil {
 		errs.Add("url", capitalise(err.Error())+".")
@@ -179,7 +181,7 @@ func (s *Service) AddFeed(ctx context.Context, householdID, actorID int64, name,
 		var err error
 		row, err = q.CreateCalendarFeed(ctx, dbq.CreateCalendarFeedParams{
 			HouseholdID: householdID, Name: name, Url: sealed, Colour: colour,
-			CreatedBy: &actorID, CreatedAt: now.Unix(),
+			PersonID: personID, CreatedBy: &actorID, CreatedAt: now.Unix(),
 		})
 		if err != nil {
 			return fmt.Errorf("create calendar: %w", err)
@@ -193,7 +195,74 @@ func (s *Service) AddFeed(ctx context.Context, householdID, actorID int64, name,
 		return Feed{}, err
 	}
 	s.store(row, events, nil)
-	return Feed{ID: row.ID, Name: row.Name, Colour: row.Colour, Masked: Mask(u), FetchedAt: now}, nil
+	return Feed{ID: row.ID, Name: row.Name, Colour: row.Colour, PersonID: row.PersonID, Masked: Mask(u), FetchedAt: now}, nil
+}
+
+// checkFeed checks a feed's name and owner, adding problems to errs, and
+// returns the trimmed name. The owner must be someone in the household who
+// isn't archived.
+func (s *Service) checkFeed(ctx context.Context, householdID int64, name string, personID *int64, errs valid.Errors) string {
+	name = strings.TrimSpace(name)
+	if name == "" || len([]rune(name)) > 50 {
+		errs.Add("name", "Enter a name (up to 50 characters).")
+	}
+	if personID != nil {
+		p, err := s.st.Q.GetPerson(ctx, dbq.GetPersonParams{HouseholdID: householdID, ID: *personID})
+		if err != nil || p.ArchivedAt != nil {
+			errs.Add("person", "Choose someone in the household, or the family.")
+		}
+	}
+	return name
+}
+
+// UpdateFeed changes a feed's name and whose it is (nil for the family's).
+// Its cached events change straight away. Problems are returned as
+// valid.Errors on "name" or "person".
+func (s *Service) UpdateFeed(ctx context.Context, householdID, actorID, feedID int64, name string, personID *int64) error {
+	errs := valid.Errors{}
+	name = s.checkFeed(ctx, householdID, name, personID, errs)
+	if err := errs.Err(); err != nil {
+		return err
+	}
+	err := s.st.WithTx(ctx, func(q *dbq.Queries) error {
+		n, err := q.UpdateCalendarFeed(ctx, dbq.UpdateCalendarFeedParams{
+			Name: name, PersonID: personID, HouseholdID: householdID, ID: feedID,
+		})
+		if err != nil {
+			return fmt.Errorf("update calendar: %w", err)
+		}
+		if n == 0 {
+			return ErrNotFound
+		}
+		return store.LogActivity(ctx, q, store.Activity{
+			HouseholdID: householdID, ActorID: &actorID, Verb: "calendar.updated",
+			SubjectType: "calendar", SubjectID: feedID, At: s.now(),
+		})
+	})
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if st := s.state[feedID]; st != nil && st.householdID == householdID {
+		st.name, st.personID = name, personID
+		st.stamp()
+	}
+	return nil
+}
+
+// ForgetPerson turns a person's cached calendars into the family's, after
+// they're archived (household.Service.ArchivePerson does the same in the
+// database).
+func (s *Service) ForgetPerson(householdID, personID int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, st := range s.state {
+		if st.householdID == householdID && st.personID != nil && *st.personID == personID {
+			st.personID = nil
+			st.stamp()
+		}
+	}
 }
 
 // RemoveFeed deletes a feed and forgets its events.
@@ -265,18 +334,24 @@ func (s *Service) store(r dbq.CalendarFeed, events []Event, fetchErr error) {
 	defer s.mu.Unlock()
 	st := s.state[r.ID]
 	if st == nil {
-		st = &feedState{}
+		st = &feedState{id: r.ID}
 		s.state[r.ID] = st
 	}
-	st.householdID, st.colour = r.HouseholdID, r.Colour
-	if fetchErr != nil {
+	st.householdID, st.colour, st.name, st.personID = r.HouseholdID, r.Colour, r.Name, r.PersonID
+	if fetchErr == nil {
+		st.events, st.fetchedAt, st.err = events, s.now(), ""
+	} else {
 		st.err = fetchErr.Error()
-		return
 	}
-	for i := range events {
-		events[i].Colour, events[i].Feed = r.Colour, r.Name
+	st.stamp()
+}
+
+// stamp copies the feed's details onto its events. Callers hold s.mu.
+func (st *feedState) stamp() {
+	for i := range st.events {
+		e := &st.events[i]
+		e.Colour, e.Feed, e.FeedID, e.PersonID = st.colour, st.name, st.id, st.personID
 	}
-	st.events, st.fetchedAt, st.err = events, s.now(), ""
 }
 
 // Upcoming returns the household's events overlapping [from, to), merged

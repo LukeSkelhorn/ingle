@@ -304,5 +304,6 @@ func (m calendarModule) Routes(r module.Router) {
 	r.Admin("GET /admin/calendars", s.handleCalendars)
 	r.Admin("POST /admin/calendars", s.handleCalendarAdd)
 	r.Admin("POST /admin/calendars/refresh", s.handleCalendarRefresh)
+	r.Admin("POST /admin/calendars/{id}/edit", s.handleCalendarEdit)
 	r.Admin("POST /admin/calendars/{id}/delete", s.handleCalendarDelete)
 }

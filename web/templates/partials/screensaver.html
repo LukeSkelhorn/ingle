@@ -32,5 +32,5 @@
 {{end}}
 
 {{define "saver_event"}}
-<li class="saver__event"><span class="saver__dot" style="--dot: {{.Colour}}" aria-hidden="true"></span><span class="saver__when">{{.When}}</span> <span class="saver__title">{{.Title}}</span></li>
+<li class="saver__event">{{with .Person}}{{template "avatar" (avatar . "xs")}}{{else}}<span class="saver__dot" style="--dot: {{.Colour}}" aria-hidden="true"></span>{{end}}<span class="saver__when">{{.When}}</span> <span class="saver__title">{{.Title}}</span></li>
 {{end}}

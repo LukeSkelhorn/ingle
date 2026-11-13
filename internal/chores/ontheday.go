@@ -99,11 +99,18 @@ func (s *Service) Missed(ctx context.Context, householdID int64, boardDay time.T
 	for _, p := range people {
 		byID[p.ID] = p
 	}
+	hols, err := loadHolidays(ctx, q, householdID, from)
+	if err != nil {
+		return nil, err
+	}
 	loc, dayStart, now := s.loc(ctx, householdID), s.dayStart(ctx, householdID), s.now()
 	var out []MissedDetail
 	for _, r := range rows {
 		if r.Status != StatusOpen && r.Status != StatusClaimed {
 			continue
+		}
+		if hols.cleared(r.DueOn, today, rowOwners(r, shared)) {
+			continue // cleared by a holiday
 		}
 		at, ok := onTheDayCutoff(r.OnTheDay, r.DueOn, optTime(r.DueTime), loc, dayStart)
 		if !ok || now.Before(at) {
