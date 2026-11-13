@@ -697,6 +697,13 @@ details.card .list { margin: 8px -20px -20px; }
 }
 .cal__views button[aria-pressed="true"] { background: var(--accent-fill); color: var(--accent-fg); }
 .cal__hint { margin: 12px 0 0; font-size: 0.9rem; }
+.cal__people { display: flex; gap: 8px; flex-wrap: wrap; margin: -4px 0 12px; }
+.cal__person {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 4px 14px 4px 6px; font: inherit; color: var(--fg);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 999px; cursor: pointer; touch-action: manipulation;
+}
+.cal__person[aria-pressed="true"] { border-color: var(--person); background: color-mix(in srgb, var(--person) 18%, var(--surface)); font-weight: 600; }
+.cal__person:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .cal__week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
 .cal__day {
@@ -720,6 +727,9 @@ details.card .list { margin: 8px -20px -20px; }
   border: 0; border-radius: 8px; padding: 6px 8px; background: var(--bg); overflow-wrap: anywhere;
 }
 .cal-item--event { border-left: 4px solid var(--item); }
+button.cal-item--event { cursor: pointer; touch-action: manipulation; }
+button.cal-item--event:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.cal-item__feed { display: block; font-size: 0.72rem; font-weight: 400; color: var(--muted); }
 .cal-item--allday { background: color-mix(in srgb, var(--item) 22%, var(--surface)); border-left: 0; font-weight: 600; }
 .cal-item__when { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 0.8rem; }
 .cal-item__or { font-size: 0.8em; color: var(--muted); white-space: nowrap; }
@@ -771,6 +781,12 @@ details.card .list { margin: 8px -20px -20px; }
 .cal-sheet__facts dt { color: var(--muted); }
 .cal-sheet__facts dd { margin: 0; }
 .cal-sheet__desc { margin: 0 0 12px; }
+.cal-sheet__feed { --item: var(--accent); display: inline-flex; align-items: center; gap: 8px; }
+.cal-sheet__feed i { width: 12px; height: 12px; border-radius: 50%; background: var(--item); flex: none; }
+.cal-feeds { list-style: none; margin: 16px 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.cal-feeds__item { align-items: center; flex-wrap: wrap; padding: 8px 0; }
+.cal-feeds__item input { margin-top: 0; }
+.cal-feeds__who { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 0.9rem; }
 
 /* Phones: the week is a day-by-day list; month cells shrink to dots. */
 @media (max-width: 700px) {

@@ -86,7 +86,7 @@
     });
     document.addEventListener("htmx:afterRequest", function (e) {
       var elt = e.detail.elt;
-      if (sheet.open && sheet.contains(elt) && elt.hasAttribute("hx-post") && !elt.closest("[data-keep-open]")) sheet.close();
+      if (sheet.open && sheet.contains(elt) && (elt.hasAttribute("hx-post") || elt.hasAttribute("data-close-after")) && !elt.closest("[data-keep-open]")) sheet.close();
     });
     sheet.addEventListener("click", function (e) {
       if (e.target === sheet || e.target.closest("[data-close]")) sheet.close();
@@ -262,13 +262,13 @@
       clearTimeout(idleTimer);
       if (calIdleMs > 0 && current() === "calendar") idleTimer = setTimeout(goneIdle, calIdleMs);
     }
-    // Back to the chores, and the Chores button back to the household's
-    // setting: the next look at the calendar leaves the chores param out.
+    // Back to the chores, with the Chores button back to the household's
+    // setting and no filters: the next look at the calendar leaves them out.
     function goneIdle() {
       var w = cal.querySelector("[data-src]");
       if (w) {
         var u = new URL(w.dataset.src, location.href);
-        u.searchParams.delete("chores");
+        ["chores", "person", "hide"].forEach(function (k) { u.searchParams.delete(k); });
         w.dataset.src = u.pathname + u.search;
       }
       show("chores");

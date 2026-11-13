@@ -53,6 +53,7 @@ type Feed struct {
 }
 
 type feedState struct {
+	id          int64
 	householdID int64
 	colour      string
 	name        string
@@ -333,7 +334,7 @@ func (s *Service) store(r dbq.CalendarFeed, events []Event, fetchErr error) {
 	defer s.mu.Unlock()
 	st := s.state[r.ID]
 	if st == nil {
-		st = &feedState{}
+		st = &feedState{id: r.ID}
 		s.state[r.ID] = st
 	}
 	st.householdID, st.colour, st.name, st.personID = r.HouseholdID, r.Colour, r.Name, r.PersonID
@@ -348,7 +349,8 @@ func (s *Service) store(r dbq.CalendarFeed, events []Event, fetchErr error) {
 // stamp copies the feed's details onto its events. Callers hold s.mu.
 func (st *feedState) stamp() {
 	for i := range st.events {
-		st.events[i].Colour, st.events[i].Feed, st.events[i].PersonID = st.colour, st.name, st.personID
+		e := &st.events[i]
+		e.Colour, e.Feed, e.FeedID, e.PersonID = st.colour, st.name, st.id, st.personID
 	}
 }
 
