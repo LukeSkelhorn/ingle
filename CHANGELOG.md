@@ -6,6 +6,8 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ## [Unreleased]
 
+## [v0.4.1] - 2026-11-13
+
 ### Added
 
 - **Filter the board calendar.** Each person with a calendar of their own has a button on the board calendar. Tap it to see just their events, the family's events and holidays, and, with chores on, their chores and those up for grabs. Tap it again to see everyone. The new **Calendars** button hides calendars you don't want on the wall, like a work calendar. Filters go when the calendar returns to the chores after being left alone, or when the page reloads. Each event now says which calendar it's from, and tapping it shows when and where it is, its calendar, and whose it is. ([DOM-56](https://linear.app/skeltech/issue/DOM-56))
@@ -14,7 +16,6 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 - **Download or delete your household's data.** Admin › Settings › Your household's data downloads everything Ingle holds for your household as a zip: people, chores, points and money, rewards, calendars, settings, photos and pictures. Passwords, PINs and sign-in codes aren't included. You can also delete the household and everything in it, after typing its name to confirm. Self-hosted Ingle then starts again at first-run setup. ([DOM-70](https://linear.app/skeltech/issue/DOM-70))
 - **For developers: Postgres.** Set `INGLE_DATABASE_URL` to a `postgres://` URL to run Ingle on Postgres instead of SQLite. This is for Hosted; self-hosted Ingle stays on SQLite and nothing changes for it. Both use the same queries, and each database has its own migrations. Nightly backups are SQLite only, so use the Postgres service's own backups. `task pg:up` starts a local Postgres and `task test:pg` runs the tests on it. ([DOM-70](https://linear.app/skeltech/issue/DOM-70))
 - **For developers: households kept apart by the database.** On Postgres, every table has row-level security, so each request and background job can only see and change its own household's rows. A query that forgets to filter by household returns nothing, not another family's data. Run the app as a role that can't bypass it, with the owner set in `INGLE_DATABASE_MIGRATE_URL` for migrations. Self-hosted SQLite is unchanged. ([DOM-70](https://linear.app/skeltech/issue/DOM-70))
-
 - **Encrypted calendar links.** Set `INGLE_MASTER_KEY` (make one with `openssl rand -base64 32`) and calendar links, which have a private key in them, are stored encrypted, with a separate key for each household. Links you've already added are encrypted on the next refresh. Keep the master key somewhere other than the database and its backups. It's optional for self-hosted Ingle and required with Postgres. ([DOM-70](https://linear.app/skeltech/issue/DOM-70))
 
 ### Changed
