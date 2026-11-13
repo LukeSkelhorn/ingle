@@ -475,6 +475,42 @@ func TestAdultPointsMigration(t *testing.T) {
 	}
 }
 
+// Rewards from before 00025 stay for everyone.
+func TestRewardPeopleMigration(t *testing.T) {
+	st := openTest(t)
+	ctx := t.Context()
+	sub, err := fs.Sub(migrations, "migrations/sqlite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := goose.NewProvider(goose.DialectSQLite3, st.DB, sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.DownTo(ctx, 24); err != nil {
+		t.Fatalf("DownTo(24): %v", err)
+	}
+	for _, q := range []string{
+		`INSERT INTO households (id, name, created_at) VALUES (1, 'Home', 1)`,
+		`INSERT INTO rewards (id, household_id, title, cost_points, created_at) VALUES (1, 1, 'Film', 10, 1)`,
+	} {
+		if _, err := st.DB.ExecContext(ctx, q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	if _, err := p.Up(ctx); err != nil {
+		t.Fatalf("Up: %v", err)
+	}
+	var everyone, people int64
+	if err := st.DB.QueryRowContext(ctx,
+		`SELECT everyone, (SELECT COUNT(*) FROM reward_people) FROM rewards WHERE id = 1`).Scan(&everyone, &people); err != nil {
+		t.Fatal(err)
+	}
+	if everyone != 1 || people != 0 {
+		t.Errorf("after up: everyone = %d, %d people; want 1, 0", everyone, people)
+	}
+}
+
 // v0.3's migrations (modules, bank requests, bank balances) come after
 // v0.2.4's 14 and 15, so a database upgraded from v0.2.4 runs just them.
 func TestV03MigrationsAfterV024(t *testing.T) {

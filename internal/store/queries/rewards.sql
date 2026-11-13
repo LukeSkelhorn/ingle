@@ -101,8 +101,8 @@ ORDER BY title;
 UPDATE rewards SET archived_at = NULL WHERE household_id = ? AND id = ?;
 
 -- name: ListGoals :many
--- What each active person is saving for (never an archived reward), and
--- whether they've already asked for it.
+-- What each active person is saving for (never an archived reward, or one
+-- they may not have), and whether they've already asked for it.
 SELECT
     p.id AS person_id, CAST(p.goal_set_at AS INTEGER) AS set_at,
     r.id, r.title, r.emoji, r.cost_points, r.cost_pence,
@@ -113,7 +113,10 @@ SELECT
     ) AS INTEGER) AS waiting
 FROM people p
 JOIN rewards r ON r.id = p.goal_reward_id AND r.household_id = p.household_id
-WHERE p.household_id = ? AND p.archived_at IS NULL AND r.archived_at IS NULL;
+WHERE p.household_id = ? AND p.archived_at IS NULL AND r.archived_at IS NULL
+  AND (r.everyone = 1 OR EXISTS (
+      SELECT 1 FROM reward_people rp WHERE rp.reward_id = r.id AND rp.person_id = p.id))
+  AND (r.cost_pence = 0 OR p.kind <> 'adult');
 
 -- name: ListPendingRedemptionsForPerson :many
 -- A person's waiting claims, newest first, with what they're for.
@@ -122,3 +125,64 @@ FROM redemptions d
 JOIN rewards r ON r.id = d.reward_id
 WHERE d.household_id = sqlc.arg(household_id) AND d.person_id = sqlc.arg(person_id) AND d.status = 'pending'
 ORDER BY d.requested_at DESC, d.id DESC;
+
+-- name: ListRewardsForPerson :many
+-- The active rewards a person may have, ordered like ListRewards. A person
+-- may have a reward when it's for everyone or they're one of its people,
+-- and (as adults have no money) it costs no money or they aren't an adult.
+-- RewardAllowed, ClearGoalsNotAllowed and ListGoals apply the same rule.
+SELECT * FROM rewards r
+WHERE r.household_id = sqlc.arg(household_id) AND r.archived_at IS NULL
+  AND (r.everyone = 1 OR EXISTS (
+      SELECT 1 FROM reward_people rp WHERE rp.reward_id = r.id AND rp.person_id = sqlc.arg(person_id)))
+  AND (r.cost_pence = 0 OR NOT EXISTS (
+      SELECT 1 FROM people p
+      WHERE p.household_id = r.household_id AND p.id = sqlc.arg(person_id) AND p.kind = 'adult'))
+ORDER BY r.cost_points, r.cost_pence, r.title;
+
+-- name: RewardAllowed :one
+-- 1 if a person may have the reward, else 0.
+SELECT CAST(EXISTS (
+    SELECT 1 FROM rewards r JOIN people p ON p.household_id = r.household_id
+    WHERE r.household_id = sqlc.arg(household_id) AND r.id = sqlc.arg(reward_id) AND p.id = sqlc.arg(person_id)
+      AND (r.everyone = 1 OR EXISTS (
+          SELECT 1 FROM reward_people rp WHERE rp.reward_id = r.id AND rp.person_id = p.id))
+      AND (r.cost_pence = 0 OR p.kind <> 'adult')
+) AS INTEGER) AS allowed;
+
+-- name: ClearGoalsNotAllowed :exec
+-- After a reward changes, anyone saving for it who may no longer have it
+-- stops.
+UPDATE people SET goal_reward_id = NULL, goal_set_at = NULL
+WHERE people.household_id = sqlc.arg(household_id) AND people.goal_reward_id = sqlc.arg(reward_id)
+  AND NOT EXISTS (
+      SELECT 1 FROM rewards r
+      WHERE r.id = people.goal_reward_id AND r.household_id = people.household_id
+        AND (r.everyone = 1 OR EXISTS (
+            SELECT 1 FROM reward_people rp WHERE rp.reward_id = r.id AND rp.person_id = people.id))
+        AND (r.cost_pence = 0 OR people.kind <> 'adult'));
+
+-- name: SetRewardEveryone :exec
+UPDATE rewards SET everyone = ? WHERE household_id = ? AND id = ?;
+
+-- name: ListPeopleForReward :many
+-- A reward's chosen people who are still active, in board order.
+SELECT rp.person_id
+FROM reward_people rp
+JOIN people p ON p.id = rp.person_id
+WHERE rp.household_id = ? AND rp.reward_id = ? AND p.archived_at IS NULL
+ORDER BY p.sort_order, p.id;
+
+-- name: ListRewardPeople :many
+-- Every reward's chosen people who are still active, in board order.
+SELECT rp.reward_id, rp.person_id
+FROM reward_people rp
+JOIN people p ON p.id = rp.person_id
+WHERE rp.household_id = ? AND p.archived_at IS NULL
+ORDER BY rp.reward_id, p.sort_order, p.id;
+
+-- name: DeleteRewardPeople :exec
+DELETE FROM reward_people WHERE household_id = ? AND reward_id = ?;
+
+-- name: AddRewardPerson :exec
+INSERT INTO reward_people (household_id, reward_id, person_id) VALUES (?, ?, ?);

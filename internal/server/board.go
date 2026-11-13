@@ -442,7 +442,7 @@ func (s *Server) handlePersonSheet(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	rewards, err := s.Household.Rewards(ctx, hhOf(r))
+	rewards, err := s.Household.RewardsFor(ctx, hhOf(r), id)
 	if err != nil {
 		s.serverError(w, r, err)
 		return

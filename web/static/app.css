@@ -637,6 +637,7 @@ details.card .list { margin: 8px -20px -20px; }
 .people-pick__item input { position: absolute; opacity: 0; }
 .people-pick__item:has(input:checked) { border-color: var(--accent); background: var(--bg); }
 .people-pick__item:has(input:focus-visible) { outline: 2px solid var(--accent); }
+.people-pick__item:has(input:disabled) { opacity: .4; cursor: not-allowed; }
 
 @media (max-width: 600px) {
   body { font-size: 17px; }

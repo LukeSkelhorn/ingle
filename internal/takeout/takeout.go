@@ -43,6 +43,7 @@ var Tables = []Table{
 	{Name: "completions", Key: "household_id"},
 	{Name: "redemptions", Key: "household_id"},
 	{Name: "chore_people", Key: "household_id"},
+	{Name: "reward_people", Key: "household_id"},
 	{Name: "chore_occurrences", Key: "household_id"},
 	{Name: "holidays", Key: "household_id"},
 	{Name: "chores", Key: "household_id"},
