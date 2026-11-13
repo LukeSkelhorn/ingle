@@ -413,6 +413,10 @@ func (s *Server) handlePersonArchive(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
+	if s.Calendars != nil {
+		// Their calendars are the family's now.
+		s.Calendars.ForgetPerson(hhOf(r), p.ID)
+	}
 	if actor(r).Person.ID == p.ID {
 		// Archiving yourself ends your own session.
 		s.clearCookie(w, r, sessionCookie)

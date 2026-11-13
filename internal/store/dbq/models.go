@@ -28,6 +28,7 @@ type CalendarFeed struct {
 	Colour      string `json:"colour"`
 	CreatedBy   *int64 `json:"created_by"`
 	CreatedAt   int64  `json:"created_at"`
+	PersonID    *int64 `json:"person_id"`
 }
 
 type Chore struct {

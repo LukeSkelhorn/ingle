@@ -658,6 +658,10 @@ details.card .list { margin: 8px -20px -20px; }
 .photo-grid__remove { width: 100%; }
 .problems { margin: 0 0 16px; padding-left: 20px; }
 .dot { flex: none; width: 14px; height: 14px; border-radius: 50%; background: var(--dot); }
+.feed-edit { flex-basis: 100%; }
+.feed-edit summary { list-style: none; display: inline-block; }
+.feed-edit summary::-webkit-details-marker { display: none; }
+.feed-edit[open] summary { margin-bottom: 12px; }
 .help summary { cursor: pointer; color: var(--accent-ink); }
 .help ul { padding-left: 20px; }
 .help li + li { margin-top: 6px; }

@@ -31,6 +31,7 @@ type screensaverView struct {
 
 type eventView struct {
 	Title, When, Colour string
+	Person              *dbq.Person // whose calendar it's from; nil for the family's
 }
 
 type progressView struct {
@@ -85,12 +86,24 @@ func (s *Server) screensaver(r *http.Request) (screensaverView, error) {
 	tomorrow := midnight.AddDate(0, 0, 1)
 	after := midnight.AddDate(0, 0, 2)
 
+	people, err := s.Store.Q.ListPeople(ctx, hhOf(r))
+	if err != nil {
+		return v, err
+	}
+	byID := make(map[int64]*dbq.Person, len(people))
+	for i := range people {
+		byID[people[i].ID] = &people[i]
+	}
+
 	n := 0
 	for _, e := range s.Calendars.Upcoming(hhOf(r), now, after) {
 		if n == maxScreensaverEvents {
 			break
 		}
-		ev := eventView{Title: e.Title, Colour: e.Colour}
+		ev := eventView{Title: e.Title, Colour: e.Colour, Person: eventOwner(byID, e)}
+		if ev.Person != nil {
+			ev.Colour = ev.Person.Colour
+		}
 		switch onToday := e.Start.Before(tomorrow); {
 		case e.AllDay:
 			ev.When = "All day"
@@ -299,14 +312,23 @@ func (s *Server) handlePhotoDelete(w http.ResponseWriter, r *http.Request) {
 // Admin › Calendars.
 
 type calendarsPage struct {
-	Feeds []feedView
-	Name  string
-	URL   string
+	Feeds  []feedView
+	People []dbq.Person // who a calendar can belong to
+	// The add form.
+	Name     string
+	URL      string
+	PersonID int64 // 0: the family
+	// Edit is the feed whose edit form failed, shown open with what was
+	// typed; 0 when none did.
+	Edit       int64
+	EditName   string
+	EditPerson int64
 }
 
 type feedView struct {
 	calendar.Feed
-	Updated string // "Updated 3 min ago", or "" before the first fetch
+	Owner   *dbq.Person // nil: the family's
+	Updated string      // "Updated 3 min ago", or "" before the first fetch
 }
 
 func (s *Server) handleCalendars(w http.ResponseWriter, r *http.Request) {
@@ -319,10 +341,21 @@ func (s *Server) renderCalendars(w http.ResponseWriter, r *http.Request, status 
 		s.serverError(w, r, err)
 		return
 	}
+	if p.People, err = s.Store.Q.ListPeople(r.Context(), hhOf(r)); err != nil {
+		s.serverError(w, r, err)
+		return
+	}
 	now := s.now()
 	p.Feeds = p.Feeds[:0]
 	for _, f := range feeds {
 		fv := feedView{Feed: f}
+		if f.PersonID != nil {
+			for i := range p.People {
+				if p.People[i].ID == *f.PersonID {
+					fv.Owner = &p.People[i]
+				}
+			}
+		}
 		if !f.FetchedAt.IsZero() {
 			fv.Updated = "Updated " + ago(now.Sub(f.FetchedAt))
 		}
@@ -341,8 +374,12 @@ func (s *Server) handleCalendarAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f := newForm(r)
+	who := f.optID("person")
 	p := calendarsPage{Name: f.str("name"), URL: f.str("url")}
-	_, err := s.Calendars.AddFeed(r.Context(), hhOf(r), actor(r).Person.ID, p.Name, p.URL)
+	if who != nil {
+		p.PersonID = *who
+	}
+	_, err := s.Calendars.AddFeed(r.Context(), hhOf(r), actor(r).Person.ID, p.Name, p.URL, who)
 	if errs, ok := validationErrors(err); ok {
 		s.renderCalendars(w, r, http.StatusUnprocessableEntity, p, errs, "")
 		return
@@ -352,6 +389,44 @@ func (s *Server) handleCalendarAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.renderCalendars(w, r, http.StatusOK, calendarsPage{}, nil, p.Name+" added.")
+}
+
+// handleCalendarEdit changes a calendar's name and whose it is.
+func (s *Server) handleCalendarEdit(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	if err := parseForm(w, r); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	f := newForm(r)
+	name, who := f.str("name"), f.optID("person")
+	err := s.Calendars.UpdateFeed(r.Context(), hhOf(r), actor(r).Person.ID, id, name, who)
+	if errs, ok := validationErrors(err); ok {
+		p := calendarsPage{Edit: id, EditName: name}
+		if who != nil {
+			p.EditPerson = *who
+		}
+		// The edit form's fields are named apart from the add form's.
+		shown := map[string]string{}
+		for k, v := range errs {
+			shown["edit_"+k] = v
+		}
+		s.renderCalendars(w, r, http.StatusUnprocessableEntity, p, shown, "")
+		return
+	}
+	if errors.Is(err, calendar.ErrNotFound) {
+		s.renderCalendars(w, r, http.StatusNotFound, calendarsPage{}, nil, "That calendar has gone.")
+		return
+	}
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	s.renderCalendars(w, r, http.StatusOK, calendarsPage{}, nil, name+" saved.")
 }
 
 func (s *Server) handleCalendarDelete(w http.ResponseWriter, r *http.Request) {
