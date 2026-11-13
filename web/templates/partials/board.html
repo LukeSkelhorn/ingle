@@ -11,6 +11,7 @@
     {{else}}<p class="muted">A grown-up can add people and chores in Admin.</p>{{end}}
   </div>
   {{else}}
+  {{with .Holiday}}<p class="board__holiday">🏖️ On holiday {{.Until $.Day}}</p>{{end}}
   <div class="columns">
     {{range $col := .Columns}}
     <section class="column" style="--person: {{.Person.Colour}}" aria-label="{{.Person.Name}}" data-person="{{.Person.ID}}">
@@ -37,6 +38,8 @@
       <ul class="chores{{if .Person.PictureCards}} chores--pictures{{end}}">
         {{- range .Cards}}{{template "card" (dict "Card" . "Adult" $.Adult "Pictures" $col.Person.PictureCards)}}{{end -}}
       </ul>
+      {{else if and .Away (not $.Holiday)}}
+      <p class="column__empty">🏖️ Away {{.Away.Until $.Day}}</p>
       {{else}}
       <p class="column__empty">Nothing today.</p>
       {{end}}

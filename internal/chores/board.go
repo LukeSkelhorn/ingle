@@ -32,6 +32,8 @@ type Board struct {
 	// NextChange is the next time an Only on the day chore on the board
 	// runs out (zero if none), so displays can refresh then.
 	NextChange time.Time
+	// Holiday is set while everyone's on holiday (the one ending last).
+	Holiday *Holiday
 }
 
 // Column is one person's chores and balance (what they can spend: waiting
@@ -47,6 +49,7 @@ type Column struct {
 	DoneToday  int
 	TotalToday int
 	Cards      []Card
+	Away       *Holiday // set while this person is on holiday on their own
 }
 
 // Card is one occurrence on the board.
@@ -165,6 +168,10 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 	for _, p := range people {
 		byPerson[p.ID] = p
 	}
+	hols, err := loadHolidays(ctx, q, householdID, from)
+	if err != nil {
+		return Board{}, err
+	}
 
 	b := Board{Day: today, People: people}
 	cols := make(map[int64]*Column, len(people))
@@ -172,6 +179,18 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 	for i, p := range people {
 		b.Columns[i] = Column{Person: p}
 		cols[p.ID] = &b.Columns[i]
+	}
+	for _, h := range holidayViews(hols, people) {
+		if !h.Current(today) {
+			continue
+		}
+		at := &b.Holiday
+		if h.Person != nil {
+			at = &cols[h.Person.ID].Away // holidayViews leaves out archived people
+		}
+		if *at == nil || h.EndsOn > (*at).EndsOn {
+			*at = &h
+		}
 	}
 	for _, bal := range balances {
 		if c := cols[bal.PersonID]; c != nil {
@@ -197,6 +216,9 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 			continue
 		}
 		comp, done := byOcc[r.ID]
+		if !done && hols.cleared(r.DueOn, today, rowOwners(r, shared)) {
+			continue // paused or cleared by a holiday
+		}
 		flex := r.AvailableFrom != nil
 		if r.DueOn < today && latest[copyOf{r.ChoreID, r.ForPerson}] > r.DueOn {
 			continue // superseded by a newer occurrence
@@ -269,8 +291,8 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 			ids := shared[r.ChoreID]
 			for _, id := range ids {
 				col := cols[id]
-				if col == nil {
-					continue
+				if col == nil || hols.awayOn(today, []int64{id}) {
+					continue // archived, or away: the others do it
 				}
 				c := card
 				c.For = id

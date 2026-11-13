@@ -98,6 +98,15 @@ type Device struct {
 	RevokedAt   *int64 `json:"revoked_at"`
 }
 
+type Holiday struct {
+	ID          int64  `json:"id"`
+	HouseholdID int64  `json:"household_id"`
+	PersonID    *int64 `json:"person_id"`
+	StartsOn    string `json:"starts_on"`
+	EndsOn      string `json:"ends_on"`
+	CreatedAt   int64  `json:"created_at"`
+}
+
 type Household struct {
 	ID        int64  `json:"id"`
 	Name      string `json:"name"`

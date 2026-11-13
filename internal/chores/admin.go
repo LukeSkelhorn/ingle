@@ -239,7 +239,11 @@ func (s *Service) refresh(ctx context.Context, q *dbq.Queries, c dbq.Chore, old 
 	}
 	loc := s.loc(ctx, c.HouseholdID)
 	start, end := window(boardDay, Window, loc)
-	_, err = materialiseChore(ctx, q, c, who.of(c), start, end, loc)
+	hols, err := loadHolidays(ctx, q, c.HouseholdID, start.Format(DateLayout))
+	if err != nil {
+		return err
+	}
+	_, err = materialiseChore(ctx, q, c, who, hols, start, end, loc)
 	return err
 }
 

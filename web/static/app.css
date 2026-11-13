@@ -69,6 +69,11 @@ h2 { margin: 0 0 8px; font-size: 1.15rem; }
   display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
   margin: -8px 0 16px; padding: 10px 14px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line);
 }
+/* Holiday mode: everyone's away, so the board is empty on purpose. */
+.board__holiday {
+  margin: 0 0 16px; padding: 10px 14px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line);
+  font-size: 1.1rem;
+}
 
 /* Locked display: photos and the clock; a tap asks who's unlocking, then
    brings up the keypad. cursor: pointer also makes iOS Safari treat the
@@ -168,6 +173,14 @@ h2 { margin: 0 0 8px; font-size: 1.15rem; }
 .column__balance { color: var(--muted); font-variant-numeric: tabular-nums; }
 .column__waiting { align-self: flex-start; margin-top: 2px; }
 .column__empty { margin: 8px 0 0; color: var(--muted); }
+/* Admin › Settings › Holiday mode. */
+.holidays { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.holidays__item {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap;
+  padding: 8px 0; border-bottom: 1px solid var(--line);
+}
+.holidays__item .row { display: flex; gap: 8px; }
+.holidays__item form { margin: 0; }
 .progress { display: flex; flex-direction: column; gap: 4px; font-size: 0.9rem; color: var(--muted); }
 .progress__bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
 .progress__bar > span { display: block; height: 100%; background: var(--person); transition: width 0.4s ease; }
@@ -799,7 +812,7 @@ details.card .list { margin: 8px -20px -20px; }
     height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
     display: flex; flex-direction: column; padding-bottom: 72px;
   }
-  .is-board .board__locked, .is-board .board__header { flex: none; }
+  .is-board .board__locked, .is-board .board__header, .is-board .board__holiday { flex: none; }
   .is-board .views { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   .is-board .views__panel:not([hidden]) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   .is-board .views__panel.cal:not([hidden]) { display: block; overflow-y: auto; overscroll-behavior: contain; }

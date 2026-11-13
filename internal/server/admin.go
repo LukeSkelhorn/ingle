@@ -211,6 +211,9 @@ var activityText = map[string]string{
 	"board.unlocked":          "unlocked the displays",
 	"board.unlocked_code":     "unlocked the displays with the household code",
 	"board.unlocked_schedule": "unlocked the displays on schedule",
+	"holiday.added":           "added a holiday",
+	"holiday.ended":           "ended a holiday early",
+	"holiday.removed":         "removed a holiday",
 }
 
 // Settings.
@@ -232,6 +235,7 @@ type settingsForm struct {
 	LockIdleHours          int64
 	HasUnlockCode          bool
 	Timezones              []string
+	Holiday                holidayForm
 }
 
 // weekdayOption is one checkbox of the lock schedule.
@@ -279,6 +283,10 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 func (s *Server) renderSettings(w http.ResponseWriter, r *http.Request, status int, f settingsForm, errs map[string]string, flash string) {
 	f.Timezones = timezoneOptions(f.Timezone)
 	f.CanTakeout, f.StartsAgain = s.Takeout != nil, s.ResolveHousehold == nil
+	if err := s.loadHolidays(r, &f.Holiday); err != nil {
+		s.serverError(w, r, err)
+		return
+	}
 	v := s.view(r, "Settings", f)
 	v.Nav = "settings"
 	v.Errors = errs
