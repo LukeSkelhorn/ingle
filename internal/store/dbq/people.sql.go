@@ -100,6 +100,18 @@ func (q *Queries) ClearPersonPIN(ctx context.Context, arg ClearPersonPINParams) 
 	return err
 }
 
+const countActiveAdults = `-- name: CountActiveAdults :one
+SELECT COUNT(*) FROM people
+WHERE household_id = ? AND kind = 'adult' AND archived_at IS NULL
+`
+
+func (q *Queries) CountActiveAdults(ctx context.Context, householdID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countActiveAdults, householdID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countActiveAssignedChores = `-- name: CountActiveAssignedChores :one
 SELECT COUNT(*) FROM chores
 WHERE household_id = ? AND assignee_id = ? AND archived_at IS NULL

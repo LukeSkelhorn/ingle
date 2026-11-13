@@ -76,6 +76,9 @@ type SetupInput struct {
 type Service struct {
 	st  *store.Store
 	now func() time.Time
+	// external is set when another service signs adults in (Hosted): then
+	// every active adult can sign in, with or without a PIN or password.
+	external bool
 }
 
 // New returns a household Service.
@@ -85,6 +88,11 @@ func New(st *store.Store) *Service {
 
 // SetClock replaces the clock (tests).
 func (s *Service) SetClock(now func() time.Time) { s.now = now }
+
+// SetExternalSignIn says another service signs adults in, so any active
+// adult can sign in: the last of them can't be archived or made a child,
+// but their PIN can be cleared.
+func (s *Service) SetExternalSignIn(on bool) { s.external = on }
 
 // NeedsSetup reports whether no adult can sign in yet.
 func (s *Service) NeedsSetup(ctx context.Context, householdID int64) (bool, error) {
@@ -206,8 +214,8 @@ func (s *Service) UpdatePerson(ctx context.Context, householdID, actorID, id int
 		if err != nil {
 			return notFound(err)
 		}
-		if in.Kind == KindChild && cur.Kind == KindAdult && hasCredential(cur) {
-			if err := ensureNotLastAdmin(ctx, q, cur); err != nil {
+		if in.Kind == KindChild && cur.Kind == KindAdult && s.canSignIn(cur) {
+			if err := s.ensureNotLastAdmin(ctx, q, cur); err != nil {
 				return err
 			}
 			if err := stripCredentials(ctx, q, cur); err != nil {
@@ -252,8 +260,8 @@ func (s *Service) ArchivePerson(ctx context.Context, householdID, actorID, id in
 		if n > 0 {
 			return ErrHasAssignedChores
 		}
-		if hasCredential(p) {
-			if err := ensureNotLastAdmin(ctx, q, p); err != nil {
+		if s.canSignIn(p) {
+			if err := s.ensureNotLastAdmin(ctx, q, p); err != nil {
 				return err
 			}
 		}
@@ -306,8 +314,8 @@ func (s *Service) SetPIN(ctx context.Context, householdID, actorID, id int64, pi
 // adult) or open My money on a display.
 func (s *Service) ClearPIN(ctx context.Context, householdID, actorID, id int64, keep []byte) error {
 	return s.credentialChange(ctx, householdID, actorID, id, "person.pin_cleared", true, keep, func(q *dbq.Queries, p dbq.Person) error {
-		if p.Kind == KindAdult && p.PasswordHash == nil && p.PinHash != nil {
-			if err := ensureNotLastAdmin(ctx, q, p); err != nil {
+		if !s.external && p.Kind == KindAdult && p.PasswordHash == nil && p.PinHash != nil {
+			if err := s.ensureNotLastAdmin(ctx, q, p); err != nil {
 				return err
 			}
 		}
@@ -353,8 +361,8 @@ func (s *Service) SetLogin(ctx context.Context, householdID, actorID, id int64, 
 // their PIN on a household display.
 func (s *Service) ClearLogin(ctx context.Context, householdID, actorID, id int64, keep []byte) error {
 	return s.credentialChange(ctx, householdID, actorID, id, "person.login_cleared", false, keep, func(q *dbq.Queries, p dbq.Person) error {
-		if p.PinHash == nil && p.PasswordHash != nil {
-			if err := ensureNotLastAdmin(ctx, q, p); err != nil {
+		if !s.external && p.PinHash == nil && p.PasswordHash != nil {
+			if err := s.ensureNotLastAdmin(ctx, q, p); err != nil {
 				return err
 			}
 		}
@@ -549,10 +557,21 @@ func normaliseEmail(s string) (addr, msg string) {
 	return strings.ToLower(s), ""
 }
 
-func hasCredential(p dbq.Person) bool { return p.PinHash != nil || p.PasswordHash != nil }
+// canSignIn reports whether adult p can sign in: with a PIN or password,
+// or, with an outside sign-in, by being an adult at all.
+func (s *Service) canSignIn(p dbq.Person) bool {
+	if s.external {
+		return p.Kind == KindAdult
+	}
+	return p.PinHash != nil || p.PasswordHash != nil
+}
 
-func ensureNotLastAdmin(ctx context.Context, q *dbq.Queries, p dbq.Person) error {
-	n, err := q.CountAdultsWithCredential(ctx, p.HouseholdID)
+func (s *Service) ensureNotLastAdmin(ctx context.Context, q *dbq.Queries, p dbq.Person) error {
+	count := q.CountAdultsWithCredential
+	if s.external {
+		count = q.CountActiveAdults
+	}
+	n, err := count(ctx, p.HouseholdID)
 	if err != nil {
 		return fmt.Errorf("count admins: %w", err)
 	}

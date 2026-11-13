@@ -64,6 +64,26 @@ type Options struct {
 	// Jobs is where the background jobs run: here, beside the web server
 	// (the default), or elsewhere, in a process that calls [RunJobs].
 	Jobs JobMode
+	// SignIn hands adults' sign-in to another service, which starts their
+	// Ingle session with [Helpers.StartSession]. Nil keeps Ingle's own
+	// email and password sign-in and first-run setup.
+	SignIn *SignIn
+}
+
+// SignIn is another service that signs adults in. With it, Ingle's email
+// and password sign-in, first-run setup and adults' email and password in
+// Admin › People are all off. PINs and household displays are unchanged.
+type SignIn struct {
+	// URL is where /signin, and anyone who needs to sign in, is sent.
+	URL string
+	// OnSignOut runs after Ingle ends an adult's session on sign-out, e.g.
+	// to end the other service's session too. A non-empty URL is where the
+	// browser goes next, instead of URL. Locking admin on a display doesn't
+	// call it. Nil does nothing more.
+	OnSignOut func(r *http.Request) string
+	// SessionIdle is how long an adult's session lasts without use, and
+	// its cookie's lifetime. 0 means 30 days, as for a password sign-in.
+	SessionIdle time.Duration
 }
 
 // AdminLink is a link in the Admin bar.
@@ -98,6 +118,15 @@ func (h Helpers) RequireAdmin(next http.Handler) http.Handler { return h.srv.Req
 // RequireViewer lets only a household display or a signed-in adult reach
 // h.
 func (h Helpers) RequireViewer(next http.Handler) http.Handler { return h.srv.RequireViewer(next) }
+
+// StartSession signs person personID of household hh in, once the
+// [SignIn] service has confirmed who they are: it starts an Ingle session,
+// the same as a password sign-in, and sets its cookie on w. Redirect to
+// "/admin" (or anywhere) afterwards. It fails unless they are an active
+// adult of hh and the request isn't for another household.
+func (h Helpers) StartSession(w http.ResponseWriter, r *http.Request, hh, personID int64) error {
+	return h.srv.StartSession(w, r, hh, personID)
+}
 
 // HouseholdOf returns the household a request is for, or 0 when none is
 // known yet (nobody signed in and the resolver couldn't tell).
@@ -258,6 +287,16 @@ func build(ctx context.Context, opts Options) (*core, error) {
 	cals := calendar.New(st, c.set.Location, nil, log)
 	cals.SetSecrets(keys)
 	c.auth = auth.New(st, c.set)
+	hhSvc := householdpkg.New(st)
+	var signIn *server.SignIn
+	if opts.SignIn != nil {
+		if opts.SignIn.URL == "" {
+			return nil, errors.New("app: SignIn.URL is empty")
+		}
+		signIn = &server.SignIn{URL: opts.SignIn.URL, OnSignOut: opts.SignIn.OnSignOut}
+		c.auth.SetPersonalIdle(opts.SignIn.SessionIdle)
+		hhSvc.SetExternalSignIn(true)
+	}
 	c.chores = chores.New(st, c.set.Location)
 	c.chores.SetDayStart(c.set.DayStart)
 	c.lock = lock.New(st, c.set, c.auth.EndDisplaySessions)
@@ -281,7 +320,7 @@ func build(ctx context.Context, opts Options) (*core, error) {
 		Auth:             c.auth,
 		Settings:         c.set,
 		Chores:           c.chores,
-		Household:        householdpkg.New(st),
+		Household:        hhSvc,
 		Avatars:          avatars,
 		Photos:           library,
 		Calendars:        cals,
@@ -298,6 +337,7 @@ func build(ctx context.Context, opts Options) (*core, error) {
 		Log:            log,
 		TrustedProxies: cfg.TrustedProxies,
 		Version:        c.version,
+		SignIn:         signIn,
 	})
 	if err != nil {
 		return nil, err
