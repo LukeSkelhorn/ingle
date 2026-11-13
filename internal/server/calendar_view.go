@@ -66,13 +66,25 @@ type calDay struct {
 type calItem struct {
 	Title  string
 	When   string // "09:00", "until 10:00", "All day" or "" for an untimed chore
-	Colour string // the feed's colour, or the person's for a chore
+	Colour string // the person's colour, or the feed's for a family event
 	Feed   string
 	Chore  *chores.CalChore
-	Person *dbq.Person // whose chore it is; nil for one up for grabs
+	// Person is whose chore or calendar it is; nil for a chore up for grabs
+	// or a family event.
+	Person *dbq.Person
 	DoneBy *dbq.Person
 	People []dbq.Person // a shared chore, not done yet: who it's for
 	sort   string
+}
+
+// eventOwner is whose calendar e is from, among the household's people who
+// aren't archived; nil for a family calendar. Events cache only the id, so
+// a person's new colour shows straight away.
+func eventOwner(people map[int64]*dbq.Person, e calendar.Event) *dbq.Person {
+	if e.PersonID == nil {
+		return nil
+	}
+	return people[*e.PersonID]
 }
 
 // IsChore reports whether the item is a chore (else it's an event).
@@ -265,7 +277,10 @@ func (s *Server) calendarDays(r *http.Request, loc locale.Locale, first, last, t
 			if !e.Start.Before(next) || !e.End.After(d) {
 				continue
 			}
-			it := calItem{Title: e.Title, Colour: e.Colour, Feed: e.Feed}
+			it := calItem{Title: e.Title, Colour: e.Colour, Feed: e.Feed, Person: eventOwner(byID, e)}
+			if it.Person != nil {
+				it.Colour = it.Person.Colour
+			}
 			start, end := e.Start.In(z), e.End.In(z)
 			switch {
 			case e.AllDay, start.Before(d) && !end.Before(next):

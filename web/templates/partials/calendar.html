@@ -57,11 +57,14 @@
 
 {{define "cal_item_class"}}{{if .IsChore}} cal-item--chore{{if .Chore.Pool}}{{if not .Person}} cal-item--pool{{end}}{{end}} cal-item--{{.Chore.Status}}{{else}} cal-item--event{{if eq .When "All day"}} cal-item--allday{{end}}{{end}}{{end}}
 
+{{/* Whose calendar an event is from, when it's a person's. */}}
+{{define "cal_owner"}}{{with .Person}} <span class="cal-item__who" title="{{.Name}}'s calendar">{{template "avatar" (avatar . "xs")}}</span>{{end}}{{end}}
+
 {{/* One day's items: all-day events, then events and chores in time order. */}}
 {{define "cal_list"}}
 {{if or .AllDay .Items}}
 <ul class="cal__items">
-  {{range .AllDay}}<li class="cal-item{{template "cal_item_class" .}}"{{with .Colour}} style="--item: {{.}}"{{end}}><span class="cal-item__title">{{.Title}}</span></li>{{end}}
+  {{range .AllDay}}<li class="cal-item{{template "cal_item_class" .}}"{{with .Colour}} style="--item: {{.}}"{{end}}><span class="cal-item__title">{{.Title}}</span>{{template "cal_owner" .}}</li>{{end}}
   {{range .Items}}
   {{if .IsChore}}
   <li><button class="cal-item{{template "cal_item_class" .}}" type="button"{{with .Colour}} style="--item: {{.}}"{{end}}
@@ -79,7 +82,7 @@
     </span>
   </button></li>
   {{else}}
-  <li class="cal-item{{template "cal_item_class" .}}"{{with .Colour}} style="--item: {{.}}"{{end}}><span class="cal-item__when">{{.When}}</span> <span class="cal-item__title">{{.Title}}</span></li>
+  <li class="cal-item{{template "cal_item_class" .}}"{{with .Colour}} style="--item: {{.}}"{{end}}><span class="cal-item__when">{{.When}}</span> <span class="cal-item__title">{{.Title}}</span>{{template "cal_owner" .}}</li>
   {{end}}
   {{end}}
 </ul>

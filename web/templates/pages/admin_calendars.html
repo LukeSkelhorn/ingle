@@ -15,13 +15,28 @@
   <ul class="list card">
     {{range .Data.Feeds}}
     <li class="list__row list__row--review">
-      <span class="dot" style="--dot: {{.Colour}}" aria-hidden="true"></span>
+      {{with .Owner}}{{template "avatar" (avatar . "sm")}}{{else}}<span class="dot" style="--dot: {{.Colour}}" aria-hidden="true"></span>{{end}}
       <span class="list__main"><strong>{{.Name}}</strong>
-        <small class="muted">{{.Masked}}{{with .Updated}} · {{.}}{{end}}</small>
+        <small class="muted">{{with .Owner}}{{.Name}}'s{{else}}Family{{end}} · {{.Masked}}{{with .Updated}} · {{.}}{{end}}</small>
         {{with .Error}}<small class="field__err">Last try failed: {{.}}</small>{{end}}</span>
       <span class="list__actions">
         <form method="post" action="/admin/calendars/{{.ID}}/delete"><button class="btn btn--ghost btn--danger" type="submit">Remove</button></form>
       </span>
+      {{$editing := eq .ID $.Data.Edit}}
+      <details class="feed-edit"{{if $editing}} open{{end}}>
+        <summary class="btn btn--ghost">Edit</summary>
+        <form class="stack" method="post" action="/admin/calendars/{{.ID}}/edit">
+          <label class="field">
+            <span>Name</span>
+            <input name="name" value="{{if $editing}}{{$.Data.EditName}}{{else}}{{.Name}}{{end}}" required maxlength="50">
+            {{if $editing}}{{template "err" index $.Errors "edit_name"}}{{end}}
+          </label>
+          {{$who := 0}}{{if $editing}}{{$who = $.Data.EditPerson}}{{else}}{{with .Owner}}{{$who = .ID}}{{end}}{{end}}
+          {{template "feed_owner" (dict "People" $.Data.People "Selected" $who)}}
+          {{if $editing}}{{template "err" index $.Errors "edit_person"}}{{end}}
+          <button class="btn btn--primary" type="submit">Save</button>
+        </form>
+      </details>
     </li>
     {{end}}
   </ul>
@@ -39,6 +54,8 @@
       <input name="url" value="{{.Data.URL}}" required inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://… or webcal://…">
       {{template "err" index .Errors "url"}}
     </label>
+    {{template "feed_owner" (dict "People" .Data.People "Selected" .Data.PersonID)}}
+    {{template "err" index .Errors "person"}}
     <details class="help">
       <summary>Where do I find this?</summary>
       <ul>
@@ -51,4 +68,16 @@
     <button class="btn btn--primary" type="submit">Add calendar</button>
   </form>
 </main>
+{{end}}
+
+{{/* Whose calendar it is. Selected is a person's id, or 0 for the family. */}}
+{{define "feed_owner"}}
+<label class="field field--short">
+  <span>Whose is it?</span>
+  <select name="person">
+    <option value="">The family</option>
+    {{range .People}}<option value="{{.ID}}"{{if eq .ID $.Selected}} selected{{end}}>{{.Name}}</option>{{end}}
+  </select>
+  <small class="muted">A person's events show in their colour, with their picture. Shared calendars, like school's, are the family's.</small>
+</label>
 {{end}}

@@ -19,6 +19,9 @@ type Event struct {
 	AllDay bool
 	Colour string // the feed's colour; set by the Service
 	Feed   string // the feed's name; set by the Service
+	// PersonID is whose calendar it is, or nil for the family's; set by
+	// the Service. Pages show a person's events in their colour.
+	PersonID *int64
 }
 
 // maxEvents caps how many occurrences one feed contributes to a window, so

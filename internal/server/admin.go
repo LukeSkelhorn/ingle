@@ -203,6 +203,7 @@ var activityText = map[string]string{
 	"photo.removed":           "removed a photo",
 	"calendar.added":          "added a calendar",
 	"calendar.removed":        "removed a calendar",
+	"calendar.updated":        "edited a calendar",
 	"lock.code_set":           "set the household unlock code",
 	"lock.code_cleared":       "removed the household unlock code",
 	"board.locked":            "locked the displays",
