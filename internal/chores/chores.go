@@ -124,8 +124,12 @@ func (s *Service) Materialise(ctx context.Context, householdID int64, from time.
 		if err != nil {
 			return err
 		}
+		hols, err := loadHolidays(ctx, q, householdID, start.Format(DateLayout))
+		if err != nil {
+			return err
+		}
 		for _, c := range chores {
-			n, err := materialiseChore(ctx, q, c, who.of(c), start, end, loc)
+			n, err := materialiseChore(ctx, q, c, who, hols, start, end, loc)
 			if err != nil {
 				return err
 			}
@@ -144,11 +148,12 @@ func window(from time.Time, days int, loc *time.Location) (start, end time.Time)
 	return start, end
 }
 
-// materialiseChore creates c's occurrences in [start, end]. people is who
-// an "each" chore is for (each gets their own copy); nil for other chores.
-func materialiseChore(ctx context.Context, q *dbq.Queries, c dbq.Chore, people []int64, start, end time.Time, loc *time.Location) (int, error) {
+// materialiseChore creates c's occurrences in [start, end], leaving out
+// copies that hols pause. who is who an "each" chore is for (each gets
+// their own copy) and who a shared chore's people are.
+func materialiseChore(ctx context.Context, q *dbq.Queries, c dbq.Chore, who doers, hols holidays, start, end time.Time, loc *time.Location) (int, error) {
 	if c.DayMode == DayAny && c.Rrule != nil {
-		return materialiseFlex(ctx, q, c, people, start, end, loc)
+		return materialiseFlex(ctx, q, c, who, hols, start, end, loc)
 	}
 	dates, err := occurrenceDates(c, start, end, loc)
 	if err != nil {
@@ -157,7 +162,10 @@ func materialiseChore(ctx context.Context, q *dbq.Queries, c dbq.Chore, people [
 	created := 0
 	for _, d := range dates {
 		for _, t := range times(c) {
-			for _, sl := range slots(c, people) {
+			for _, sl := range slots(c, who.of(c)) {
+				if hols.awayOn(d, slotOwners(c, sl, who)) {
+					continue
+				}
 				n, err := q.InsertOccurrence(ctx, dbq.InsertOccurrenceParams{
 					HouseholdID: c.HouseholdID,
 					ChoreID:     c.ID,
@@ -177,8 +185,9 @@ func materialiseChore(ctx context.Context, q *dbq.Queries, c dbq.Chore, people [
 }
 
 // materialiseFlex creates one occurrence per week for a flexible-day chore,
-// on the board from the week's first allowed day and due on its last.
-func materialiseFlex(ctx context.Context, q *dbq.Queries, c dbq.Chore, people []int64, start, end time.Time, loc *time.Location) (int, error) {
+// on the board from the week's first allowed day and due on its last. A
+// week is left out only when hols pause every one of its days.
+func materialiseFlex(ctx context.Context, q *dbq.Queries, c dbq.Chore, who doers, hols holidays, start, end time.Time, loc *time.Location) (int, error) {
 	ws, err := flexWindows(c, start, end, loc)
 	if err != nil {
 		return 0, fmt.Errorf("chore %d: %w", c.ID, err)
@@ -186,7 +195,10 @@ func materialiseFlex(ctx context.Context, q *dbq.Queries, c dbq.Chore, people []
 	created := 0
 	for _, w := range ws {
 		from := w.From()
-		for _, sl := range slots(c, people) {
+		for _, sl := range slots(c, who.of(c)) {
+			if hols.awayAll(w.Days, slotOwners(c, sl, who)) {
+				continue
+			}
 			n, err := q.InsertOccurrence(ctx, dbq.InsertOccurrenceParams{
 				HouseholdID:   c.HouseholdID,
 				ChoreID:       c.ID,

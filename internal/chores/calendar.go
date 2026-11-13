@@ -81,6 +81,10 @@ func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time
 	if err != nil {
 		return nil, fmt.Errorf("list people: %w", err)
 	}
+	hols, err := loadHolidays(ctx, q, householdID, from)
+	if err != nil {
+		return nil, err
+	}
 	kind := make(map[int64]string, len(people))
 	for _, p := range people {
 		kind[p.ID] = p.Kind
@@ -128,6 +132,9 @@ func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time
 		}
 		c.Points, c.Pence = earns(r.Mode, c.PersonID, r.Points, r.Pence, r.AdultPoints)
 		comp, done := byOcc[r.ID]
+		if !done && r.AvailableFrom == nil && hols.awayOn(r.DueOn, rowOwners(r, shared)) {
+			continue // on holiday
+		}
 		// An Only on the day chore past its time is missed, even today.
 		at, onTheDay := onTheDayCutoff(r.OnTheDay, r.DueOn, optTime(r.DueTime), loc, dayStart)
 		tooLate := onTheDay && !done && !now.Before(at)
@@ -158,8 +165,9 @@ func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time
 			add(c)
 			continue
 		}
+		owners := rowOwners(r, shared)
 		for _, d := range days {
-			if d < today && d != r.DueOn {
+			if (d < today && d != r.DueOn) || hols.awayOn(d, owners) {
 				continue
 			}
 			c.Date, c.Status = d, statusOn(d, today)
@@ -203,6 +211,9 @@ func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time
 							continue
 						}
 						for _, sl := range slots(ch, who.of(ch)) {
+							if hols.awayOn(d, slotOwners(ch, sl, who)) {
+								continue
+							}
 							c := CalChore{
 								ChoreID: ch.ID, Date: d, Title: ch.Title, Emoji: ch.Emoji, DueTime: optTime(times(ch)[0]),
 								Pool: ch.Mode == ModePool, PersonID: sl.assignee, Status: statusOn(d, today), Or: or,
@@ -227,6 +238,9 @@ func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time
 				}
 				for _, t := range times(ch) {
 					for _, sl := range slots(ch, who.of(ch)) {
+						if hols.awayOn(d, slotOwners(ch, sl, who)) {
+							continue
+						}
 						c := CalChore{
 							ChoreID: ch.ID, Date: d, Title: ch.Title, Emoji: ch.Emoji, DueTime: optTime(t),
 							Pool: ch.Mode == ModePool, PersonID: sl.assignee, Status: statusOn(d, today),

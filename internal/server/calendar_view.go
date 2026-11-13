@@ -234,6 +234,10 @@ func (s *Server) calendarDays(r *http.Request, loc locale.Locale, first, last, t
 	for i := range people {
 		byID[people[i].ID] = &people[i]
 	}
+	hols, err := s.Chores.Holidays(ctx, hhOf(r), first)
+	if err != nil {
+		return nil, err
+	}
 	var events []calendar.Event
 	if s.Calendars != nil && s.moduleOn(ctx, modCalendar) {
 		events = s.Calendars.Upcoming(hhOf(r), first, last.AddDate(0, 0, 1))
@@ -246,6 +250,16 @@ func (s *Server) calendarDays(r *http.Request, loc locale.Locale, first, last, t
 		day := calDay{
 			Date: date, Num: d.Day(), Label: d.Format("Mon 2 Jan"),
 			Today: date == today.Format(chores.DateLayout), Past: d.Before(today),
+		}
+		for _, h := range hols {
+			if h.StartsOn > date || date > h.EndsOn {
+				continue
+			}
+			it := calItem{Title: "🏖️ Holiday", When: "All day"}
+			if h.Person != nil {
+				it.Title, it.Colour = "🏖️ "+h.Person.Name+" away", h.Person.Colour
+			}
+			day.AllDay = append(day.AllDay, it)
 		}
 		for _, e := range events {
 			if !e.Start.Before(next) || !e.End.After(d) {
