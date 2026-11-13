@@ -171,7 +171,7 @@ func (s *Server) handleUnlock(w http.ResponseWriter, r *http.Request) {
 	id := identityFrom(r.Context())
 	if id.Device == nil {
 		if id.Session == nil {
-			redirect(w, r, "/signin")
+			redirect(w, r, s.signInURL())
 			return
 		}
 		if err := s.Lock.Unlock(r.Context(), hhOf(r), &id.Session.Person.ID, lock.ByPhone); err != nil {

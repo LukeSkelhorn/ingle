@@ -20,7 +20,7 @@
       <a class="list__row" href="/admin/people/{{.ID}}">
         {{template "avatar" (avatar . "md")}}
         <span class="list__main"><strong>{{.Name}}</strong>
-          <small class="muted">{{if eq .Kind "adult"}}Adult{{if .PinHash}} · PIN{{end}}{{if .PasswordHash}} · Sign-in{{end}}{{else}}Child{{end}}</small></span>
+          <small class="muted">{{if eq .Kind "adult"}}Adult{{if .PinHash}} · PIN{{end}}{{if and .PasswordHash (not $.ExternalSignIn)}} · Sign-in{{end}}{{else}}Child{{end}}</small></span>
         <span class="list__balance">{{pts $b.Points}}{{if $b.Pence}} · {{money $b.Pence}}{{end}}</span>
       </a>
       <details class="menu">

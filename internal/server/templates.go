@@ -118,6 +118,9 @@ type view struct {
 	Errors    valid.Errors
 	Data      any
 	Version   string // the Ingle build, shown in admin
+	// ExternalSignIn is set when another service signs adults in: Ingle
+	// shows no email or password for them.
+	ExternalSignIn bool
 }
 
 // viewer describes who is looking at the page.

@@ -54,6 +54,10 @@ SELECT COUNT(*) FROM people
 WHERE household_id = ? AND kind = 'adult' AND archived_at IS NULL
   AND (pin_hash IS NOT NULL OR password_hash IS NOT NULL);
 
+-- name: CountActiveAdults :one
+SELECT COUNT(*) FROM people
+WHERE household_id = ? AND kind = 'adult' AND archived_at IS NULL;
+
 -- name: CountActiveAssignedChores :one
 SELECT COUNT(*) FROM chores
 WHERE household_id = ? AND assignee_id = ? AND archived_at IS NULL;

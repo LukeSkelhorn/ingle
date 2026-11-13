@@ -23,6 +23,12 @@ Each release's section is also its GitHub release notes (`task release:notes`).
   - `AdminLinks` adds links to the Admin bar.
   - `PhotoBlobs` stores uploaded photos somewhere other than the data folder.
   - `Jobs: app.JobsElsewhere` moves the background jobs to a separate process running `app.RunJobs`.
+- **For developers: another service can sign adults in.** `app.Options.SignIn` hands adults' sign-in to another service, as Hosted will do with WorkOS. Once that service confirms who someone is, `Helpers.StartSession` starts their Ingle session. It only works for an active adult of that household. With `SignIn` set, a few things change. Nothing changes for self-hosted Ingle, and PINs and household displays work as before. ([DOM-104](https://linear.app/skeltech/issue/DOM-104))
+  - `/signin` goes to the service's page instead of Ingle's email and password form.
+  - There's no first-run setup.
+  - Admin › People shows no email or password for adults.
+  - Signing out also runs `OnSignOut`, which can end the other service's session.
+  - `SessionIdle` sets how long a session lasts without use.
 
 ### Fixed
 

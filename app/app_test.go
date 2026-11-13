@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -173,5 +174,18 @@ func waitHealthy(t *testing.T, done <-chan error) {
 			t.Fatalf("healthz never came up: %v", err)
 		}
 		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+func TestRunRefusesSignInWithoutURL(t *testing.T) {
+	t.Setenv("INGLE_ADDR", freeAddr(t))
+	t.Setenv("INGLE_DB_PATH", filepath.Join(t.TempDir(), "ingle.db"))
+	t.Setenv("INGLE_BACKUP_KEEP", "0")
+	err := app.Run(t.Context(), app.Options{
+		ResolveHousehold: func(*http.Request) (int64, bool, error) { return 0, false, nil },
+		SignIn:           &app.SignIn{},
+	})
+	if err == nil || !strings.Contains(err.Error(), "SignIn.URL") {
+		t.Fatalf("Run = %v, want an error about SignIn.URL", err)
 	}
 }
