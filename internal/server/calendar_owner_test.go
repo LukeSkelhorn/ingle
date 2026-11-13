@@ -27,7 +27,8 @@ func TestCalendarOwner(t *testing.T) {
 
 	// Alfie's colour and avatar on the board calendar and screensaver.
 	expect(t, wall.get("/board/calendar"), http.StatusOK,
-		`style="--item: `+alfie.Colour+`"><span class="cal-item__when">09:00</span> <span class="cal-item__title">Swimming</span> <span class="cal-item__who" title="Alfie's calendar">`)
+		`style="--item: `+alfie.Colour+`" hx-get="/board/calendar/event?`,
+		`<span class="cal-item__title">Swimming</span> <span class="cal-item__who" title="Alfie's calendar">`)
 	expect(t, wall.get("/screensaver"), http.StatusOK,
 		`<li class="saver__event"><span class="avatar avatar--xs" style="--person: `+alfie.Colour+`"`)
 
@@ -44,11 +45,11 @@ func TestCalendarOwner(t *testing.T) {
 
 	// Isla's now, then the family's.
 	expect(t, phone.post(edit, url.Values{"name": {"Swimming"}, "person": {itoa(isla.ID)}}), http.StatusOK, "Swimming saved.", "Isla's ·")
-	expect(t, wall.get("/board/calendar"), http.StatusOK, `style="--item: `+isla.Colour+`"><span class="cal-item__when">09:00`)
+	expect(t, wall.get("/board/calendar"), http.StatusOK, `style="--item: `+isla.Colour+`" hx-get="/board/calendar/event?`)
 	r = phone.post(edit, url.Values{"name": {"Swimming"}, "person": {""}})
 	expect(t, r, http.StatusOK, "Swimming saved.", "Family ·")
 	r = wall.get("/board/calendar")
-	if strings.Contains(r.body, "Isla's calendar") || strings.Contains(r.body, `style="--item: `+isla.Colour+`"><span class="cal-item__when">09:00`) {
+	if strings.Contains(r.body, "Isla's calendar") || strings.Contains(r.body, `style="--item: `+isla.Colour+`" hx-get="/board/calendar/event?`) {
 		t.Error("a family event still shows Isla")
 	}
 	expectNot(t, wall.get("/screensaver"), `<li class="saver__event"><span class="avatar`)

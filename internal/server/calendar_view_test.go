@@ -155,7 +155,7 @@ func TestBoardCalendarLocked(t *testing.T) {
 	h := newHarness(t)
 	wall := h.setUp() // a display unlocked as Mum
 	expectRedirect(t, wall.post("/lock", nil), "/")
-	for _, p := range []string{"/board/calendar", "/board/calendar/day/2026-07-01", "/board/calendar/chores/1/2026-07-01"} {
+	for _, p := range []string{"/board/calendar", "/board/calendar/day/2026-07-01", "/board/calendar/chores/1/2026-07-01", "/board/calendar/event?feed=1&start=1&title=x", "/board/calendar/calendars"} {
 		if r := wall.get(p); r.status != http.StatusLocked {
 			t.Errorf("GET %s while locked = %d, want 423", p, r.status)
 		}

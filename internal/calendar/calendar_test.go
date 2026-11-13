@@ -55,6 +55,7 @@ UID:a
 DTSTART;TZID=Europe/London:20261024T090000
 DTEND;TZID=Europe/London:20261024T100000
 SUMMARY:Swimming
+LOCATION: Leisure centre\, pool 2
 END:VEVENT
 `, `BEGIN:VEVENT
 UID:b
@@ -94,6 +95,9 @@ END:VEVENT
 	}
 	if !got[0].AllDay || got[1].AllDay {
 		t.Errorf("all-day flags wrong: %+v", got[:2])
+	}
+	if got[1].Location != "Leisure centre, pool 2" || got[0].Location != "" {
+		t.Errorf("locations = %q, %q", got[0].Location, got[1].Location)
 	}
 	if d := got[1].End.Sub(got[1].Start); d != time.Hour {
 		t.Errorf("Swimming lasts %v", d)
@@ -401,6 +405,9 @@ END:VEVENT
 	}
 	if p := owner(); p == nil || *p != dad.ID {
 		t.Errorf("event owner = %v, want Dad", p)
+	}
+	if got := f.svc.Upcoming(f.hh, from, to)[0].FeedID; got != feed.ID {
+		t.Errorf("event feed id = %d, want %d", got, feed.ID)
 	}
 
 	// Edit: the name and owner change, and the events follow.
