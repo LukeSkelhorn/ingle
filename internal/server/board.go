@@ -52,7 +52,22 @@ type boardPage struct {
 // pickerView is the "who's doing this?" sheet for a pool chore.
 type pickerView struct {
 	Card   chores.Card
-	People []dbq.Person
+	People []pickerPerson
+}
+
+// pickerPerson is someone in the picker with what they'd earn for the chore.
+type pickerPerson struct {
+	Person        dbq.Person
+	Points, Pence int64
+}
+
+func newPickerView(c chores.Card, people []dbq.Person) pickerView {
+	v := pickerView{Card: c, People: make([]pickerPerson, len(people))}
+	for i, p := range people {
+		v.People[i].Person = p
+		v.People[i].Points, v.People[i].Pence = chores.Earns(p.Kind, c.Points, c.Pence, c.AdultPoints)
+	}
+	return v
 }
 
 func (s *Server) loadBoard(r *http.Request) (boardView, error) {
@@ -124,7 +139,7 @@ func (s *Server) handlePick(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, c := range b.Pool {
 		if c.OccurrenceID == id {
-			s.renderPartial(w, r, "picker", pickerView{Card: c, People: b.People})
+			s.renderPartial(w, r, "picker", newPickerView(c, b.People))
 			return
 		}
 	}

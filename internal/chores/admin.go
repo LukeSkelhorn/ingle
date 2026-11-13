@@ -23,7 +23,7 @@ type Input struct {
 	AssigneeID       *int64  // required for ModeAssigned, ignored otherwise
 	PeopleIDs        []int64 // ModeShared: who it's for (two or more); ModeEach: who does their own (one or more)
 	Everyone         bool    // ModeEach: everyone, including people added later (PeopleIDs is ignored)
-	AdultPoints      int64   // ModeEach: what an adult earns (adults get no money for these)
+	AdultPoints      int64   // what an adult earns for it (adults never get money)
 	Repeat           Recurrence
 	DayMode          string   // DayEach or DayAny; "" means DayEach
 	StartsOn         string   // YYYY-MM-DD
@@ -185,8 +185,8 @@ func setOnTheDay(ctx context.Context, q *dbq.Queries, c dbq.Chore, on bool) (dbq
 	return c, nil
 }
 
-// setEach stores an "each" chore's Everyone and adult points (0 for other
-// chores), when they differ.
+// setEach stores an "each" chore's Everyone (0 for other chores) and any
+// chore's adults' points, when they differ.
 func setEach(ctx context.Context, q *dbq.Queries, c dbq.Chore, everyone, adultPoints int64) (dbq.Chore, error) {
 	if c.ForEveryone == everyone && c.AdultPoints == adultPoints {
 		return c, nil
@@ -294,6 +294,10 @@ func (s *Service) validate(ctx context.Context, q *dbq.Queries, householdID int6
 	if len(out.Description) > 1000 {
 		errs.Add("description", "Keep it under 1,000 characters.")
 	}
+	if in.AdultPoints < 0 || in.AdultPoints > 100000 {
+		errs.Add("adult_points", "Use 0 to 100,000 points.")
+	}
+	out.AdultPoints = in.AdultPoints
 	switch in.Mode {
 	case ModeAssigned:
 		if in.AssigneeID == nil {
@@ -321,10 +325,6 @@ func (s *Service) validate(ctx context.Context, q *dbq.Queries, householdID int6
 			out.Mode, out.AssigneeID, out.PeopleIDs = ModeAssigned, &out.PeopleIDs[0], nil
 		}
 	case ModeEach:
-		if in.AdultPoints < 0 || in.AdultPoints > 100000 {
-			errs.Add("adult_points", "Use 0 to 100,000 points.")
-		}
-		out.AdultPoints = in.AdultPoints
 		if in.Everyone {
 			out.ForEveryone = 1
 			break

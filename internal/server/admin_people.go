@@ -84,6 +84,12 @@ func (s *Server) renderPeople(w http.ResponseWriter, r *http.Request, status int
 	for _, b := range balances {
 		v.Balances[b.PersonID] = b
 	}
+	for _, p := range v.People {
+		if b, ok := v.Balances[p.ID]; ok && p.Kind == household.KindAdult {
+			b.Pence = 0 // adults have points only
+			v.Balances[p.ID] = b
+		}
+	}
 	if v.Adjust != nil {
 		if v.Adjust.Panel.Suggestions, err = s.Chores.ReasonSuggestions(ctx, hhOf(r)); err != nil {
 			s.serverError(w, r, err)

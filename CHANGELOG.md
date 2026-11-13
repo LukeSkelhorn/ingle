@@ -6,6 +6,14 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ## [Unreleased]
 
+### Changed
+
+- **Adults earn points only, not money.** Every chore now has **Adults' points**, which adults get with no money, whoever the chore is for. Before, only "Each of these people" chores had them. Children still get the chore's points and pocket money. In Admin › Chores, a chore for one adult shows only Adults' points, a chore for one child shows only Points and Pocket money, and everything else shows all three. The board shows each person what they'd earn, including in the Up for grabs picker. Adults no longer have a money balance, and Move to bank is only for children. Money adults earned before stays in their history. ([DOM-60](https://linear.app/skeltech/issue/DOM-60))
+
+### Upgrade notes
+
+- Existing chores start with Adults' points equal to their points, so adults keep earning the same points, just without the money.
+
 ## [v0.4.1] - 2026-11-13
 
 ### Added

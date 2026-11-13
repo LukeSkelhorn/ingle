@@ -66,10 +66,10 @@ func slots(c dbq.Chore, people []int64) []slot {
 }
 
 // Earns is what a person of kind ("adult" or "child") gets for a chore:
-// adults earn an "each" chore's adult points and no money; everyone else
-// earns its points and money.
-func Earns(mode, kind string, points, pence, adultPoints int64) (int64, int64) {
-	if mode == ModeEach && kind == "adult" {
+// adults earn its adults' points and no money, whoever the chore is for;
+// children earn its points and money.
+func Earns(kind string, points, pence, adultPoints int64) (int64, int64) {
+	if kind == "adult" {
 		return adultPoints, 0
 	}
 	return points, pence

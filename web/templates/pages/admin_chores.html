@@ -42,7 +42,7 @@
       {{- else}}{{with .Assignee}}{{template "avatar" (avatar . "sm")}}{{else}}<span class="avatar avatar--sm avatar--pool" aria-hidden="true">✋</span>{{end}}{{end}}
       <span class="list__main"><strong>{{with .Chore.Emoji}}{{.}} {{end}}{{.Chore.Title}}</strong>
         <small class="muted">{{if .Each}}{{.Each}}{{else if .People}}{{orNames .People}}{{else}}{{with .Assignee}}{{.Name}}{{else}}Anyone can claim{{end}}{{end}} · {{.Schedule}}{{with .Times}} · by {{.}}{{end}}{{with .Shows}} · shows {{.}}{{end}}{{if eq .Chore.OnTheDay 1}} · Only on the day{{end}}</small></span>
-      <span class="list__value">{{if .Chore.Points}}{{.Chore.Points}} pts{{end}}{{if and .Chore.Points .Chore.Pence}} · {{end}}{{if .Chore.Pence}}{{money .Chore.Pence}}{{end}}</span>
+      <span class="list__value">{{if and (eq .Chore.Mode "assigned") .Assignee (eq .Assignee.Kind "adult")}}{{with .Chore.AdultPoints}}{{.}} pts{{end}}{{else}}{{if .Chore.Points}}{{.Chore.Points}} pts{{end}}{{if and .Chore.Points .Chore.Pence}} · {{end}}{{if .Chore.Pence}}{{money .Chore.Pence}}{{end}}{{end}}</span>
       <span aria-hidden="true">›</span>
     </a></li>
     {{else}}
