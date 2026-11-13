@@ -48,8 +48,8 @@ func (s *Service) ClaimReward(ctx context.Context, householdID, rewardID, person
 		if err != nil {
 			return notFound(err)
 		}
-		if reward.ArchivedAt != nil {
-			return ErrNotFound
+		if err := rewardAllowed(ctx, q, reward, personID); err != nil {
+			return err
 		}
 		points, pence, err := available(ctx, q, householdID, personID)
 		if err != nil {
@@ -83,6 +83,23 @@ func (s *Service) ClaimReward(ctx context.Context, householdID, rewardID, person
 		return nil
 	})
 	return out, err
+}
+
+// rewardAllowed fails with ErrNotFound unless reward is active and personID
+// may have it: it's for everyone or chosen for them, and it costs no money
+// if they're an adult.
+func rewardAllowed(ctx context.Context, q *dbq.Queries, reward dbq.Reward, personID int64) error {
+	if reward.ArchivedAt != nil {
+		return ErrNotFound
+	}
+	ok, err := q.RewardAllowed(ctx, dbq.RewardAllowedParams{HouseholdID: reward.HouseholdID, RewardID: reward.ID, PersonID: personID})
+	if err != nil {
+		return fmt.Errorf("reward allowed: %w", err)
+	}
+	if ok == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // available is what personID can spend: their balance less waiting claims.
@@ -298,8 +315,8 @@ func (s *Service) SetGoal(ctx context.Context, householdID, personID, rewardID i
 		if err != nil {
 			return notFound(err)
 		}
-		if reward.ArchivedAt != nil {
-			return ErrNotFound
+		if err := rewardAllowed(ctx, q, reward, personID); err != nil {
+			return err
 		}
 		now := s.now().Unix()
 		n, err := q.SetGoal(ctx, dbq.SetGoalParams{RewardID: &rewardID, SetAt: &now, HouseholdID: householdID, ID: personID})
