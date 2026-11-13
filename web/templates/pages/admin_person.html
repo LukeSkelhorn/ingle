@@ -164,7 +164,7 @@
   </section>
   {{end}}
 
-  {{if and .Data.ID .Data.IsAdult (not .Data.Archived)}}
+  {{if and .Data.ID .Data.IsAdult (not .Data.Archived) (not .ExternalSignIn)}}
   <section class="card stack">
     <h2>Sign-in</h2>
     <p class="muted">Email and password for managing Ingle from a phone or computer.</p>

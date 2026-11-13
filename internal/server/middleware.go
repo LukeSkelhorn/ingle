@@ -134,7 +134,9 @@ func (s *Server) identify(next http.Handler) http.Handler {
 func (s *Server) requireSetup(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hh := hhOf(r)
-		if hh == 0 || s.isSetUp(hh) || isOpenAsset(r.URL.Path) {
+		// With an outside sign-in, households are set up by the program
+		// that creates them (Hosted's sign-up), not by /setup.
+		if hh == 0 || s.SignIn != nil || s.isSetUp(hh) || isOpenAsset(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -156,6 +158,14 @@ func (s *Server) requireSetup(next http.Handler) http.Handler {
 	})
 }
 
+// signInURL is where people go to sign in.
+func (s *Server) signInURL() string {
+	if s.SignIn != nil {
+		return s.SignIn.URL
+	}
+	return "/signin"
+}
+
 // isSetUp reports whether household hh is known to be set up.
 func (s *Server) isSetUp(hh int64) bool {
 	_, ok := s.setupDone.Load(hh)
@@ -172,7 +182,7 @@ func (s *Server) requireViewer(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := identityFrom(r.Context())
 		if id.Device == nil && id.Session == nil {
-			redirect(w, r, "/signin")
+			redirect(w, r, s.signInURL())
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -192,7 +202,7 @@ func (s *Server) requireAdmin(next http.Handler) http.Handler {
 			redirect(w, r, "/admin/unlock")
 			return
 		}
-		redirect(w, r, "/signin")
+		redirect(w, r, s.signInURL())
 	})
 }
 
@@ -243,7 +253,7 @@ func (s *Server) clearCookie(w http.ResponseWriter, r *http.Request, name string
 // view builds the common page data for r.
 func (s *Server) view(r *http.Request, title string, data any) view {
 	id := identityFrom(r.Context())
-	v := view{Title: title, Data: data, Version: s.version()}
+	v := view{Title: title, Data: data, Version: s.version(), ExternalSignIn: s.SignIn != nil}
 	screensaverSeconds, calendarSeconds := 0, 0
 	if s.Settings != nil {
 		if set, err := s.Settings.Get(r.Context(), hhOf(r)); err == nil {

@@ -521,7 +521,7 @@ func (s *Server) handleDeviceRevoke(w http.ResponseWriter, r *http.Request) {
 	if dev := identityFrom(ctx).Device; dev != nil && dev.ID == devID {
 		s.clearCookie(w, r, deviceCookie)
 		s.clearCookie(w, r, sessionCookie)
-		redirect(w, r, "/signin")
+		redirect(w, r, s.signInURL())
 		return
 	}
 	redirect(w, r, "/admin/devices")
@@ -543,7 +543,7 @@ func (s *Server) handleSessionRevoke(w http.ResponseWriter, r *http.Request) {
 	}
 	if string(hash) == string(actor(r).TokenHash) {
 		s.clearCookie(w, r, sessionCookie)
-		redirect(w, r, "/signin")
+		redirect(w, r, s.signInURL())
 		return
 	}
 	redirect(w, r, "/admin/devices")

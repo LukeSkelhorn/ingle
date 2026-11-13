@@ -40,7 +40,7 @@ func newSetupForm() setupForm {
 }
 
 func (s *Server) handleSetupForm(w http.ResponseWriter, r *http.Request) {
-	if hh := hhOf(r); hh == 0 || s.isSetUp(hh) {
+	if hh := hhOf(r); hh == 0 || s.SignIn != nil || s.isSetUp(hh) {
 		http.NotFound(w, r)
 		return
 	}
@@ -48,7 +48,7 @@ func (s *Server) handleSetupForm(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
-	if hh := hhOf(r); hh == 0 || s.isSetUp(hh) {
+	if hh := hhOf(r); hh == 0 || s.SignIn != nil || s.isSetUp(hh) {
 		http.NotFound(w, r)
 		return
 	}
@@ -139,7 +139,7 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 			s.serverError(w, r, err)
 			return
 		}
-		s.setCookie(w, r, sessionCookie, token, auth.PersonalSessionTTL)
+		s.setCookie(w, r, sessionCookie, token, s.Auth.PersonalIdle())
 	}
 	redirect(w, r, "/admin")
 }
@@ -158,11 +158,18 @@ func (s *Server) handleSignInForm(w http.ResponseWriter, r *http.Request) {
 		// Displays use PINs; passwords are for personal devices.
 		redirect(w, r, "/admin/unlock")
 		return
+	case s.SignIn != nil:
+		redirect(w, r, s.SignIn.URL)
+		return
 	}
 	s.render(w, r, http.StatusOK, "signin", s.view(r, "Sign in", signInForm{}))
 }
 
 func (s *Server) handleSignIn(w http.ResponseWriter, r *http.Request) {
+	if s.SignIn != nil {
+		http.NotFound(w, r)
+		return
+	}
 	if identityFrom(r.Context()).Device != nil {
 		redirect(w, r, "/admin/unlock")
 		return
@@ -197,8 +204,24 @@ func (s *Server) handleSignIn(w http.ResponseWriter, r *http.Request) {
 		s.render(w, r, http.StatusUnauthorized, "signin", v)
 		return
 	}
-	s.setCookie(w, r, sessionCookie, token, auth.PersonalSessionTTL)
+	s.setCookie(w, r, sessionCookie, token, s.Auth.PersonalIdle())
 	redirect(w, r, "/admin")
+}
+
+// StartSession signs person personID of household hh in with a personal
+// session, once another service has confirmed who they are, and sets its
+// cookie. It fails unless they are an active adult of hh and the request
+// isn't for another household.
+func (s *Server) StartSession(w http.ResponseWriter, r *http.Request, hh, personID int64) error {
+	if cur := hhOf(r); cur != 0 && cur != hh {
+		return auth.ErrBadCredentials
+	}
+	token, err := s.Auth.StartSessionFor(r.Context(), hh, personID, r.UserAgent())
+	if err != nil {
+		return err
+	}
+	s.setCookie(w, r, sessionCookie, token, s.Auth.PersonalIdle())
+	return nil
 }
 
 // handleSignOut signs out a personal device, or locks admin on a display.
@@ -214,7 +237,13 @@ func (s *Server) handleSignOut(w http.ResponseWriter, r *http.Request) {
 		redirect(w, r, "/")
 		return
 	}
-	redirect(w, r, "/signin")
+	if s.SignIn != nil && s.SignIn.OnSignOut != nil {
+		if next := s.SignIn.OnSignOut(r); next != "" {
+			redirect(w, r, next)
+			return
+		}
+	}
+	redirect(w, r, s.signInURL())
 }
 
 type unlockView struct {
@@ -244,7 +273,7 @@ func (s *Server) unlockAdults(r *http.Request) ([]unlockAdult, error) {
 func (s *Server) handleUnlockForm(w http.ResponseWriter, r *http.Request) {
 	id := identityFrom(r.Context())
 	if id.Device == nil {
-		redirect(w, r, "/signin")
+		redirect(w, r, s.signInURL())
 		return
 	}
 	if id.Session != nil {
@@ -270,7 +299,7 @@ func (s *Server) handleUnlockForm(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAdminUnlock(w http.ResponseWriter, r *http.Request) {
 	id := identityFrom(r.Context())
 	if id.Device == nil {
-		redirect(w, r, "/signin")
+		redirect(w, r, s.signInURL())
 		return
 	}
 	if err := parseForm(w, r); err != nil {

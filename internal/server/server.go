@@ -69,6 +69,20 @@ type Deps struct {
 	TrustedProxies []netip.Prefix
 	// Version is the build's version ("dev" when not built for a release).
 	Version string
+	// SignIn hands adults' sign-in to another service (Hosted's). Nil
+	// keeps Ingle's own email and password sign-in and first-run setup.
+	SignIn *SignIn
+}
+
+// SignIn is another service that signs adults in.
+type SignIn struct {
+	// URL is where /signin sends people, e.g. "/auth/signin".
+	URL string
+	// OnSignOut runs after Ingle ends a personal session, e.g. to end the
+	// other service's session too. A non-empty URL is where the browser
+	// goes next, instead of URL. Locking admin on a display doesn't call
+	// it.
+	OnSignOut func(r *http.Request) string
 }
 
 // Server serves the Ingle web UI.

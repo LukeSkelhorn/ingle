@@ -56,6 +56,8 @@ type Service struct {
 	st       *store.Store
 	settings *settings.Service
 	now      func() time.Time
+	// personalIdle is how long a personal session lasts without use.
+	personalIdle time.Duration
 
 	pinLimiter  *Limiter
 	codeLimiter *Limiter
@@ -68,16 +70,30 @@ type Service struct {
 // New returns an auth Service.
 func New(st *store.Store, set *settings.Service) *Service {
 	return &Service{
-		st:          st,
-		settings:    set,
-		now:         time.Now,
-		pinLimiter:  NewLimiter(MaxFailures, LockoutPeriod),
-		codeLimiter: NewLimiter(MaxFailures, LockoutPeriod),
-		pwLimiter:   NewLimiter(MaxFailures, LockoutPeriod),
-		addrLimiter: NewLimiter(MaxAddressFailures, LockoutPeriod),
-		money:       moneyTokens{grants: map[string]moneyGrant{}},
+		st:           st,
+		settings:     set,
+		now:          time.Now,
+		personalIdle: PersonalSessionTTL,
+		pinLimiter:   NewLimiter(MaxFailures, LockoutPeriod),
+		codeLimiter:  NewLimiter(MaxFailures, LockoutPeriod),
+		pwLimiter:    NewLimiter(MaxFailures, LockoutPeriod),
+		addrLimiter:  NewLimiter(MaxAddressFailures, LockoutPeriod),
+		money:        moneyTokens{grants: map[string]moneyGrant{}},
 	}
 }
+
+// SetPersonalIdle sets how long a personal session lasts without use; 0
+// keeps PersonalSessionTTL.
+func (s *Service) SetPersonalIdle(d time.Duration) {
+	if d <= 0 {
+		d = PersonalSessionTTL
+	}
+	s.personalIdle = d
+}
+
+// PersonalIdle is how long a personal session lasts without use, which is
+// also its cookie's lifetime.
+func (s *Service) PersonalIdle() time.Duration { return s.personalIdle }
 
 // SetClock replaces the clock (tests).
 func (s *Service) SetClock(now func() time.Time) {
@@ -228,6 +244,26 @@ func (s *Service) StartPersonalSession(ctx context.Context, p dbq.Person, userAg
 	return s.createSession(ctx, p, KindPersonal, nil, userAgent)
 }
 
+// StartSessionFor signs person personID of household hh in without a
+// password, once another service has confirmed who they are. It fails with
+// ErrBadCredentials unless they are an active adult of hh.
+func (s *Service) StartSessionFor(ctx context.Context, hh, personID int64, userAgent string) (string, error) {
+	if hh <= 0 || personID <= 0 {
+		return "", ErrBadCredentials
+	}
+	p, err := s.st.Q.GetPerson(store.WithHousehold(ctx, hh), dbq.GetPersonParams{HouseholdID: hh, ID: personID})
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrBadCredentials
+	}
+	if err != nil {
+		return "", fmt.Errorf("get person: %w", err)
+	}
+	if p.HouseholdID != hh {
+		return "", ErrBadCredentials
+	}
+	return s.createSession(ctx, p, KindPersonal, nil, userAgent)
+}
+
 func (s *Service) createSession(ctx context.Context, p dbq.Person, kind string, deviceID *int64, userAgent string) (string, error) {
 	if p.Kind != "adult" || p.ArchivedAt != nil {
 		return "", ErrBadCredentials
@@ -299,7 +335,7 @@ func (s *Service) Session(ctx context.Context, token string, device *dbq.Device)
 		}
 		ttl = set.AdminIdle()
 	default:
-		ttl = PersonalSessionTTL
+		ttl = s.personalIdle
 	}
 
 	if p.ArchivedAt != nil || p.Kind != "adult" || now.Sub(lastSeen) >= ttl {
@@ -390,7 +426,7 @@ func (s *Service) Sweep(ctx context.Context, householdID int64) (int64, error) {
 	now := s.now()
 	return s.st.Q.DeleteExpiredSessions(ctx, dbq.DeleteExpiredSessionsParams{
 		HouseholdID:    householdID,
-		PersonalBefore: now.Add(-PersonalSessionTTL).Unix(),
+		PersonalBefore: now.Add(-s.personalIdle).Unix(),
 		DisplayBefore:  now.Add(-set.AdminIdle()).Unix(),
 	})
 }

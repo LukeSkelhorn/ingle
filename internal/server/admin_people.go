@@ -498,6 +498,10 @@ func (s *Server) handlePersonClearPIN(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePersonSetLogin(w http.ResponseWriter, r *http.Request) {
+	if s.SignIn != nil {
+		http.NotFound(w, r)
+		return
+	}
 	s.credentialAction(w, r, "Sign-in saved.", func(p dbq.Person, f *form) error {
 		if f.raw("password") != f.raw("password_confirm") {
 			f.errs.Add("password_confirm", "The passwords don't match.")
@@ -508,6 +512,10 @@ func (s *Server) handlePersonSetLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePersonClearLogin(w http.ResponseWriter, r *http.Request) {
+	if s.SignIn != nil {
+		http.NotFound(w, r)
+		return
+	}
 	s.credentialAction(w, r, "Sign-in removed.", func(p dbq.Person, _ *form) error {
 		return s.Household.ClearLogin(r.Context(), hhOf(r), actor(r).Person.ID, p.ID, keepToken(r, p.ID))
 	})
