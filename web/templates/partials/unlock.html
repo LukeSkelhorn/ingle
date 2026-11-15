@@ -90,3 +90,30 @@
   </div>
 </div>
 {{end}}
+
+{{/* An admin pop-up for setting a code or PIN on the keypad:
+     dict "ID" "Title" "Action" "Back" (the plain page, for Cancel without
+     JavaScript) "Open" (open when the page loads) "Set" (pinpad_set's dict).
+     /static/dialogs.js opens it from a [data-dialog] link. */}}
+{{define "code_dialog"}}
+<dialog class="dialog" id="{{.ID}}" aria-labelledby="{{.ID}}-h"{{if .Open}} open data-open{{end}}>
+  <div class="dialog__head"><h2 id="{{.ID}}-h">{{.Title}}</h2></div>
+  <form class="stack" method="post" action="{{.Action}}">
+    {{template "pinpad_set" .Set}}
+  </form>
+  <p class="dialog__foot"><a class="btn btn--ghost" href="{{.Back}}" data-dialog-close>Cancel</a></p>
+</dialog>
+{{end}}
+
+{{/* An admin pop-up asking before something is removed:
+     dict "ID" "Title" "Text" "Action" "Back" "Open", as code_dialog. */}}
+{{define "remove_dialog"}}
+<dialog class="dialog" id="{{.ID}}" aria-labelledby="{{.ID}}-h"{{if .Open}} open data-open{{end}}>
+  <div class="dialog__head"><h2 id="{{.ID}}-h">{{.Title}}</h2></div>
+  <p>{{.Text}}</p>
+  <form class="dialog__actions" method="post" action="{{.Action}}">
+    <a class="btn" href="{{.Back}}" data-dialog-close>Cancel</a>
+    <button class="btn btn--danger" type="submit">Remove</button>
+  </form>
+</dialog>
+{{end}}

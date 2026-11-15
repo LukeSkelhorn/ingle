@@ -213,17 +213,34 @@
   <section class="card stack" id="pin">
     <h2>PIN</h2>
     {{if .Data.IsAdult}}
-    <p class="muted">Unlocks admin on a household display{{if $money}}, and opens your My money{{end}}. {{if .Data.HasPIN}}A PIN is set.{{else}}No PIN set.{{end}}</p>
+    <p class="muted">Unlocks admin on a household display{{if $money}}, and opens your My money{{end}}.</p>
     {{else}}
-    <p class="muted">Opens {{.Data.Name}}'s My money on a household display, and nothing else: it can't open admin or unlock the displays. They can type it in themselves while you watch. {{if .Data.HasPIN}}A PIN is set.{{else}}No PIN set.{{end}}</p>
+    <p class="muted">Opens {{.Data.Name}}'s My money on a household display, and nothing else: it can't open admin or unlock the displays. They can type it in themselves while you watch.</p>
     {{end}}
-    <form class="stack" method="post" action="/admin/people/{{.Data.ID}}/pin">
-      {{template "pinpad_set" (dict "Name" "pin" "Confirm" "pin_confirm" "Label" "New PIN (4–6 digits)" "Again" "Confirm PIN" "Err" (or (index .Errors "pin") (index .Errors "pin_confirm")) "Submit" true "Button" (or (and .Data.HasPIN "Change PIN") "Set PIN"))}}
-    </form>
-    <script src="{{asset "pinpad.js"}}"></script>
+    {{$pinErr := or (index .Errors "pin") (index .Errors "pin_confirm")}}
+    {{$back := printf "/admin/people/%d#pin" .Data.ID}}
     {{if .Data.HasPIN}}
-    <form method="post" action="/admin/people/{{.Data.ID}}/pin/clear"><button class="btn btn--danger" type="submit">Remove PIN</button></form>
+    <p class="credential__status">PIN is set <span class="credential__tick" aria-hidden="true">✓</span></p>
+    <div class="credential__actions">
+      <a class="btn" href="?edit=pin#pin" data-dialog="pin-dialog">Change PIN</a>
+      <a class="btn btn--danger" href="?edit=remove-pin#pin" data-dialog="remove-pin-dialog">Remove</a>
+    </div>
+    {{else}}
+    <p class="credential__status">No PIN yet.</p>
+    <div class="credential__actions">
+      <a class="btn btn--primary" href="?edit=pin#pin" data-dialog="pin-dialog">Set a PIN</a>
+    </div>
     {{end}}
+    {{template "code_dialog" (dict "ID" "pin-dialog" "Title" (printf "%s %s's PIN" (or (and .Data.HasPIN "Change") "Set") .Data.Name)
+      "Action" (printf "/admin/people/%d/pin" .Data.ID) "Back" $back "Open" (or (eq $.Edit "pin") $pinErr)
+      "Set" (dict "Name" "pin" "Confirm" "pin_confirm" "Label" "New PIN (4–6 digits)" "Again" "Confirm PIN" "Err" $pinErr "Submit" true "Button" "Save PIN"))}}
+    {{if .Data.HasPIN}}
+    {{template "remove_dialog" (dict "ID" "remove-pin-dialog" "Title" (printf "Remove %s's PIN?" .Data.Name)
+      "Text" (or (and .Data.IsAdult (printf "%s won't be able to unlock admin on a display%s until you set a new one." .Data.Name (or (and $money " or open their My money") ""))) (printf "%s won't be able to open their My money on a display until you set a new one." .Data.Name))
+      "Action" (printf "/admin/people/%d/pin/clear" .Data.ID) "Back" $back "Open" (eq $.Edit "remove-pin"))}}
+    {{end}}
+    <script src="{{asset "pinpad.js"}}"></script>
+    <script src="{{asset "dialogs.js"}}"></script>
   </section>
   {{end}}
 

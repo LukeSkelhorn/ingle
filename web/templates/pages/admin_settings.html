@@ -151,16 +151,29 @@
   <section class="card stack" id="unlock-code">
     <h2>Household unlock code</h2>
     <p class="muted">A locked display shows photos and the clock only. Anyone can unlock it with this code (share it with the kids) or with an adult's PIN. Unlocking the board never opens admin.</p>
-    <p>{{if .Data.HasUnlockCode}}✓ A code is set.{{else}}No code yet. Only adult PINs unlock the displays.{{end}}</p>
-    <form class="stack" method="post" action="/admin/settings/unlock-code">
-      {{template "pinpad_set" (dict "Name" "code" "Confirm" "code_confirm" "Label" (printf "%s (4 to 6 digits)" (or (and .Data.HasUnlockCode "New code") "Code")) "Again" "Code again" "Err" (or (index .Errors "code") (index .Errors "code_confirm")) "Submit" true "Button" "Save code")}}
-    </form>
-    <script src="{{asset "pinpad.js"}}"></script>
+    {{$codeErr := or (index .Errors "code") (index .Errors "code_confirm")}}
     {{if .Data.HasUnlockCode}}
-    <form method="post" action="/admin/settings/unlock-code/clear">
-      <button class="btn btn--danger" type="submit">Remove code</button>
-    </form>
+    <p class="credential__status">Code is set <span class="credential__tick" aria-hidden="true">✓</span></p>
+    <div class="credential__actions">
+      <a class="btn" href="?edit=code#unlock-code" data-dialog="code-dialog">Change code</a>
+      <a class="btn btn--danger" href="?edit=remove-code#unlock-code" data-dialog="remove-code-dialog">Remove</a>
+    </div>
+    {{else}}
+    <p class="credential__status">No code yet. Only adult PINs unlock the displays.</p>
+    <div class="credential__actions">
+      <a class="btn btn--primary" href="?edit=code#unlock-code" data-dialog="code-dialog">Set a code</a>
+    </div>
     {{end}}
+    {{template "code_dialog" (dict "ID" "code-dialog" "Title" (or (and .Data.HasUnlockCode "Change the household code") "Set a household code")
+      "Action" "/admin/settings/unlock-code" "Back" "/admin/settings#unlock-code" "Open" (or (eq $.Edit "code") $codeErr)
+      "Set" (dict "Name" "code" "Confirm" "code_confirm" "Label" (printf "%s (4 to 6 digits)" (or (and .Data.HasUnlockCode "New code") "Code")) "Again" "Code again" "Err" $codeErr "Submit" true "Button" "Save code"))}}
+    {{if .Data.HasUnlockCode}}
+    {{template "remove_dialog" (dict "ID" "remove-code-dialog" "Title" "Remove the household code?"
+      "Text" "Only adult PINs will unlock the displays. The kids won't be able to unlock them until you set a new code."
+      "Action" "/admin/settings/unlock-code/clear" "Back" "/admin/settings#unlock-code" "Open" (eq $.Edit "remove-code"))}}
+    {{end}}
+    <script src="{{asset "pinpad.js"}}"></script>
+    <script src="{{asset "dialogs.js"}}"></script>
   </section>
 
   {{if .Data.CanTakeout}}

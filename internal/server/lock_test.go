@@ -133,14 +133,25 @@ func TestHouseholdCodeAndPhone(t *testing.T) {
 	phone := h.phone()
 
 	// The code is typed twice on Ingle's keypad, not the tablet's keyboard.
-	expect(t, phone.get("/admin/settings"), http.StatusOK, "No code yet",
-		`name="code"`, `name="code_confirm"`, "data-pinpad-set", "/static/pinpad.js")
+	// It's set in a pop-up, closed until "Set a code" opens it.
+	r := phone.get("/admin/settings")
+	expect(t, r, http.StatusOK, "No code yet", `data-dialog="code-dialog">Set a code</a>`,
+		`<dialog class="dialog" id="code-dialog" aria-labelledby="code-dialog-h">`,
+		`name="code"`, `name="code_confirm"`, "data-pinpad-set", "/static/pinpad.js", "/static/dialogs.js")
+	expectNot(t, r, "remove-code-dialog")
+	// Without JavaScript the link opens it with the page.
+	expect(t, phone.get("/admin/settings?edit=code"), http.StatusOK, `id="code-dialog" aria-labelledby="code-dialog-h" open data-open>`)
+	// A mistake comes back with the pop-up open, saying what's wrong.
 	expect(t, phone.post("/admin/settings/unlock-code", url.Values{"code": {"1357"}, "code_confirm": {"1358"}}),
-		http.StatusUnprocessableEntity, "The codes don&#39;t match.")
+		http.StatusUnprocessableEntity, "The codes don&#39;t match.", `id="code-dialog" aria-labelledby="code-dialog-h" open data-open>`)
 	expect(t, phone.post("/admin/settings/unlock-code", url.Values{"code": {"12"}, "code_confirm": {"12"}}),
-		http.StatusUnprocessableEntity, "Use 4 to 6 digits.")
-	expect(t, phone.post("/admin/settings/unlock-code", url.Values{"code": {"1357"}, "code_confirm": {"1357"}}),
-		http.StatusOK, "Unlock code saved.", "A code is set.")
+		http.StatusUnprocessableEntity, "Use 4 to 6 digits.", "open data-open>")
+	r = phone.post("/admin/settings/unlock-code", url.Values{"code": {"1357"}, "code_confirm": {"1357"}})
+	expect(t, r, http.StatusOK, "Unlock code saved.", "Code is set", ">Change code</a>", `data-dialog="remove-code-dialog">Remove</a>`,
+		"Change the household code", "Remove the household code?")
+	expectNot(t, r, "open data-open>")
+	expect(t, phone.get("/admin/settings?edit=remove-code"), http.StatusOK,
+		`id="remove-code-dialog" aria-labelledby="remove-code-dialog-h" open data-open>`, "Only adult PINs will unlock the displays.")
 
 	// Lock from the phone (back to admin home), unlock with the code.
 	expectRedirect(t, phone.post("/lock", url.Values{"next": {"/admin"}}), "/admin")

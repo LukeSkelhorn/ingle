@@ -46,9 +46,13 @@ func TestKidMoneyPIN(t *testing.T) {
 
 	// A grown-up sets it in Admin › People, typing it twice on Ingle's
 	// keypad.
-	expect(t, phone.get("/admin/people/"+alfie), http.StatusOK,
-		`name="pin"`, `name="pin_confirm"`, "data-pinpad-set", "/static/pinpad.js")
-	expect(t, phone.post("/admin/people/"+alfie+"/pin", url.Values{"pin": {"1357"}, "pin_confirm": {"1357"}}), http.StatusOK, "PIN saved.", "A PIN is set.")
+	expect(t, phone.get("/admin/people/"+alfie), http.StatusOK, "No PIN yet.", `data-dialog="pin-dialog">Set a PIN</a>`,
+		`name="pin"`, `name="pin_confirm"`, "data-pinpad-set", "/static/pinpad.js", "/static/dialogs.js")
+	expect(t, phone.get("/admin/people/"+alfie+"?edit=pin"), http.StatusOK, `id="pin-dialog" aria-labelledby="pin-dialog-h" open data-open>`, "Set Alfie&#39;s PIN")
+	expect(t, phone.post("/admin/people/"+alfie+"/pin", url.Values{"pin": {"1357"}, "pin_confirm": {"1358"}}), http.StatusUnprocessableEntity,
+		"The PINs don&#39;t match.", `id="pin-dialog" aria-labelledby="pin-dialog-h" open data-open>`)
+	expect(t, phone.post("/admin/people/"+alfie+"/pin", url.Values{"pin": {"1357"}, "pin_confirm": {"1357"}}), http.StatusOK, "PIN saved.", "PIN is set", "Remove Alfie&#39;s PIN?",
+		"Alfie won&#39;t be able to open their My money on a display until you set a new one.")
 	expect(t, wall.get("/board/money/"+alfie), http.StatusOK, "Enter your PIN", `data-pinpad data-length="4"`)
 	expect(t, wall.get("/"), http.StatusOK, "/static/pinpad.js")
 
@@ -232,7 +236,8 @@ func TestMoneyModuleOff(t *testing.T) {
 	// No kid PIN card, and no new kid PINs; adults keep theirs.
 	notContains(t, phone.get("/admin/people/"+alfie), `/pin"`)
 	expect(t, phone.post("/admin/people/"+alfie+"/pin", url.Values{"pin": {"2222"}, "pin_confirm": {"2222"}}), http.StatusConflict, "Turn My money on")
-	expect(t, phone.get("/admin/people/"+itoa(h.person("Mum").ID)), http.StatusOK, "Unlocks admin on a household display. A PIN is set.")
+	expect(t, phone.get("/admin/people/"+itoa(h.person("Mum").ID)), http.StatusOK, "Unlocks admin on a household display.", "PIN is set",
+		"Mum won&#39;t be able to unlock admin on a display until you set a new one.")
 
 	// Back on, Alfie's PIN still works.
 	setModules(t, phone, "rewards", "money", "photos", "calendar")
