@@ -389,6 +389,12 @@ func canDo(ctx context.Context, q *dbq.Queries, chore dbq.Chore, occ dbq.ChoreOc
 // marks the occurrence done and, when approved, credits it. reviewer is the
 // adult who approved it, if one did.
 func (s *Service) recordCompletion(ctx context.Context, q *dbq.Queries, chore dbq.Chore, occurrenceID, personID int64, status string, reviewer *int64) (dbq.Completion, error) {
+	return s.recordCompletionFor(ctx, q, chore, occurrenceID, personID, nil, status, reviewer)
+}
+
+// recordCompletionFor is recordCompletion for someone doing another
+// person's chore: personID did it and earns it, forPerson is whose it was.
+func (s *Service) recordCompletionFor(ctx context.Context, q *dbq.Queries, chore dbq.Chore, occurrenceID, personID int64, forPerson *int64, status string, reviewer *int64) (dbq.Completion, error) {
 	now := s.now().Unix()
 	p, err := getPerson(ctx, q, chore.HouseholdID, personID)
 	if err != nil {
@@ -399,6 +405,7 @@ func (s *Service) recordCompletion(ctx context.Context, q *dbq.Queries, chore db
 		HouseholdID:  chore.HouseholdID,
 		OccurrenceID: occurrenceID,
 		PersonID:     personID,
+		ForPersonID:  forPerson,
 		CompletedAt:  now,
 		Status:       status,
 		Points:       points,

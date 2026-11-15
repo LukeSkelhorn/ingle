@@ -386,6 +386,8 @@ func boardErrorText(err error) (string, bool) {
 		return "Someone has already checked that one.", true
 	case errors.Is(err, chores.ErrNotAdult):
 		return needAdult, true
+	case errors.Is(err, chores.ErrNotChild):
+		return "Only a child's chore can be done for them.", true
 	case errors.Is(err, chores.ErrInsufficientBalance):
 		return "Not enough for that yet.", true
 	case errors.Is(err, chores.ErrNotFound):

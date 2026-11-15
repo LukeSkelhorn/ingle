@@ -26,6 +26,7 @@ type HistoryItem struct {
 	Title, Emoji  string // the chore or reward, if any
 	DueTime       string // the chore's time (HH:MM), "" if untimed or not a chore
 	Note          string // an adult's reason, or what a reversal undid
+	For           string // whose chore it was, when this person did it for them
 	Points, Pence int64  // signed: what it added or took away
 	At            int64  // unix seconds
 }
@@ -54,7 +55,7 @@ func (s *Service) History(ctx context.Context, householdID, personID int64, sinc
 	items = make([]HistoryItem, 0, len(rows))
 	for _, r := range rows {
 		items = append(items, HistoryItem{
-			ID: r.ID, Kind: r.Kind, Title: r.Title, Emoji: r.Emoji, DueTime: r.DueTime, Note: r.Note,
+			ID: r.ID, Kind: r.Kind, Title: r.Title, Emoji: r.Emoji, DueTime: r.DueTime, Note: r.Note, For: r.ForName,
 			Points: r.Points, Pence: r.Pence, At: r.CreatedAt,
 		})
 	}
