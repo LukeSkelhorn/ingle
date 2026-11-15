@@ -10,15 +10,16 @@ import (
 )
 
 const createCompletion = `-- name: CreateCompletion :one
-INSERT INTO completions (household_id, occurrence_id, person_id, completed_at, status, points, pence)
-VALUES (?, ?, ?, ?, ?, ?, ?)
-RETURNING id, household_id, occurrence_id, person_id, completed_at, status, reviewed_by, reviewed_at, points, pence
+INSERT INTO completions (household_id, occurrence_id, person_id, for_person_id, completed_at, status, points, pence)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING id, household_id, occurrence_id, person_id, completed_at, status, reviewed_by, reviewed_at, points, pence, for_person_id
 `
 
 type CreateCompletionParams struct {
 	HouseholdID  int64  `json:"household_id"`
 	OccurrenceID int64  `json:"occurrence_id"`
 	PersonID     int64  `json:"person_id"`
+	ForPersonID  *int64 `json:"for_person_id"`
 	CompletedAt  int64  `json:"completed_at"`
 	Status       string `json:"status"`
 	Points       int64  `json:"points"`
@@ -30,6 +31,7 @@ func (q *Queries) CreateCompletion(ctx context.Context, arg CreateCompletionPara
 		arg.HouseholdID,
 		arg.OccurrenceID,
 		arg.PersonID,
+		arg.ForPersonID,
 		arg.CompletedAt,
 		arg.Status,
 		arg.Points,
@@ -47,6 +49,7 @@ func (q *Queries) CreateCompletion(ctx context.Context, arg CreateCompletionPara
 		&i.ReviewedAt,
 		&i.Points,
 		&i.Pence,
+		&i.ForPersonID,
 	)
 	return i, err
 }
@@ -66,7 +69,7 @@ func (q *Queries) DeleteCompletion(ctx context.Context, arg DeleteCompletionPara
 }
 
 const getCompletion = `-- name: GetCompletion :one
-SELECT id, household_id, occurrence_id, person_id, completed_at, status, reviewed_by, reviewed_at, points, pence FROM completions WHERE household_id = ? AND id = ?
+SELECT id, household_id, occurrence_id, person_id, completed_at, status, reviewed_by, reviewed_at, points, pence, for_person_id FROM completions WHERE household_id = ? AND id = ?
 `
 
 type GetCompletionParams struct {
@@ -88,6 +91,7 @@ func (q *Queries) GetCompletion(ctx context.Context, arg GetCompletionParams) (C
 		&i.ReviewedAt,
 		&i.Points,
 		&i.Pence,
+		&i.ForPersonID,
 	)
 	return i, err
 }
@@ -96,13 +100,14 @@ const getCompletionDetail = `-- name: GetCompletionDetail :one
 SELECT
     c.id, c.occurrence_id, c.person_id, c.completed_at, c.status, c.reviewed_at, c.points, c.pence,
     p.name AS person_name, p.colour AS person_colour, p.avatar AS person_avatar,
-    r.name AS reviewer_name,
+    r.name AS reviewer_name, f.name AS for_name,
     ch.title, ch.emoji, o.due_on, o.due_time
 FROM completions c
 JOIN chore_occurrences o ON o.id = c.occurrence_id
 JOIN chores ch ON ch.id = o.chore_id
 JOIN people p ON p.id = c.person_id
 LEFT JOIN people r ON r.id = c.reviewed_by
+LEFT JOIN people f ON f.id = c.for_person_id
 WHERE c.household_id = ?1 AND c.id = ?2
 `
 
@@ -124,6 +129,7 @@ type GetCompletionDetailRow struct {
 	PersonColour string  `json:"person_colour"`
 	PersonAvatar *string `json:"person_avatar"`
 	ReviewerName *string `json:"reviewer_name"`
+	ForName      *string `json:"for_name"`
 	Title        string  `json:"title"`
 	Emoji        string  `json:"emoji"`
 	DueOn        string  `json:"due_on"`
@@ -146,6 +152,7 @@ func (q *Queries) GetCompletionDetail(ctx context.Context, arg GetCompletionDeta
 		&i.PersonColour,
 		&i.PersonAvatar,
 		&i.ReviewerName,
+		&i.ForName,
 		&i.Title,
 		&i.Emoji,
 		&i.DueOn,
@@ -158,13 +165,14 @@ const listCompletionDetails = `-- name: ListCompletionDetails :many
 SELECT
     c.id, c.occurrence_id, c.person_id, c.completed_at, c.status, c.reviewed_at, c.points, c.pence,
     p.name AS person_name, p.colour AS person_colour, p.avatar AS person_avatar,
-    r.name AS reviewer_name,
+    r.name AS reviewer_name, f.name AS for_name,
     ch.title, ch.emoji, o.due_on, o.due_time
 FROM completions c
 JOIN chore_occurrences o ON o.id = c.occurrence_id
 JOIN chores ch ON ch.id = o.chore_id
 JOIN people p ON p.id = c.person_id
 LEFT JOIN people r ON r.id = c.reviewed_by
+LEFT JOIN people f ON f.id = c.for_person_id
 WHERE c.household_id = ?1
   AND (c.status = 'pending' OR c.completed_at >= ?2)
 ORDER BY c.status = 'pending' DESC, c.completed_at DESC, c.id DESC
@@ -188,6 +196,7 @@ type ListCompletionDetailsRow struct {
 	PersonColour string  `json:"person_colour"`
 	PersonAvatar *string `json:"person_avatar"`
 	ReviewerName *string `json:"reviewer_name"`
+	ForName      *string `json:"for_name"`
 	Title        string  `json:"title"`
 	Emoji        string  `json:"emoji"`
 	DueOn        string  `json:"due_on"`
@@ -218,6 +227,7 @@ func (q *Queries) ListCompletionDetails(ctx context.Context, arg ListCompletionD
 			&i.PersonColour,
 			&i.PersonAvatar,
 			&i.ReviewerName,
+			&i.ForName,
 			&i.Title,
 			&i.Emoji,
 			&i.DueOn,
@@ -237,7 +247,7 @@ func (q *Queries) ListCompletionDetails(ctx context.Context, arg ListCompletionD
 }
 
 const listLiveCompletionsForRange = `-- name: ListLiveCompletionsForRange :many
-SELECT c.id, c.occurrence_id, c.person_id, c.completed_at, c.status
+SELECT c.id, c.occurrence_id, c.person_id, c.for_person_id, c.completed_at, c.status
 FROM completions c
 JOIN chore_occurrences o ON o.id = c.occurrence_id
 WHERE c.household_id = ?1
@@ -256,6 +266,7 @@ type ListLiveCompletionsForRangeRow struct {
 	ID           int64  `json:"id"`
 	OccurrenceID int64  `json:"occurrence_id"`
 	PersonID     int64  `json:"person_id"`
+	ForPersonID  *int64 `json:"for_person_id"`
 	CompletedAt  int64  `json:"completed_at"`
 	Status       string `json:"status"`
 }
@@ -275,6 +286,7 @@ func (q *Queries) ListLiveCompletionsForRange(ctx context.Context, arg ListLiveC
 			&i.ID,
 			&i.OccurrenceID,
 			&i.PersonID,
+			&i.ForPersonID,
 			&i.CompletedAt,
 			&i.Status,
 		); err != nil {
@@ -292,7 +304,7 @@ func (q *Queries) ListLiveCompletionsForRange(ctx context.Context, arg ListLiveC
 }
 
 const listPendingCompletions = `-- name: ListPendingCompletions :many
-SELECT id, household_id, occurrence_id, person_id, completed_at, status, reviewed_by, reviewed_at, points, pence FROM completions
+SELECT id, household_id, occurrence_id, person_id, completed_at, status, reviewed_by, reviewed_at, points, pence, for_person_id FROM completions
 WHERE household_id = ? AND status = 'pending'
 ORDER BY completed_at
 `
@@ -317,6 +329,7 @@ func (q *Queries) ListPendingCompletions(ctx context.Context, householdID int64)
 			&i.ReviewedAt,
 			&i.Points,
 			&i.Pence,
+			&i.ForPersonID,
 		); err != nil {
 			return nil, err
 		}

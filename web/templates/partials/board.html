@@ -36,7 +36,7 @@
       {{end}}
       {{if .Cards}}
       <ul class="chores{{if .Person.PictureCards}} chores--pictures{{end}}">
-        {{- range .Cards}}{{template "card" (dict "Card" . "Adult" $.Adult "Pictures" $col.Person.PictureCards)}}{{end -}}
+        {{- range .Cards}}{{template "card" (dict "Card" . "Adult" $.Adult "Pictures" $col.Person.PictureCards "Child" (eq $col.Person.Kind "child") "Col" $col.Person.ID)}}{{end -}}
       </ul>
       {{else if and .Away (not $.Holiday)}}
       <p class="column__empty">🏖️ Away {{.Away.Until $.Day}}</p>
@@ -84,9 +84,11 @@
 {{/* One chore: dict "Card" chores.Card "Adult" bool "Pictures" (picture
      cards: a big emoji tile, never without an emoji). Pool chores open the
      picker; assigned and claimed chores are completed with one tap; done
-     chores open the review sheet for an adult, and are inert otherwise. */}}
+     chores open the review sheet for an adult, and are inert otherwise. On a
+     child's column, a long press (data-hold) opens the sheet where an adult
+     can say they did it instead. */}}
 {{define "card"}}
-{{- $adult := .Adult}}{{$e := .Card.Emoji}}{{if .Pictures}}{{$e = .Card.PictureEmoji}}{{end}}{{with .Card}}
+{{- $adult := .Adult}}{{$hold := ""}}{{if .Child}}{{$hold = printf "/board/occurrences/%d/do-for?person=%d" .Card.OccurrenceID .Col}}{{end}}{{$e := .Card.Emoji}}{{if .Pictures}}{{$e = .Card.PictureEmoji}}{{end}}{{with .Card}}
 <li class="chore{{if .Done}} chore--done{{if .JustDone}} chore--just{{end}}{{end}}{{if .Overdue}} chore--overdue{{end}}{{if .Claimed}} chore--claimed{{end}}">
   {{if and .Done $adult .CompletionID}}
   <button class="chore__main" type="button"
@@ -108,7 +110,7 @@
   {{else}}
   <button class="chore__main" type="button" hx-disabled-elt="this"
           hx-post="/board/occurrences/{{.OccurrenceID}}/complete" hx-target="#board" hx-swap="outerHTML"
-          {{- if .Shared}} hx-vals='{"person": "{{.For}}"}'{{end}}>
+          {{- if .Shared}} hx-vals='{"person": "{{.For}}"}'{{end}}{{with $hold}} data-hold="{{.}}"{{end}}>
     <span class="chore__check" aria-hidden="true"></span>
     {{with $e}}<span class="chore__emoji" aria-hidden="true">{{.}}</span>{{end}}
     <span class="chore__text">
@@ -130,7 +132,7 @@
 {{with $e}}<span class="chore__emoji" aria-hidden="true">{{.}}</span>{{end}}
 <span class="chore__text">
   <span class="chore__title">{{.Title}}</span>
-  <span class="chore__meta">{{if .Pending}}<span class="tag tag--wait">Waiting for a grown-up</span>{{else}}Done{{end}}{{with .DueTime}} · {{.}}{{end}}</span>
+  <span class="chore__meta">{{if .Pending}}<span class="tag tag--wait">Waiting for a grown-up</span>{{else if .DoneBy}}Done by {{.DoneBy}}{{else}}Done{{end}}{{with .DueTime}} · {{.}}{{end}}</span>
 </span>
 {{end}}{{end}}
 
@@ -153,13 +155,14 @@
   <h2 class="picker__title" tabindex="-1" autofocus>{{with .Card.Emoji}}<span class="picker__emoji" aria-hidden="true">{{.}}</span> {{end}}{{.Card.Title}}</h2>
   <p class="picker__ask">Who's doing this?</p>
   <div class="picker__people">
-    {{range .People}}
+    {{range .People}}{{$worth := worth .Points .Pence}}{{with .Person}}
     <label class="picker__person" style="--person: {{.Colour}}">
       <input class="visually-hidden" type="radio" name="person" value="{{.ID}}">
       {{template "avatar" (avatar . "lg")}}
       <span>{{.Name}}</span>
+      {{with $worth}}<small class="picker__worth">{{.}}</small>{{end}}
     </label>
-    {{end}}
+    {{end}}{{end}}
   </div>
   <div class="picker__actions">
     <button class="btn btn--block" type="button" hx-disabled-elt="this"
@@ -172,6 +175,42 @@
 </form>
 {{end}}
 
+{{/* "I did it" (doForView): an adult did a child's chore for them and gets
+     the points instead. Opened by a long press on the child's chore. With
+     more than one adult it asks which of them did it, starting on the one
+     who unlocked the board. */}}
+{{define "do_for"}}{{$v := .}}
+<form class="picker" hx-target="#board" hx-swap="outerHTML" onsubmit="return false">
+  <h2 class="picker__title" tabindex="-1" autofocus>{{with .Emoji}}<span class="picker__emoji" aria-hidden="true">{{.}}</span> {{end}}{{.Title}}</h2>
+  <div class="review__who">
+    {{template "avatar" (avatar .Child "md")}}
+    <p>{{.Child.Name}}'s chore</p>
+  </div>
+  {{if gt (len .Adults) 1}}
+  <p class="picker__ask">Who did it?</p>
+  <div class="picker__people">
+    {{range .Adults}}
+    <label class="picker__person" style="--person: {{.Colour}}">
+      <input class="visually-hidden" type="radio" name="by" value="{{.ID}}"{{if eq .ID $v.Adult.ID}} checked{{end}}>
+      {{template "avatar" (avatar . "lg")}}
+      <span>{{.Name}}</span>
+      {{with $v.Points}}<small class="picker__worth">{{pts .}}</small>{{end}}
+    </label>
+    {{end}}
+  </div>
+  <p class="muted">They get {{if .Points}}{{pts .Points}}{{else}}the credit{{end}}, and it's ticked off for {{.Child.Name}} without any points.</p>
+  {{else}}
+  <input type="hidden" name="by" value="{{.Adult.ID}}">
+  <p class="muted">Did it for {{.Child.Name}}? You get {{if .Points}}{{pts .Points}}{{else}}the credit{{end}}, and it's ticked off for {{.Child.Name}} without any points.</p>
+  {{end}}
+  <div class="picker__actions">
+    <button class="btn btn--primary btn--block" type="button" hx-disabled-elt="this"
+            hx-post="/board/occurrences/{{.OccurrenceID}}/do-for" hx-vals='{"person": "{{.Child.ID}}"}'>{{if gt (len .Adults) 1}}Done{{else}}I did it{{end}}</button>
+    <button class="btn btn--ghost btn--block" type="button" data-close>Cancel</button>
+  </div>
+</form>
+{{end}}
+
 {{/* An adult's sheet for a done chore: approve or reject if it's waiting,
      reverse if it counted. */}}
 {{define "review"}}
@@ -180,7 +219,7 @@
   <h2 class="picker__title" tabindex="-1" autofocus>{{with .Emoji}}<span class="picker__emoji" aria-hidden="true">{{.}}</span> {{end}}{{.Title}}</h2>
   <div class="review__who">
     {{template "avatar" (avatar .Person "md")}}
-    <p>{{.Person.Name}} · {{when .CompletedAt}}{{with worth .Points .Pence}}<br><span class="chip">{{.}}</span>{{end}}</p>
+    <p>{{.Person.Name}}{{with .ForName}} for {{.}}{{end}} · {{when .CompletedAt}}{{with worth .Points .Pence}}<br><span class="chip">{{.}}</span>{{end}}</p>
   </div>
   <div class="picker__actions">
     {{if .Pending}}
@@ -341,11 +380,35 @@
       {{- if .CostPence}}{{money .HavePence}} of {{money .CostPence}}{{end -}}
     </span>
   </p>
-  <div class="goal__bar" role="img" aria-label="Saving for {{.Title}}: {{.Percent}}%"><span style="width: {{.Percent}}%"></span></div>
+  {{template "goal_bar" .}}
   {{if .Waiting}}<p class="goal__status"><span class="tag tag--wait">Waiting for a grown-up</span></p>
   {{else if .Reached}}<p class="goal__status"><span class="goal__ready">You've saved enough!</span>
     <button class="btn btn--primary goal__claim" type="button" hx-disabled-elt="this"
             hx-post="/board/rewards/{{.RewardID}}/claim" hx-vals='{"person": "{{$pid}}"}'>Claim</button></p>
+  {{else}}{{template "goal_offer" .}}
   {{end}}
 </div>
+{{end}}{{end}}
+
+{{/* A goal's progress bar (chores.Goal): what they saved, then the part an
+     adult matched in a lighter shade. */}}
+{{define "goal_bar"}}
+<div class="goal__bar" role="img" aria-label="Saving for {{.Title}}: {{.Percent}}%
+  {{- with worth .MatchedPoints .MatchedPence}}, including {{.}} matched{{end}}">
+  {{- if .MatchPercent}}<span style="width: {{.OwnPercent}}%"></span><span class="goal__bar-match" style="width: {{.MatchPercent}}%"></span>
+  {{- else}}<span style="width: {{.Percent}}%"></span>{{end -}}
+</div>
+{{end}}
+
+{{/* What an adult adds while a child saves for this goal (chores.Goal's
+     Offer): "Mum adds 10p for every £1 you earn (£3.80 left to match)". */}}
+{{define "goal_offer"}}{{with .Offer}}
+<p class="goal__offer"><span aria-hidden="true">🤝</span>
+  {{- if .Spent}} {{.SetByName}}'s matching has reached its limit.
+  {{- else}} {{.SetByName}} adds
+  {{- if .Money}} {{money .AddPence}} for every {{money .PerPence}}{{end}}
+  {{- if and .Money .Points}} and{{end}}
+  {{- if .Points}} {{pts .AddPoints}} for every {{pts .PerPoints}}{{end}} you earn
+  {{- if .Capped}}{{with worth .CapLeftPoints .CapLeftPence}} ({{.}} left to match){{end}}{{end}}.
+  {{- end}}</p>
 {{end}}{{end}}

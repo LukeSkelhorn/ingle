@@ -131,7 +131,7 @@ func (s *Service) Missed(ctx context.Context, householdID int64, boardDay time.T
 				continue // archived since
 			}
 			m.Person = &p
-			m.Points, m.Pence = Earns(r.Mode, p.Kind, r.Points, r.Pence, r.AdultPoints)
+			m.Points, m.Pence = Earns(p.Kind, r.Points, r.Pence, r.AdultPoints)
 		case r.Mode == ModeShared:
 			for _, id := range shared[r.ChoreID] {
 				if p, ok := byID[id]; ok {

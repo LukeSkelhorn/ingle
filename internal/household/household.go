@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/mail"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -61,6 +62,10 @@ type RewardInput struct {
 	Description string
 	CostPoints  int64
 	CostPence   int64
+	// Chosen makes it for PeopleIDs only. Otherwise it's for everyone,
+	// including people added later.
+	Chosen    bool
+	PeopleIDs []int64
 }
 
 // SetupInput is the first-run form.
@@ -418,6 +423,33 @@ func (s *Service) Reward(ctx context.Context, householdID, id int64) (dbq.Reward
 	return r, notFound(err)
 }
 
+// RewardsFor returns the active rewards personID may have: rewards for
+// everyone or chosen for them, and, as adults have no money, only rewards
+// that cost no money for an adult.
+func (s *Service) RewardsFor(ctx context.Context, householdID, personID int64) ([]dbq.Reward, error) {
+	return s.st.Q.ListRewardsForPerson(ctx, dbq.ListRewardsForPersonParams{HouseholdID: householdID, PersonID: personID})
+}
+
+// RewardPeople returns who a reward is for, when it isn't for everyone
+// (active people only, in board order).
+func (s *Service) RewardPeople(ctx context.Context, householdID, rewardID int64) ([]int64, error) {
+	return s.st.Q.ListPeopleForReward(ctx, dbq.ListPeopleForRewardParams{HouseholdID: householdID, RewardID: rewardID})
+}
+
+// AllRewardPeople returns every reward's chosen people (active only), by
+// reward.
+func (s *Service) AllRewardPeople(ctx context.Context, householdID int64) (map[int64][]int64, error) {
+	rows, err := s.st.Q.ListRewardPeople(ctx, householdID)
+	if err != nil {
+		return nil, fmt.Errorf("list reward people: %w", err)
+	}
+	out := make(map[int64][]int64)
+	for _, r := range rows {
+		out[r.RewardID] = append(out[r.RewardID], r.PersonID)
+	}
+	return out, nil
+}
+
 // CreateReward adds a reward.
 func (s *Service) CreateReward(ctx context.Context, householdID, actorID int64, in RewardInput) (dbq.Reward, error) {
 	if err := validateReward(in).Err(); err != nil {
@@ -426,7 +458,10 @@ func (s *Service) CreateReward(ctx context.Context, householdID, actorID int64, 
 	var r dbq.Reward
 	now := s.now()
 	err := s.st.WithTx(ctx, func(q *dbq.Queries) error {
-		var err error
+		people, err := rewardPeople(ctx, q, householdID, in)
+		if err != nil {
+			return err
+		}
 		r, err = q.CreateReward(ctx, dbq.CreateRewardParams{
 			HouseholdID: householdID, Title: strings.TrimSpace(in.Title), Emoji: strings.TrimSpace(in.Emoji), Description: strings.TrimSpace(in.Description),
 			CostPoints: in.CostPoints, CostPence: in.CostPence, CreatedAt: now.Unix(),
@@ -434,12 +469,17 @@ func (s *Service) CreateReward(ctx context.Context, householdID, actorID int64, 
 		if err != nil {
 			return fmt.Errorf("create reward: %w", err)
 		}
+		if r, err = setRewardPeople(ctx, q, r, !in.Chosen, people); err != nil {
+			return err
+		}
 		return log(ctx, q, householdID, actorID, "reward.created", "reward", r.ID, now)
 	})
 	return r, err
 }
 
 // UpdateReward edits a reward. Past redemptions keep the cost they had.
+// Anyone saving for it who may no longer have it loses the goal; claims
+// they've already made still wait for an adult.
 func (s *Service) UpdateReward(ctx context.Context, householdID, actorID, id int64, in RewardInput) (dbq.Reward, error) {
 	if err := validateReward(in).Err(); err != nil {
 		return dbq.Reward{}, err
@@ -447,7 +487,10 @@ func (s *Service) UpdateReward(ctx context.Context, householdID, actorID, id int
 	var r dbq.Reward
 	now := s.now()
 	err := s.st.WithTx(ctx, func(q *dbq.Queries) error {
-		var err error
+		people, err := rewardPeople(ctx, q, householdID, in)
+		if err != nil {
+			return err
+		}
 		r, err = q.UpdateReward(ctx, dbq.UpdateRewardParams{
 			Title: strings.TrimSpace(in.Title), Emoji: strings.TrimSpace(in.Emoji), Description: strings.TrimSpace(in.Description),
 			CostPoints: in.CostPoints, CostPence: in.CostPence, HouseholdID: householdID, ID: id,
@@ -455,9 +498,65 @@ func (s *Service) UpdateReward(ctx context.Context, householdID, actorID, id int
 		if err != nil {
 			return notFound(err)
 		}
+		if r, err = setRewardPeople(ctx, q, r, !in.Chosen, people); err != nil {
+			return err
+		}
+		if err := q.ClearGoalsNotAllowed(ctx, dbq.ClearGoalsNotAllowedParams{HouseholdID: householdID, RewardID: &id}); err != nil {
+			return fmt.Errorf("clear goals: %w", err)
+		}
 		return log(ctx, q, householdID, actorID, "reward.updated", "reward", id, now)
 	})
 	return r, err
+}
+
+// rewardPeople checks who a reward is for: nobody to list when it's for
+// everyone, otherwise distinct, active people from this household, and no
+// adults when it costs money.
+func rewardPeople(ctx context.Context, q *dbq.Queries, householdID int64, in RewardInput) ([]int64, error) {
+	if !in.Chosen {
+		return nil, nil
+	}
+	var ids []int64
+	adult := false
+	for _, id := range in.PeopleIDs {
+		if slices.Contains(ids, id) {
+			continue
+		}
+		p, err := q.GetPerson(ctx, dbq.GetPersonParams{HouseholdID: householdID, ID: id})
+		if err != nil || p.ArchivedAt != nil {
+			continue
+		}
+		adult = adult || p.Kind == KindAdult
+		ids = append(ids, p.ID)
+	}
+	errs := valid.Errors{}
+	switch {
+	case len(ids) == 0:
+		errs.Add("people_ids", "Choose who it's for, or Everyone.")
+	case adult && in.CostPence > 0:
+		errs.Add("people_ids", "Adults don't have money, so they can't have a reward that costs money.")
+	}
+	return ids, errs.Err()
+}
+
+// setRewardPeople saves who a reward is for.
+func setRewardPeople(ctx context.Context, q *dbq.Queries, r dbq.Reward, everyone bool, people []int64) (dbq.Reward, error) {
+	r.Everyone = 0
+	if everyone {
+		r.Everyone = 1
+	}
+	if err := q.SetRewardEveryone(ctx, dbq.SetRewardEveryoneParams{Everyone: r.Everyone, HouseholdID: r.HouseholdID, ID: r.ID}); err != nil {
+		return r, fmt.Errorf("set reward everyone: %w", err)
+	}
+	if err := q.DeleteRewardPeople(ctx, dbq.DeleteRewardPeopleParams{HouseholdID: r.HouseholdID, RewardID: r.ID}); err != nil {
+		return r, fmt.Errorf("clear reward people: %w", err)
+	}
+	for _, id := range people {
+		if err := q.AddRewardPerson(ctx, dbq.AddRewardPersonParams{HouseholdID: r.HouseholdID, RewardID: r.ID, PersonID: id}); err != nil {
+			return r, fmt.Errorf("add reward person: %w", err)
+		}
+	}
+	return r, nil
 }
 
 // ArchiveReward hides a reward. Anyone saving for it loses the goal; it

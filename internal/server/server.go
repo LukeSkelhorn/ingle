@@ -117,6 +117,10 @@ func New(d Deps) (*Server, error) {
 		s.Modules = module.NewService(d.Store, module.NewRegistry())
 	}
 	s.registerModules(s.Modules.Registry())
+	if d.Chores != nil {
+		// Matching savings checks the rewards and money modules.
+		d.Chores.SetModules(s.Modules.EnabledWith)
+	}
 	// Switching a module on or off changes every page; displays reload.
 	s.Modules.OnChange(func(householdID int64) {
 		s.lockEvents.publish(householdID, "")
@@ -181,6 +185,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /board/occurrences/{id}/claim", viewer(s.handleClaim))
 	mux.Handle("POST /board/occurrences/{id}/complete", viewer(s.handleComplete))
 	mux.Handle("POST /board/occurrences/{id}/release", viewer(s.handleRelease))
+	mux.Handle("GET /board/occurrences/{id}/do-for", viewer(s.handleDoForSheet))
+	mux.Handle("POST /board/occurrences/{id}/do-for", viewer(s.handleDoFor))
 	mux.Handle("POST /board/completions/{id}/undo", viewer(s.handleUndo))
 	mux.Handle("GET /board/completions/{id}/review", viewer(s.handleReviewSheet))
 	mux.Handle("POST /board/completions/{id}/approve", viewer(s.boardReview(s.Chores.Approve, "Approved. Points added.")))
@@ -237,6 +243,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /admin/settings/unlock-code", admin(s.handleUnlockCodeSet))
 	mux.Handle("POST /admin/settings/unlock-code/clear", admin(s.handleUnlockCodeClear))
 	mux.Handle("POST /admin/settings/holidays", admin(s.handleHolidayAdd))
+	mux.Handle("POST /admin/settings/interest", admin(s.handleInterestUpdate))
 	mux.Handle("POST /admin/settings/holidays/{id}/end", admin(s.handleHolidayEnd))
 	mux.Handle("POST /admin/settings/holidays/{id}/delete", admin(s.handleHolidayRemove))
 	if s.Takeout != nil {

@@ -55,11 +55,21 @@ func (s *Service) PersonSummary(ctx context.Context, householdID, personID int64
 		HeldPoints: held.Points, HeldPence: held.Pence, Waiting: int(held.Waiting),
 		WeekPoints: week.Points, WeekPence: week.Pence,
 	}
+	gm, err := s.loadGoalMatches(ctx, q, householdID)
+	if err != nil {
+		return Summary{}, err
+	}
 	for _, g := range goals {
 		if g.PersonID == personID {
 			goal := newGoal(g, sum.Points, sum.Pence)
+			gm.apply(&goal, p, s.moduleOn(ctx, q, householdID, moduleMoney))
 			sum.Goal = &goal
 		}
+	}
+	if p.Kind == "adult" {
+		// Adults have points only; any money from before stays in the
+		// history but isn't a balance.
+		sum.Pence, sum.HeldPence, sum.WeekPence = 0, 0, 0
 	}
 	return sum, nil
 }

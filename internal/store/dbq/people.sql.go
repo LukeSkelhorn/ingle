@@ -145,7 +145,7 @@ func (q *Queries) CountAdultsWithCredential(ctx context.Context, householdID int
 const createPerson = `-- name: CreatePerson :one
 INSERT INTO people (household_id, name, kind, colour, avatar, sort_order, picture_cards, created_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-RETURNING id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash, pin_length, goal_reward_id, goal_set_at, picture_cards
+RETURNING id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash, pin_length, goal_reward_id, goal_set_at, picture_cards, interest_opt_out
 `
 
 type CreatePersonParams struct {
@@ -188,12 +188,13 @@ func (q *Queries) CreatePerson(ctx context.Context, arg CreatePersonParams) (Per
 		&i.GoalRewardID,
 		&i.GoalSetAt,
 		&i.PictureCards,
+		&i.InterestOptOut,
 	)
 	return i, err
 }
 
 const getPerson = `-- name: GetPerson :one
-SELECT id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash, pin_length, goal_reward_id, goal_set_at, picture_cards FROM people WHERE household_id = ? AND id = ?
+SELECT id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash, pin_length, goal_reward_id, goal_set_at, picture_cards, interest_opt_out FROM people WHERE household_id = ? AND id = ?
 `
 
 type GetPersonParams struct {
@@ -221,12 +222,13 @@ func (q *Queries) GetPerson(ctx context.Context, arg GetPersonParams) (Person, e
 		&i.GoalRewardID,
 		&i.GoalSetAt,
 		&i.PictureCards,
+		&i.InterestOptOut,
 	)
 	return i, err
 }
 
 const getPersonByEmail = `-- name: GetPersonByEmail :one
-SELECT id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash, pin_length, goal_reward_id, goal_set_at, picture_cards FROM people WHERE email = ? AND archived_at IS NULL
+SELECT id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash, pin_length, goal_reward_id, goal_set_at, picture_cards, interest_opt_out FROM people WHERE email = ? AND archived_at IS NULL
 `
 
 func (q *Queries) GetPersonByEmail(ctx context.Context, email *string) (Person, error) {
@@ -249,6 +251,7 @@ func (q *Queries) GetPersonByEmail(ctx context.Context, email *string) (Person, 
 		&i.GoalRewardID,
 		&i.GoalSetAt,
 		&i.PictureCards,
+		&i.InterestOptOut,
 	)
 	return i, err
 }
@@ -270,7 +273,7 @@ func (q *Queries) LearnPINLength(ctx context.Context, arg LearnPINLengthParams) 
 }
 
 const listArchivedPeople = `-- name: ListArchivedPeople :many
-SELECT id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash, pin_length, goal_reward_id, goal_set_at, picture_cards FROM people
+SELECT id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash, pin_length, goal_reward_id, goal_set_at, picture_cards, interest_opt_out FROM people
 WHERE household_id = ? AND archived_at IS NOT NULL
 ORDER BY name
 `
@@ -301,6 +304,7 @@ func (q *Queries) ListArchivedPeople(ctx context.Context, householdID int64) ([]
 			&i.GoalRewardID,
 			&i.GoalSetAt,
 			&i.PictureCards,
+			&i.InterestOptOut,
 		); err != nil {
 			return nil, err
 		}
@@ -316,7 +320,7 @@ func (q *Queries) ListArchivedPeople(ctx context.Context, householdID int64) ([]
 }
 
 const listPeople = `-- name: ListPeople :many
-SELECT id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash, pin_length, goal_reward_id, goal_set_at, picture_cards FROM people
+SELECT id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash, pin_length, goal_reward_id, goal_set_at, picture_cards, interest_opt_out FROM people
 WHERE household_id = ? AND archived_at IS NULL
 ORDER BY sort_order, name
 `
@@ -347,6 +351,7 @@ func (q *Queries) ListPeople(ctx context.Context, householdID int64) ([]Person, 
 			&i.GoalRewardID,
 			&i.GoalSetAt,
 			&i.PictureCards,
+			&i.InterestOptOut,
 		); err != nil {
 			return nil, err
 		}
@@ -461,7 +466,7 @@ func (q *Queries) UnarchivePerson(ctx context.Context, arg UnarchivePersonParams
 const updatePerson = `-- name: UpdatePerson :one
 UPDATE people SET name = ?, kind = ?, colour = ?, avatar = ?, sort_order = ?, picture_cards = ?
 WHERE household_id = ? AND id = ?
-RETURNING id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash, pin_length, goal_reward_id, goal_set_at, picture_cards
+RETURNING id, household_id, name, kind, colour, avatar, pin_hash, sort_order, archived_at, created_at, email, password_hash, pin_length, goal_reward_id, goal_set_at, picture_cards, interest_opt_out
 `
 
 type UpdatePersonParams struct {
@@ -504,6 +509,7 @@ func (q *Queries) UpdatePerson(ctx context.Context, arg UpdatePersonParams) (Per
 		&i.GoalRewardID,
 		&i.GoalSetAt,
 		&i.PictureCards,
+		&i.InterestOptOut,
 	)
 	return i, err
 }

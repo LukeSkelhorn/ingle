@@ -32,10 +32,13 @@ type CompletionDetail struct {
 	Pence        int64
 	Person       dbq.Person // ID, Name, Colour and Avatar only
 	ReviewerName string
-	Title        string
-	Emoji        string // the chore's, "" for none
-	DueOn        string
-	DueTime      *string // the occurrence's time, nil for none
+	// ForName is whose chore it was when Person did it for them, "" when
+	// they did their own.
+	ForName string
+	Title   string
+	Emoji   string // the chore's, "" for none
+	DueOn   string
+	DueTime *string // the occurrence's time, nil for none
 	// CanReverse is set for approved completions inside ReverseWindow.
 	CanReverse bool
 }
@@ -89,6 +92,9 @@ func (s *Service) detail(now time.Time, r dbq.GetCompletionDetailRow) Completion
 	}
 	if r.ReviewerName != nil {
 		d.ReviewerName = *r.ReviewerName
+	}
+	if r.ForName != nil {
+		d.ForName = *r.ForName
 	}
 	d.CanReverse = r.Status == StatusApproved && withinReverseWindow(now, r.CompletedAt)
 	return d
@@ -153,6 +159,9 @@ func (s *Service) Reverse(ctx context.Context, householdID, completionID, review
 			}); err != nil {
 				return fmt.Errorf("ledger: %w", err)
 			}
+		}
+		if err := takeBackCompletionMatch(ctx, q, c, title, ts); err != nil {
+			return err
 		}
 		if err := q.ReopenOccurrence(ctx, dbq.ReopenOccurrenceParams{HouseholdID: householdID, ID: c.OccurrenceID}); err != nil {
 			return fmt.Errorf("reopen occurrence: %w", err)

@@ -56,6 +56,7 @@ var (
 	ErrInsufficientBalance = errors.New("not enough points or money")
 	ErrInvalidRRule        = errors.New("invalid recurrence rule")
 	ErrNotChild            = errors.New("only children can do this")
+	ErrInvalidRate         = errors.New("invalid interest rate")
 )
 
 // Window is how many days ahead occurrences are materialised.
@@ -80,6 +81,7 @@ type Service struct {
 	st       *store.Store
 	loc      LocationFunc
 	dayStart DayStartFunc
+	modules  ModulesFunc // nil: every module on
 	now      func() time.Time
 }
 
@@ -389,19 +391,23 @@ func canDo(ctx context.Context, q *dbq.Queries, chore dbq.Chore, occ dbq.ChoreOc
 // marks the occurrence done and, when approved, credits it. reviewer is the
 // adult who approved it, if one did.
 func (s *Service) recordCompletion(ctx context.Context, q *dbq.Queries, chore dbq.Chore, occurrenceID, personID int64, status string, reviewer *int64) (dbq.Completion, error) {
+	return s.recordCompletionFor(ctx, q, chore, occurrenceID, personID, nil, status, reviewer)
+}
+
+// recordCompletionFor is recordCompletion for someone doing another
+// person's chore: personID did it and earns it, forPerson is whose it was.
+func (s *Service) recordCompletionFor(ctx context.Context, q *dbq.Queries, chore dbq.Chore, occurrenceID, personID int64, forPerson *int64, status string, reviewer *int64) (dbq.Completion, error) {
 	now := s.now().Unix()
-	points, pence := chore.Points, chore.Pence
-	if chore.Mode == ModeEach {
-		p, err := getPerson(ctx, q, chore.HouseholdID, personID)
-		if err != nil {
-			return dbq.Completion{}, err
-		}
-		points, pence = Earns(chore.Mode, p.Kind, chore.Points, chore.Pence, chore.AdultPoints)
+	p, err := getPerson(ctx, q, chore.HouseholdID, personID)
+	if err != nil {
+		return dbq.Completion{}, err
 	}
+	points, pence := Earns(p.Kind, chore.Points, chore.Pence, chore.AdultPoints)
 	out, err := q.CreateCompletion(ctx, dbq.CreateCompletionParams{
 		HouseholdID:  chore.HouseholdID,
 		OccurrenceID: occurrenceID,
 		PersonID:     personID,
+		ForPersonID:  forPerson,
 		CompletedAt:  now,
 		Status:       status,
 		Points:       points,
@@ -416,7 +422,7 @@ func (s *Service) recordCompletion(ctx context.Context, q *dbq.Queries, chore db
 		return out, fmt.Errorf("mark done: %w", err)
 	}
 	if status == StatusApproved {
-		if err := creditCompletion(ctx, q, out, reviewer, now); err != nil {
+		if err := s.creditCompletion(ctx, q, out, reviewer, now); err != nil {
 			return out, err
 		}
 	}
@@ -479,7 +485,7 @@ func (s *Service) reviewTx(ctx context.Context, q *dbq.Queries, householdID, com
 
 	verb := "chore.approved"
 	if status == StatusApproved {
-		if err := creditCompletion(ctx, q, c, &reviewerID, now); err != nil {
+		if err := s.creditCompletion(ctx, q, c, &reviewerID, now); err != nil {
 			return err
 		}
 	} else {
@@ -491,7 +497,9 @@ func (s *Service) reviewTx(ctx context.Context, q *dbq.Queries, householdID, com
 	return s.activity(ctx, q, householdID, reviewerID, verb, completionID)
 }
 
-func creditCompletion(ctx context.Context, q *dbq.Queries, c dbq.Completion, by *int64, now int64) error {
+// creditCompletion adds a completion to the ledger, and its match if the
+// person is being matched towards a goal.
+func (s *Service) creditCompletion(ctx context.Context, q *dbq.Queries, c dbq.Completion, by *int64, now int64) error {
 	if _, err := q.InsertLedgerEntry(ctx, dbq.InsertLedgerEntryParams{
 		HouseholdID:  c.HouseholdID,
 		PersonID:     c.PersonID,
@@ -504,7 +512,7 @@ func creditCompletion(ctx context.Context, q *dbq.Queries, c dbq.Completion, by 
 	}); err != nil {
 		return fmt.Errorf("ledger: %w", err)
 	}
-	return nil
+	return s.matchCompletion(ctx, q, c, now)
 }
 
 func (s *Service) activity(ctx context.Context, q *dbq.Queries, householdID, actorID int64, verb string, subjectID int64) error {
@@ -529,6 +537,8 @@ func (s *Service) activity(ctx context.Context, q *dbq.Queries, householdID, act
 		"transfer.paid":      "transfer",
 		"bank.updated":       "person",
 		"bank.removed":       "person",
+		"match.set":          "person",
+		"match.off":          "person",
 	}[verb]
 	if err := q.InsertActivity(ctx, dbq.InsertActivityParams{
 		HouseholdID: householdID,

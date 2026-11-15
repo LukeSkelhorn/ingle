@@ -93,6 +93,42 @@
     });
     sheet.addEventListener("close", function () { sheetBody.innerHTML = ""; });
 
+    // Long press on a child's chore ([data-hold]) opens "I did it" for an
+    // adult, instead of ticking it. The click that ends the press is
+    // swallowed so the chore isn't ticked as well.
+    var hold = null, held = false;
+    function cancelHold() { if (hold) { clearTimeout(hold.timer); hold = null; } }
+    function openHold(el) {
+      held = true;
+      cancelHold();
+      if (navigator.vibrate) navigator.vibrate(10);
+      htmx.ajax("GET", el.dataset.hold, { target: sheetBody, swap: "innerHTML" });
+    }
+    document.addEventListener("pointerdown", function (e) {
+      var el = e.target.closest && e.target.closest("[data-hold]");
+      held = false;
+      cancelHold();
+      if (!el || e.button > 0) return;
+      hold = { el: el, x: e.clientX, y: e.clientY, timer: setTimeout(function () { openHold(el); }, 600) };
+    });
+    document.addEventListener("pointermove", function (e) {
+      if (hold && Math.abs(e.clientX - hold.x) + Math.abs(e.clientY - hold.y) > 10) cancelHold();
+    });
+    ["pointerup", "pointercancel", "pointerleave"].forEach(function (t) { document.addEventListener(t, cancelHold); });
+    document.addEventListener("contextmenu", function (e) {
+      var el = e.target.closest && e.target.closest("[data-hold]");
+      if (!el) return;
+      e.preventDefault();
+      if (!held) openHold(el);
+    });
+    document.addEventListener("click", function (e) {
+      if (held && e.target.closest && e.target.closest("[data-hold]")) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      held = false;
+    }, true);
+
     // My money (and its Move to my bank panel) closes itself after a minute
     // without a tap, which also drops its PIN check. Only taps count: the live refresh doesn't keep it open.
     var moneyTimer = null;

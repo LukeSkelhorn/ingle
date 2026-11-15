@@ -105,9 +105,9 @@ func (s *Server) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 }
 
 // activityActor names who did something when no person did (the schedule
-// or idle lock, the household code).
+// or idle lock, monthly interest, the household code).
 func activityActor(verb string) string {
-	if strings.HasPrefix(verb, "board.") && verb != "board.unlocked_code" {
+	if (strings.HasPrefix(verb, "board.") && verb != "board.unlocked_code") || verb == "interest.paid" || verb == "match.taken_back" {
 		return "Ingle"
 	}
 	return "Someone"
@@ -123,6 +123,14 @@ func (s *Server) activityLine(a dbq.ListRecentActivityWithActorRow) string {
 			return "updated " + *a.SubjectPerson + "'s bank balance"
 		case "bank.removed":
 			return "removed " + *a.SubjectPerson + "'s bank balance"
+		case "interest.paid":
+			return "paid " + *a.SubjectPerson + " their monthly interest"
+		case "match.set":
+			return "set up matching for " + *a.SubjectPerson
+		case "match.off":
+			return "stopped matching for " + *a.SubjectPerson
+		case "match.taken_back":
+			return "took back " + *a.SubjectPerson + "'s match after their goal changed"
 		}
 	}
 	if a.SubjectPence != nil && a.SubjectPerson != nil {
@@ -215,6 +223,10 @@ var activityText = map[string]string{
 	"holiday.added":           "added a holiday",
 	"holiday.ended":           "ended a holiday early",
 	"holiday.removed":         "removed a holiday",
+	"interest.paid":           "paid monthly interest",
+	"match.set":               "set up matching",
+	"match.off":               "stopped matching",
+	"match.taken_back":        "took back a match",
 }
 
 // Settings.
@@ -238,6 +250,7 @@ type settingsForm struct {
 	HasUnlockCode          bool
 	Timezones              []string
 	Holiday                holidayForm
+	Interest               interestForm
 }
 
 // weekdayOption is one checkbox of the lock schedule.
@@ -289,6 +302,14 @@ func (s *Server) renderSettings(w http.ResponseWriter, r *http.Request, status i
 	if err := s.loadHolidays(r, &f.Holiday); err != nil {
 		s.serverError(w, r, err)
 		return
+	}
+	if !f.Interest.filled {
+		in, err := s.Chores.InterestSettings(r.Context(), hhOf(r))
+		if err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+		f.Interest = newInterestForm(in)
 	}
 	v := s.view(r, "Settings", f)
 	v.Nav = "settings"

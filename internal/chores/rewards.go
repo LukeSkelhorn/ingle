@@ -48,8 +48,8 @@ func (s *Service) ClaimReward(ctx context.Context, householdID, rewardID, person
 		if err != nil {
 			return notFound(err)
 		}
-		if reward.ArchivedAt != nil {
-			return ErrNotFound
+		if err := rewardAllowed(ctx, q, reward, personID); err != nil {
+			return err
 		}
 		points, pence, err := available(ctx, q, householdID, personID)
 		if err != nil {
@@ -83,6 +83,23 @@ func (s *Service) ClaimReward(ctx context.Context, householdID, rewardID, person
 		return nil
 	})
 	return out, err
+}
+
+// rewardAllowed fails with ErrNotFound unless reward is active and personID
+// may have it: it's for everyone or chosen for them, and it costs no money
+// if they're an adult.
+func rewardAllowed(ctx context.Context, q *dbq.Queries, reward dbq.Reward, personID int64) error {
+	if reward.ArchivedAt != nil {
+		return ErrNotFound
+	}
+	ok, err := q.RewardAllowed(ctx, dbq.RewardAllowedParams{HouseholdID: reward.HouseholdID, RewardID: reward.ID, PersonID: personID})
+	if err != nil {
+		return fmt.Errorf("reward allowed: %w", err)
+	}
+	if ok == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // available is what personID can spend: their balance less waiting claims.
@@ -242,6 +259,11 @@ type Goal struct {
 	Percent               int   // the slower of points and money, 0 to 100
 	Reached               bool  // they can claim it now
 	Waiting               bool  // they've asked for it; a grown-up decides
+	// MatchedPoints and MatchedPence are the part of Have an adult matched;
+	// MatchPercent is that part of the bar.
+	MatchedPoints, MatchedPence int64
+	MatchPercent                int
+	Offer                       *MatchOffer // the match on offer, if any
 }
 
 // Emoji is the reward's emoji, or DefaultGoalEmoji.
@@ -251,6 +273,10 @@ func (g Goal) Emoji() string {
 	}
 	return g.RewardEmoji
 }
+
+// OwnPercent is the part of the bar they saved themselves, before the
+// matched part.
+func (g Goal) OwnPercent() int { return g.Percent - g.MatchPercent }
 
 // NeedPoints is how many more points they need for it.
 func (g Goal) NeedPoints() int64 { return g.CostPoints - g.HavePoints }
@@ -290,16 +316,22 @@ func newGoal(row dbq.ListGoalsRow, points, pence int64) Goal {
 func (s *Service) SetGoal(ctx context.Context, householdID, personID, rewardID int64) (dbq.Reward, error) {
 	var reward dbq.Reward
 	err := s.st.WithTx(ctx, func(q *dbq.Queries) error {
-		if _, err := getPerson(ctx, q, householdID, personID); err != nil {
+		p, err := getPerson(ctx, q, householdID, personID)
+		if err != nil {
 			return err
 		}
-		var err error
 		reward, err = q.GetReward(ctx, dbq.GetRewardParams{HouseholdID: householdID, ID: rewardID})
 		if err != nil {
 			return notFound(err)
 		}
-		if reward.ArchivedAt != nil {
-			return ErrNotFound
+		if err := rewardAllowed(ctx, q, reward, personID); err != nil {
+			return err
+		}
+		// Swapping goals takes back what was matched towards the old one.
+		if p.GoalRewardID != nil && *p.GoalRewardID != rewardID {
+			if err := s.takeBackGoalMatch(ctx, q, householdID, p); err != nil {
+				return err
+			}
 		}
 		now := s.now().Unix()
 		n, err := q.SetGoal(ctx, dbq.SetGoalParams{RewardID: &rewardID, SetAt: &now, HouseholdID: householdID, ID: personID})
@@ -309,15 +341,27 @@ func (s *Service) SetGoal(ctx context.Context, householdID, personID, rewardID i
 		if n == 0 {
 			return ErrNotFound
 		}
+		if p.GoalRewardID != nil && *p.GoalRewardID == rewardID && p.GoalSetAt != nil {
+			if err := q.MoveGoalMatch(ctx, dbq.MoveGoalMatchParams{
+				NewSetAt: now, HouseholdID: householdID, PersonID: personID, RewardID: rewardID, OldSetAt: *p.GoalSetAt,
+			}); err != nil {
+				return fmt.Errorf("move goal match: %w", err)
+			}
+		}
 		return nil
 	})
 	return reward, err
 }
 
-// ClearGoal stops personID saving for anything.
+// ClearGoal stops personID saving for anything, taking back what was
+// matched towards it.
 func (s *Service) ClearGoal(ctx context.Context, householdID, personID int64) error {
 	return s.st.WithTx(ctx, func(q *dbq.Queries) error {
-		if _, err := getPerson(ctx, q, householdID, personID); err != nil {
+		p, err := getPerson(ctx, q, householdID, personID)
+		if err != nil {
+			return err
+		}
+		if err := s.takeBackGoalMatch(ctx, q, householdID, p); err != nil {
 			return err
 		}
 		if err := q.ClearGoal(ctx, dbq.ClearGoalParams{HouseholdID: householdID, ID: personID}); err != nil {

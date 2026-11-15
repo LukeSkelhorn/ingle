@@ -65,14 +65,17 @@ WHERE household_id = sqlc.arg(household_id) AND id = sqlc.arg(id)
 -- name: ListLedgerHistory :many
 -- A person's ledger, newest first, for My money: entries since since_unix
 -- (0 for any) and older than before_id (math.MaxInt64 for any), with the
--- chore or reward each one was for, and the chore's time ('' for none).
+-- chore or reward each one was for, the chore's time ('' for none), and
+-- whose chore it was when someone did it for them ('' otherwise).
 SELECT
     l.id, l.kind, l.points, l.pence, l.note, l.created_at,
     CAST(COALESCE(ch.title, rw.title, '') AS TEXT) AS title,
     CAST(COALESCE(ch.emoji, rw.emoji, '') AS TEXT) AS emoji,
-    CAST(COALESCE(o.due_time, '') AS TEXT) AS due_time
+    CAST(COALESCE(o.due_time, '') AS TEXT) AS due_time,
+    CAST(COALESCE(f.name, '') AS TEXT) AS for_name
 FROM ledger_entries l
 LEFT JOIN completions c ON c.id = l.completion_id
+LEFT JOIN people f ON f.id = c.for_person_id
 LEFT JOIN chore_occurrences o ON o.id = c.occurrence_id
 LEFT JOIN chores ch ON ch.id = o.chore_id
 LEFT JOIN redemptions d ON d.id = l.redemption_id
@@ -82,3 +85,19 @@ WHERE l.household_id = sqlc.arg(household_id) AND l.person_id = sqlc.arg(person_
   AND l.id < sqlc.arg(before_id)
 ORDER BY l.id DESC
 LIMIT sqlc.arg(lim);
+
+-- name: BalanceBeforeForPerson :one
+-- A person's balance from every entry made before before_unix.
+SELECT
+    CAST(COALESCE(SUM(points), 0) AS INTEGER) AS points,
+    CAST(COALESCE(SUM(pence), 0) AS INTEGER) AS pence
+FROM ledger_entries
+WHERE household_id = sqlc.arg(household_id) AND person_id = sqlc.arg(person_id)
+  AND created_at < sqlc.arg(before_unix);
+
+-- name: ListLedgerChangesBetween :many
+-- A person's entries made in [from_unix, to_unix), oldest first.
+SELECT points, pence FROM ledger_entries
+WHERE household_id = sqlc.arg(household_id) AND person_id = sqlc.arg(person_id)
+  AND created_at >= sqlc.arg(from_unix) AND created_at < sqlc.arg(to_unix)
+ORDER BY created_at, id;

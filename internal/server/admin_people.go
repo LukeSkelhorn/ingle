@@ -84,6 +84,12 @@ func (s *Server) renderPeople(w http.ResponseWriter, r *http.Request, status int
 	for _, b := range balances {
 		v.Balances[b.PersonID] = b
 	}
+	for _, p := range v.People {
+		if b, ok := v.Balances[p.ID]; ok && p.Kind == household.KindAdult {
+			b.Pence = 0 // adults have points only
+			v.Balances[p.ID] = b
+		}
+	}
 	if v.Adjust != nil {
 		if v.Adjust.Panel.Suggestions, err = s.Chores.ReasonSuggestions(ctx, hhOf(r)); err != nil {
 			s.serverError(w, r, err)
@@ -111,7 +117,10 @@ type personForm struct {
 	Photo      string // current photo URL
 	SortOrder  int64
 	Pictures   bool // picture cards on the board
-	Archived   bool
+	// InterestOn shows "Earns interest" (the household pays interest);
+	// EarnsInterest is whether this child does.
+	InterestOn, EarnsInterest bool
+	Archived                  bool
 
 	IsAdult  bool
 	HasPIN   bool
@@ -123,10 +132,11 @@ type personForm struct {
 	Emojis  []string
 
 	Goal    int64        // the reward they're saving for, 0 for none
-	Rewards []dbq.Reward // to pick a goal from (editing only)
+	Rewards []dbq.Reward // the rewards they may have, to pick a goal from (editing only)
 
 	Points pointsPanel // the Adjust points section (editing only)
 	Bank   bankPanel   // a child's Bank balance section (editing only)
+	Match  matchPanel  // a child's Match savings section (editing only)
 }
 
 // pointsPanel is the person page's Points section: their balance, the
@@ -163,6 +173,7 @@ func (s *Server) personFormFor(r *http.Request, p dbq.Person) personForm {
 	f := newPersonForm()
 	f.ID, f.Name, f.Kind, f.Colour, f.SortOrder = p.ID, p.Name, p.Kind, p.Colour, p.SortOrder
 	f.Pictures = p.PictureCards == 1
+	f.EarnsInterest = p.InterestOptOut == 0
 	f.Archived = p.ArchivedAt != nil
 	f.IsAdult = p.Kind == household.KindAdult
 	f.HasPIN = p.PinHash != nil
@@ -192,18 +203,28 @@ func (s *Server) renderPerson(w http.ResponseWriter, r *http.Request, status int
 	if f.ID != 0 && !f.Archived {
 		// No rewards, no "Saving for" picker.
 		if s.moduleOn(r.Context(), modRewards) {
-			rewards, err := s.Household.Rewards(r.Context(), hhOf(r))
+			rewards, err := s.Household.RewardsFor(r.Context(), hhOf(r), f.ID)
 			if err != nil {
 				s.serverError(w, r, err)
 				return
 			}
 			f.Rewards = rewards
 		}
+		in, err := s.Chores.InterestSettings(r.Context(), hhOf(r))
+		if err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+		f.InterestOn = in.On()
 		if err := s.loadPointsPanel(r, &f); err != nil {
 			s.serverError(w, r, err)
 			return
 		}
 		if err := s.loadBankPanel(r, &f); err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+		if err := s.loadMatchPanel(r, &f); err != nil {
 			s.serverError(w, r, err)
 			return
 		}
@@ -261,6 +282,9 @@ func (s *Server) readPersonForm(w http.ResponseWriter, r *http.Request, f *perso
 	f.Emoji = fm.str("emoji")
 	f.SortOrder = fm.int("sort_order", "Use a number from 0 to 999.")
 	f.Pictures = fm.checked("picture_cards")
+	if r.Form.Has("interest_shown") {
+		f.EarnsInterest = fm.checked("earns_interest")
+	}
 
 	in = household.PersonInput{Name: f.Name, Kind: f.Kind, Colour: f.Colour, SortOrder: f.SortOrder, PictureCards: f.Pictures}
 	switch f.AvatarMode {
@@ -368,9 +392,20 @@ func (s *Server) handlePersonUpdate(w http.ResponseWriter, r *http.Request) {
 		_ = s.Avatars.Remove(name)
 	}
 	flash := "Saved."
+	// The checkbox is only on the form while interest is on.
+	if r.Form.Has("interest_shown") && p.Kind == household.KindChild {
+		optOut := !newForm(r).checked("earns_interest")
+		if optOut != (p.InterestOptOut == 1) {
+			if err := s.Chores.SetInterestOptOut(r.Context(), hhOf(r), p.ID, optOut); err != nil {
+				s.serverError(w, r, err)
+				return
+			}
+			p.InterestOptOut = boolInt64(optOut)
+		}
+	}
 	if r.Form.Has("goal") && s.moduleOn(r.Context(), modRewards) {
 		if p, err = s.savePersonGoal(r, p, newForm(r).optID("goal")); errors.Is(err, chores.ErrNotFound) {
-			flash = "Saved, but that reward has gone, so their goal wasn't changed."
+			flash = "Saved, but that reward has gone or isn't for them, so their goal wasn't changed."
 		} else if err != nil {
 			s.serverError(w, r, err)
 			return
@@ -536,4 +571,11 @@ func conflictMessage(err error) (string, bool) {
 		return "That person couldn't be found.", true
 	}
 	return "", false
+}
+
+func boolInt64(b bool) int64 {
+	if b {
+		return 1
+	}
+	return 0
 }

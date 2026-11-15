@@ -6,6 +6,41 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ## [Unreleased]
 
+## [v0.4.2] - 2026-11-15
+
+### Added
+
+- **Choose who a reward is for.** Admin › Rewards has **Who's it for?**: **Everyone**, the default, which includes people added later, or **Choose people**. Each person's sheet only shows the rewards they can have, and they can only claim or save for those. Admin › People's **Saving for** works the same way. Adults don't have money, so a reward that costs money is only for children. Taking someone off a reward removes their goal for it, but a claim they've already made still waits for an adult. The Rewards list shows who each reward is for. Existing rewards stay for everyone. ([DOM-61](https://linear.app/skeltech/issue/DOM-61))
+- **An adult can do a child's chore and get the points.** When a child is ill, away or busy, press and hold their chore on the board and choose **I did it**. The adult gets their points for it, with no money. The child gets nothing for it, but the chore is ticked off on their column and counts towards their "All done today". It needs an adult signed in on their phone, or unlocked on the wall display. With more than one adult, the sheet asks **Who did it?**, starting on whoever unlocked it, so Mum can unlock the wall and credit Dad. A chore that needs checking doesn't wait, because an adult did it. Undo works as usual. Admin › Completions shows "Done by Mum for Alfie", and the adult's history says who it was for. ([DOM-67](https://linear.app/skeltech/issue/DOM-67), [DOM-125](https://linear.app/skeltech/issue/DOM-125))
+- **Bank of Mum and Dad: monthly interest.** Admin › Settings › **Bank of Mum and Dad** pays children interest on what they keep in Ingle. It's off to start with.
+  - **Rate:** a % a month, which the setting also shows as about a % a year.
+  - **What earns it:** money, points, or both.
+  - **Cap:** an optional most-per-month for money and for points.
+  - **When:** interest is paid on the 1st, on the lowest balance each child had during the month, so spending early in the month counts against it. Fractions of a penny or point carry over to the next month.
+  - **History:** each payment reads "Interest from the Bank of Mum and Dad".
+  - **My money:** shows the interest so far and "If you keep saving…" what the balance will be in a year.
+  - **Who:** every child earns it, unless **Earns interest** is unticked on their page in Admin › People. Adults never earn interest.
+  - **Downtime:** if Ingle was off on the 1st, it catches up when it starts.
+
+  ([DOM-99](https://linear.app/skeltech/issue/DOM-99))
+- **Match savings towards a goal.** On a child's page in Admin › People, **Match savings** adds a bit extra whenever they earn from chores while saving for a goal. It's off to start with.
+  - **Rate:** for example "Add 10p for every £1 they earn" and "Add 1 point for every 10 points". Either can be left blank. Each chore is matched in proportion, rounded down.
+  - **Limit:** an optional most, all told, for money and for points.
+  - **Up to the goal:** matching stops once they have enough for the goal, and never takes them past it. Nothing is matched while a claim is waiting.
+  - **What the child sees:** their goal shows "Mum adds 10p for every £1 you earn", and the matched part of the bar in a lighter, striped shade. Their history reads "Matched by Mum".
+  - **Taking it back:** if they change or remove their goal without claiming it, what was matched towards it is taken back, but never more than they have. Undoing or reversing a chore takes its match back too. They keep it if they claim the reward, or if an adult archives the reward. Anything taken back no longer counts towards the limit.
+  - **Only chores count:** interest, adjustments and bank moves aren't matched. Adults are never matched.
+
+  ([DOM-100](https://linear.app/skeltech/issue/DOM-100))
+
+### Changed
+
+- **Adults earn points only, not money.** Every chore now has **Adults' points**, which adults get with no money, whoever the chore is for. Before, only "Each of these people" chores had them. Children still get the chore's points and pocket money. In Admin › Chores, a chore for one adult shows only Adults' points, a chore for one child shows only Points and Pocket money, and everything else shows all three. The board shows each person what they'd earn, including in the Up for grabs picker. Adults no longer have a money balance, and Move to bank is only for children. Money adults earned before stays in their history. ([DOM-60](https://linear.app/skeltech/issue/DOM-60))
+
+### Upgrade notes
+
+- Existing chores start with Adults' points equal to their points, so adults keep earning the same points, just without the money.
+
 ## [v0.4.1] - 2026-11-13
 
 ### Added

@@ -61,6 +61,7 @@ type Card struct {
 	DueTime      *string
 	Points       int64
 	Pence        int64
+	AdultPoints  int64 // what an adult earns for it (pool chores' picker)
 	Pool         bool  // a pool chore (claimable, or claimed by this column's person)
 	Claimed      bool  // a pool chore claimed by this column's person
 	Overdue      bool  // due before today and not done
@@ -69,6 +70,9 @@ type Card struct {
 	CompletionID int64 // set when Done
 	CompletedAt  int64 // unix seconds, set when Done
 	JustDone     bool  // completed in the last few seconds (for the tick animation)
+	// DoneBy is the adult who did this person's chore for them (and got
+	// the points), "" when they did it themselves.
+	DoneBy string
 	// Flexible-day chores, not yet done: Flex names the days left ("Today or
 	// Thu"); LastChance marks the last of several days.
 	Flex       string
@@ -204,10 +208,21 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 			c.Waiting = int(h.Waiting)
 		}
 	}
+	gm, err := s.loadGoalMatches(ctx, q, householdID)
+	if err != nil {
+		return Board{}, err
+	}
+	money := s.moduleOn(ctx, q, householdID, moduleMoney)
 	for _, g := range goals {
 		if c := cols[g.PersonID]; c != nil {
 			goal := newGoal(g, c.Points, c.Pence)
+			gm.apply(&goal, c.Person, money)
 			c.Goal = &goal
+		}
+	}
+	for i := range b.Columns {
+		if c := &b.Columns[i]; c.Person.Kind == "adult" {
+			c.Pence = 0 // adults have points only
 		}
 	}
 
@@ -256,6 +271,7 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 			DueTime:      dueTime,
 			Points:       r.Points,
 			Pence:        r.Pence,
+			AdultPoints:  r.AdultPoints,
 			Pool:         r.Mode == ModePool,
 			Shared:       r.Mode == ModeShared,
 			Overdue:      r.DueOn < today && !done,
@@ -276,6 +292,9 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 			card.CompletionID = comp.ID
 			card.CompletedAt = comp.CompletedAt
 			card.JustDone = now.Sub(time.Unix(comp.CompletedAt, 0)) < justDoneFor
+			if comp.ForPersonID != nil {
+				card.DoneBy = byPerson[comp.PersonID].Name
+			}
 		}
 
 		owner := r.AssigneeID
@@ -283,8 +302,12 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 			owner = r.ClaimedBy
 		}
 		if owner == nil && done {
-			// An unclaimed pool chore someone just did: show it under them.
+			// An unclaimed pool chore someone just did: show it under them,
+			// or a shared chore an adult did for someone: under that person.
 			owner = &comp.PersonID
+			if comp.ForPersonID != nil {
+				owner = comp.ForPersonID
+			}
 		}
 		if owner == nil && card.Shared {
 			// Not done yet: in each chosen person's column, as theirs to do.
@@ -296,6 +319,7 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 				}
 				c := card
 				c.For = id
+				c.Points, c.Pence = Earns(col.Person.Kind, r.Points, r.Pence, r.AdultPoints)
 				for _, other := range ids {
 					if p, ok := byPerson[other]; ok && other != id {
 						c.With = append(c.With, p)
@@ -315,7 +339,7 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 			continue // owner archived since
 		}
 		card.Claimed = card.Pool && !done
-		card.Points, card.Pence = Earns(r.Mode, col.Person.Kind, r.Points, r.Pence, r.AdultPoints)
+		card.Points, card.Pence = Earns(col.Person.Kind, r.Points, r.Pence, r.AdultPoints)
 		col.Cards = append(col.Cards, card)
 		col.TotalToday++
 		if done {
@@ -375,6 +399,11 @@ func (s *Service) Undo(ctx context.Context, householdID, completionID int64) err
 		if c.Status == StatusRejected || c.ReviewedBy != nil ||
 			s.now().Sub(time.Unix(c.CompletedAt, 0)) > UndoWindow {
 			return ErrUndoExpired
+		}
+		if err := q.DeleteMatchForCompletion(ctx, dbq.DeleteMatchForCompletionParams{
+			HouseholdID: householdID, CompletionID: &c.ID,
+		}); err != nil {
+			return fmt.Errorf("delete match: %w", err)
 		}
 		if err := q.DeleteLedgerForCompletion(ctx, dbq.DeleteLedgerForCompletionParams{
 			HouseholdID: householdID, CompletionID: &c.ID,

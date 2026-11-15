@@ -221,6 +221,8 @@ func (m rewardsModule) Routes(r module.Router) {
 	r.Viewer("POST /board/rewards/{id}/claim", s.handleRewardClaim)
 	r.Viewer("POST /board/people/{id}/goal", s.handleGoalSet)
 	r.Viewer("POST /board/people/{id}/goal/clear", s.handleGoalClear)
+	r.Admin("POST /admin/people/{id}/match", s.handleMatchSave)
+	r.Admin("POST /admin/people/{id}/match/remove", s.handleMatchRemove)
 	r.Viewer("GET /board/redemptions/{id}/review", s.handleClaimReviewSheet)
 	r.Viewer("POST /board/redemptions/{id}/approve", s.boardReview(s.Chores.ApproveRedemption, "Approved. Enjoy! 🎁"))
 	r.Viewer("POST /board/redemptions/{id}/decline", s.boardReview(s.Chores.DeclineRedemption, "Declined. Points are free again."))

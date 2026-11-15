@@ -437,6 +437,182 @@ func TestEachPersonMigration(t *testing.T) {
 	}
 }
 
+// 00024 starts every chore that isn't "each" with adults' points equal to
+// its points, so adults keep earning the same points (now without money).
+func TestAdultPointsMigration(t *testing.T) {
+	st := openTest(t)
+	ctx := t.Context()
+	sub, err := fs.Sub(migrations, "migrations/sqlite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := goose.NewProvider(goose.DialectSQLite3, st.DB, sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.DownTo(ctx, 23); err != nil {
+		t.Fatalf("DownTo(23): %v", err)
+	}
+	for _, q := range []string{
+		`INSERT INTO households (id, name, created_at) VALUES (1, 'Home', 1)`,
+		`INSERT INTO chores (id, household_id, title, mode, starts_on, points, adult_points, created_at, updated_at) VALUES
+		   (1, 1, 'Bins', 'pool', '2026-11-02', 5, 0, 1, 1),
+		   (2, 1, 'Teeth', 'each', '2026-11-02', 2, 1, 1, 1)`,
+	} {
+		if _, err := st.DB.ExecContext(ctx, q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	if _, err := p.Up(ctx); err != nil {
+		t.Fatalf("Up: %v", err)
+	}
+	var got string
+	if err := st.DB.QueryRowContext(ctx, `SELECT group_concat(title || '=' || adult_points, ' ') FROM (SELECT * FROM chores ORDER BY id)`).Scan(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got != "Bins=5 Teeth=1" {
+		t.Errorf("adult points after up: %q, want Bins=5 Teeth=1", got)
+	}
+}
+
+// Rewards from before 00025 stay for everyone.
+func TestRewardPeopleMigration(t *testing.T) {
+	st := openTest(t)
+	ctx := t.Context()
+	sub, err := fs.Sub(migrations, "migrations/sqlite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := goose.NewProvider(goose.DialectSQLite3, st.DB, sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.DownTo(ctx, 24); err != nil {
+		t.Fatalf("DownTo(24): %v", err)
+	}
+	for _, q := range []string{
+		`INSERT INTO households (id, name, created_at) VALUES (1, 'Home', 1)`,
+		`INSERT INTO rewards (id, household_id, title, cost_points, created_at) VALUES (1, 1, 'Film', 10, 1)`,
+	} {
+		if _, err := st.DB.ExecContext(ctx, q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	if _, err := p.Up(ctx); err != nil {
+		t.Fatalf("Up: %v", err)
+	}
+	var everyone, people int64
+	if err := st.DB.QueryRowContext(ctx,
+		`SELECT everyone, (SELECT COUNT(*) FROM reward_people) FROM rewards WHERE id = 1`).Scan(&everyone, &people); err != nil {
+		t.Fatal(err)
+	}
+	if everyone != 1 || people != 0 {
+		t.Errorf("after up: everyone = %d, %d people; want 1, 0", everyone, people)
+	}
+}
+
+// completions.for_person_id goes on and comes off cleanly (SQLite has to
+// drop a column with a foreign key).
+func TestCompletionForPersonMigration(t *testing.T) {
+	st := openTest(t)
+	ctx := t.Context()
+	sub, err := fs.Sub(migrations, "migrations/sqlite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := goose.NewProvider(goose.DialectSQLite3, st.DB, sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	has := func() bool {
+		var n int
+		if err := st.DB.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM pragma_table_info('completions') WHERE name = 'for_person_id'`).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n == 1
+	}
+	if !has() {
+		t.Fatal("no completions.for_person_id")
+	}
+	if _, err := p.DownTo(ctx, 25); err != nil {
+		t.Fatalf("DownTo(25): %v", err)
+	}
+	if has() {
+		t.Error("for_person_id still there after down")
+	}
+	if _, err := p.Up(ctx); err != nil {
+		t.Fatalf("Up: %v", err)
+	}
+	if !has() {
+		t.Error("no for_person_id after up again")
+	}
+}
+
+// 00027 rebuilds ledger_entries to allow 'interest': existing entries and
+// the bank transfers pointing at them survive, both ways.
+func TestInterestMigration(t *testing.T) {
+	st := openTest(t)
+	ctx := t.Context()
+	sub, err := fs.Sub(migrations, "migrations/sqlite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := goose.NewProvider(goose.DialectSQLite3, st.DB, sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.DownTo(ctx, 26); err != nil {
+		t.Fatalf("DownTo(26): %v", err)
+	}
+	exec := func(q string, args ...any) error {
+		_, err := st.DB.ExecContext(ctx, q, args...)
+		return err
+	}
+	for _, q := range []string{
+		`INSERT INTO households (id, name, created_at) VALUES (1, 'Home', 1)`,
+		`INSERT INTO people (id, household_id, name, kind, colour, created_at) VALUES (1, 1, 'Alfie', 'child', '#4A90D9', 1)`,
+		`INSERT INTO ledger_entries (id, household_id, person_id, points, pence, kind, created_at) VALUES (1, 1, 1, 5, 50, 'completion', 1)`,
+		`INSERT INTO ledger_entries (id, household_id, person_id, points, pence, kind, created_at) VALUES (2, 1, 1, 0, -50, 'payout', 2)`,
+		`INSERT INTO transfer_requests (household_id, person_id, pence, status, requested_at, ledger_entry_id) VALUES (1, 1, 50, 'approved', 2, 2)`,
+	} {
+		if err := exec(q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	if err := exec(`INSERT INTO ledger_entries (household_id, person_id, points, pence, kind, created_at) VALUES (1, 1, 0, 1, 'interest', 3)`); err == nil {
+		t.Fatal("'interest' allowed before 00027")
+	}
+	if _, err := p.Up(ctx); err != nil {
+		t.Fatalf("Up: %v", err)
+	}
+	if err := exec(`INSERT INTO ledger_entries (id, household_id, person_id, points, pence, kind, created_at) VALUES (3, 1, 1, 0, 1, 'interest', 3)`); err != nil {
+		t.Fatalf("interest entry: %v", err)
+	}
+	count := func(q string) int {
+		var n int
+		if err := st.DB.QueryRowContext(ctx, q).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	if n := count(`SELECT COUNT(*) FROM ledger_entries`); n != 3 {
+		t.Errorf("%d entries after up, want 3", n)
+	}
+	if n := count(`SELECT COUNT(*) FROM pragma_foreign_key_check`); n != 0 {
+		t.Errorf("%d broken foreign keys", n)
+	}
+	if _, err := p.DownTo(ctx, 26); err != nil {
+		t.Fatalf("DownTo(26) again: %v", err)
+	}
+	if n := count(`SELECT COUNT(*) FROM ledger_entries`); n != 2 {
+		t.Errorf("%d entries after down, want the 2 that aren't interest", n)
+	}
+	if _, err := p.Up(ctx); err != nil {
+		t.Fatalf("Up again: %v", err)
+	}
+}
+
 // v0.3's migrations (modules, bank requests, bank balances) come after
 // v0.2.4's 14 and 15, so a database upgraded from v0.2.4 runs just them.
 func TestV03MigrationsAfterV024(t *testing.T) {
@@ -495,5 +671,91 @@ func TestV03MigrationsAfterV024(t *testing.T) {
 		if _, err := st.DB.ExecContext(ctx, q); err != nil {
 			t.Errorf("%s: %v", q, err)
 		}
+	}
+}
+
+func TestGoalMatchMigration(t *testing.T) {
+	st := openTest(t)
+	ctx := t.Context()
+	sub, err := fs.Sub(migrations, "migrations/sqlite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := goose.NewProvider(goose.DialectSQLite3, st.DB, sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.DownTo(ctx, 27); err != nil {
+		t.Fatalf("DownTo(27): %v", err)
+	}
+	exec := func(q string, args ...any) error {
+		_, err := st.DB.ExecContext(ctx, q, args...)
+		return err
+	}
+	for _, q := range []string{
+		`INSERT INTO households (id, name, created_at) VALUES (1, 'Home', 1)`,
+		`INSERT INTO people (id, household_id, name, kind, colour, created_at) VALUES (1, 1, 'Alfie', 'child', '#4A90D9', 1)`,
+		`INSERT INTO people (id, household_id, name, kind, colour, created_at) VALUES (2, 1, 'Mum', 'adult', '#4A90D9', 1)`,
+		`INSERT INTO ledger_entries (id, household_id, person_id, points, pence, kind, created_at) VALUES (1, 1, 1, 5, 50, 'completion', 1)`,
+		`INSERT INTO ledger_entries (id, household_id, person_id, points, pence, kind, created_at) VALUES (2, 1, 1, 0, 6, 'interest', 2)`,
+		`INSERT INTO interest_payments (household_id, person_id, period, points, pence, carry_points, carry_pence, ledger_entry_id, created_at) VALUES (1, 1, '2026-10', 0, 6, 0, 0, 2, 2)`,
+	} {
+		if err := exec(q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	if err := exec(`INSERT INTO ledger_entries (household_id, person_id, points, pence, kind, created_at) VALUES (1, 1, 0, 5, 'match', 3)`); err == nil {
+		t.Fatal("'match' allowed before 00028")
+	}
+	if _, err := p.Up(ctx); err != nil {
+		t.Fatalf("Up: %v", err)
+	}
+	for _, q := range []string{
+		`INSERT INTO ledger_entries (id, household_id, person_id, points, pence, kind, note, created_by, created_at) VALUES (3, 1, 1, 0, 5, 'match', 'Matched by Mum', 2, 3)`,
+		`INSERT INTO match_offers (person_id, household_id, add_pence, per_pence, add_points, per_points, set_by, updated_at) VALUES (1, 1, 10, 100, 0, 0, 2, 3)`,
+		`INSERT INTO match_entries (household_id, person_id, ledger_entry_id, completion_id, reward_id, goal_set_at, points, pence, created_at) VALUES (1, 1, 3, NULL, 9, 3, 0, 5, 3)`,
+	} {
+		if err := exec(q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	// An add needs a per.
+	if err := exec(`INSERT INTO match_offers (person_id, household_id, add_pence, per_pence, add_points, per_points, set_by, updated_at) VALUES (2, 1, 10, 0, 0, 0, 2, 3)`); err == nil {
+		t.Error("an offer with nothing to earn for it was allowed")
+	}
+	count := func(q string) int {
+		var n int
+		if err := st.DB.QueryRowContext(ctx, q).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	if n := count(`SELECT COUNT(*) FROM ledger_entries`); n != 3 {
+		t.Errorf("%d entries after up, want 3", n)
+	}
+	if n := count(`SELECT COUNT(*) FROM pragma_foreign_key_check`); n != 0 {
+		t.Errorf("%d broken foreign keys", n)
+	}
+	// A match_entries row goes with its ledger entry.
+	if err := exec(`DELETE FROM ledger_entries WHERE id = 3`); err != nil {
+		t.Fatal(err)
+	}
+	if n := count(`SELECT COUNT(*) FROM match_entries`); n != 0 {
+		t.Errorf("%d match entries left after their ledger entry went", n)
+	}
+	if err := exec(`INSERT INTO ledger_entries (id, household_id, person_id, points, pence, kind, created_at) VALUES (3, 1, 1, 0, 5, 'match', 3)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.DownTo(ctx, 27); err != nil {
+		t.Fatalf("DownTo(27) again: %v", err)
+	}
+	if n := count(`SELECT COUNT(*) FROM ledger_entries`); n != 2 {
+		t.Errorf("%d entries after down, want the 2 that aren't matches", n)
+	}
+	if n := count(`SELECT COUNT(*) FROM interest_payments WHERE ledger_entry_id = 2`); n != 1 {
+		t.Errorf("interest payment lost its ledger entry")
+	}
+	if _, err := p.Up(ctx); err != nil {
+		t.Fatalf("Up again: %v", err)
 	}
 }

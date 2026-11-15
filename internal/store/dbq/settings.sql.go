@@ -10,7 +10,7 @@ import (
 )
 
 const getSettings = `-- name: GetSettings :one
-SELECT household_id, timezone, day_starts_at, admin_idle_minutes, updated_at, screensaver_idle_minutes, unlock_code_hash, lock_days, lock_from, lock_until, lock_idle_hours, unlock_code_length, calendar_idle_minutes, calendar_chores FROM household_settings WHERE household_id = ?
+SELECT household_id, timezone, day_starts_at, admin_idle_minutes, updated_at, screensaver_idle_minutes, unlock_code_hash, lock_days, lock_from, lock_until, lock_idle_hours, unlock_code_length, calendar_idle_minutes, calendar_chores, interest_rate_bp, interest_money, interest_points, interest_cap_pence, interest_cap_points, interest_since FROM household_settings WHERE household_id = ?
 `
 
 func (q *Queries) GetSettings(ctx context.Context, householdID int64) (HouseholdSetting, error) {
@@ -31,6 +31,12 @@ func (q *Queries) GetSettings(ctx context.Context, householdID int64) (Household
 		&i.UnlockCodeLength,
 		&i.CalendarIdleMinutes,
 		&i.CalendarChores,
+		&i.InterestRateBp,
+		&i.InterestMoney,
+		&i.InterestPoints,
+		&i.InterestCapPence,
+		&i.InterestCapPoints,
+		&i.InterestSince,
 	)
 	return i, err
 }
@@ -95,7 +101,7 @@ SET timezone = ?, day_starts_at = ?, admin_idle_minutes = ?, screensaver_idle_mi
     calendar_idle_minutes = ?, calendar_chores = ?,
     lock_days = ?, lock_from = ?, lock_until = ?, lock_idle_hours = ?, updated_at = ?
 WHERE household_id = ?
-RETURNING household_id, timezone, day_starts_at, admin_idle_minutes, updated_at, screensaver_idle_minutes, unlock_code_hash, lock_days, lock_from, lock_until, lock_idle_hours, unlock_code_length, calendar_idle_minutes, calendar_chores
+RETURNING household_id, timezone, day_starts_at, admin_idle_minutes, updated_at, screensaver_idle_minutes, unlock_code_hash, lock_days, lock_from, lock_until, lock_idle_hours, unlock_code_length, calendar_idle_minutes, calendar_chores, interest_rate_bp, interest_money, interest_points, interest_cap_pence, interest_cap_points, interest_since
 `
 
 type UpdateSettingsParams struct {
@@ -144,6 +150,12 @@ func (q *Queries) UpdateSettings(ctx context.Context, arg UpdateSettingsParams) 
 		&i.UnlockCodeLength,
 		&i.CalendarIdleMinutes,
 		&i.CalendarChores,
+		&i.InterestRateBp,
+		&i.InterestMoney,
+		&i.InterestPoints,
+		&i.InterestCapPence,
+		&i.InterestCapPoints,
+		&i.InterestSince,
 	)
 	return i, err
 }

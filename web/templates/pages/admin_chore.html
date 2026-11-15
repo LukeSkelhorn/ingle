@@ -34,7 +34,7 @@
       <div class="people-pick">
         {{range .Data.People}}
         <label class="people-pick__item">
-          <input type="radio" name="assignee_id" value="{{.ID}}"{{if eq .ID $.Data.AssigneeID}} checked{{end}}>
+          <input type="radio" name="assignee_id" value="{{.ID}}" data-kind="{{.Kind}}"{{if eq .ID $.Data.AssigneeID}} checked{{end}}>
           {{template "avatar" (avatar . "md")}}<span>{{.Name}}</span>
         </label>
         {{end}}
@@ -152,7 +152,7 @@
         <small class="muted">It can't be done late, like putting the bins out. Once it's too late it comes off the board.</small></span>
     </label>
 
-    <div class="row">
+    <div class="row" data-pay="kids">
       <label class="field">
         <span>Points</span>
         <input type="number" name="points" value="{{.Data.Points}}" min="0" max="100000" inputmode="numeric">
@@ -165,10 +165,12 @@
         {{template "err" index .Errors "pence"}}
       </label>
     </div>
-    <label class="field" data-show-when="mode=each">
+    <label class="field" data-pay="adults">
       <span>Adults' points</span>
-      <input type="number" name="adult_points" value="{{.Data.AdultPoints}}" min="0" max="100000" inputmode="numeric">
-      <small class="muted field__hint">Kids get the points and pocket money above. Adults get these points and no money.</small>
+      <input type="number" name="adult_points" value="{{.Data.AdultPoints}}" min="0" max="100000" inputmode="numeric"
+             {{- if eq .Data.AdultPoints .Data.Points}} data-follow{{end}}>
+      <small class="muted field__hint" data-pay-hint="both">Kids get the points and pocket money above. Adults get these points and no money.</small>
+      <small class="muted field__hint" data-pay-hint="adults" hidden>Adults get points only, no money.</small>
       {{template "err" index .Errors "adult_points"}}
     </label>
 
@@ -179,6 +181,41 @@
 
     <button class="btn btn--primary" type="submit">{{if .Data.ID}}Save{{else}}Add chore{{end}}</button>
   </form>
+  <script>
+    // What it's worth: a chore for one adult shows only Adults' points, one
+    // for one child only Points and Pocket money, anything else all three.
+    // Adults' points copy Points until they're changed.
+    (function () {
+      var form = document.querySelector(".chore-form");
+      if (!form) return;
+      var kids = form.querySelector('[data-pay="kids"]'),
+          adults = form.querySelector('[data-pay="adults"]'),
+          both = form.querySelector('[data-pay-hint="both"]'),
+          only = form.querySelector('[data-pay-hint="adults"]'),
+          points = form.querySelector('[name="points"]'),
+          adultPoints = form.querySelector('[name="adult_points"]');
+      function who() {
+        var mode = form.querySelector('[name="mode"]:checked'),
+            person = form.querySelector('[name="assignee_id"]:checked');
+        return mode && mode.value === "assigned" && person ? person.dataset.kind : "";
+      }
+      function update() {
+        var k = who();
+        kids.hidden = k === "adult";
+        adults.hidden = k === "child";
+        both.hidden = k === "adult";
+        only.hidden = k !== "adult";
+      }
+      points.addEventListener("input", function () {
+        if (adultPoints.hasAttribute("data-follow")) adultPoints.value = points.value;
+      });
+      adultPoints.addEventListener("input", function () {
+        adultPoints.removeAttribute("data-follow");
+      });
+      form.addEventListener("change", update);
+      update();
+    })();
+  </script>
 
   {{if .Data.ID}}
   <section class="card stack">

@@ -441,8 +441,8 @@ func Backup(ctx context.Context) (string, error) {
 
 // maintenanceLoop runs once at startup and then hourly: it keeps the rolling
 // window of chore occurrences filled (so new days and newly added chores
-// appear) from the household's current board day, and sweeps expired
-// sessions.
+// appear) from the household's current board day, pays any interest due
+// for last month, and sweeps expired sessions.
 func maintenanceLoop(ctx context.Context, log *slog.Logger, set *settings.Service, svc *chores.Service, authSvc *auth.Service, households func(context.Context) ([]int64, error)) {
 	one := func(ctx context.Context, householdID int64) {
 		log := log.With(slog.Int64("household", householdID))
@@ -460,6 +460,13 @@ func maintenanceLoop(ctx context.Context, log *slog.Logger, set *settings.Servic
 			}
 		} else if n > 0 {
 			log.Info("materialised chore occurrences", slog.Int("created", n))
+		}
+		if n, err := svc.PayInterest(ctx, householdID); err != nil {
+			if ctx.Err() == nil {
+				log.Error("pay interest", slog.Any("err", err))
+			}
+		} else if n > 0 {
+			log.Info("paid interest", slog.Int("payments", n))
 		}
 		if _, err := authSvc.Sweep(ctx, householdID); err != nil && ctx.Err() == nil {
 			log.Error("sweep sessions", slog.Any("err", err))

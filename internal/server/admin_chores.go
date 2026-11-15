@@ -247,7 +247,7 @@ type choreForm struct {
 	AssigneeID       int64
 	PeopleIDs        []int64 // a shared or "each" chore's chosen people
 	Everyone         bool    // an "each" chore for everyone
-	AdultPoints      int64   // an "each" chore's adults' points
+	AdultPoints      int64   // what adults earn (they get no money)
 	Repeat           string
 	Days             []time.Weekday
 	DayMode          string // chores.DayEach or chores.DayAny
@@ -479,8 +479,10 @@ func (s *Server) readChoreForm(w http.ResponseWriter, r *http.Request, f *choreF
 		pick = "each_ids"
 	}
 	f.Everyone = fm.str("each_who") == "everyone"
-	f.AdultPoints = 0
-	if f.Mode == chores.ModeEach {
+	// Adults' points: a form without the field (an older page) gives
+	// adults the kids' points.
+	f.AdultPoints = f.Points
+	if fm.str("adult_points") != "" {
 		f.AdultPoints = fm.int("adult_points", "Enter a whole number of points.")
 	}
 	for _, v := range r.Form[pick] {
@@ -507,8 +509,9 @@ func (s *Server) readChoreForm(w http.ResponseWriter, r *http.Request, f *choreF
 	if f.Mode == chores.ModeShared || f.Mode == chores.ModeEach {
 		in.PeopleIDs = f.PeopleIDs
 	}
+	in.AdultPoints = f.AdultPoints
 	if f.Mode == chores.ModeEach {
-		in.Everyone, in.AdultPoints = f.Everyone, f.AdultPoints
+		in.Everyone = f.Everyone
 	}
 	if f.Mode == chores.ModeAssigned && f.AssigneeID != 0 {
 		id := f.AssigneeID
