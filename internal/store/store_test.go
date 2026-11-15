@@ -511,6 +511,44 @@ func TestRewardPeopleMigration(t *testing.T) {
 	}
 }
 
+// completions.for_person_id goes on and comes off cleanly (SQLite has to
+// drop a column with a foreign key).
+func TestCompletionForPersonMigration(t *testing.T) {
+	st := openTest(t)
+	ctx := t.Context()
+	sub, err := fs.Sub(migrations, "migrations/sqlite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := goose.NewProvider(goose.DialectSQLite3, st.DB, sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	has := func() bool {
+		var n int
+		if err := st.DB.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM pragma_table_info('completions') WHERE name = 'for_person_id'`).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n == 1
+	}
+	if !has() {
+		t.Fatal("no completions.for_person_id")
+	}
+	if _, err := p.DownTo(ctx, 25); err != nil {
+		t.Fatalf("DownTo(25): %v", err)
+	}
+	if has() {
+		t.Error("for_person_id still there after down")
+	}
+	if _, err := p.Up(ctx); err != nil {
+		t.Fatalf("Up: %v", err)
+	}
+	if !has() {
+		t.Error("no for_person_id after up again")
+	}
+}
+
 // v0.3's migrations (modules, bank requests, bank balances) come after
 // v0.2.4's 14 and 15, so a database upgraded from v0.2.4 runs just them.
 func TestV03MigrationsAfterV024(t *testing.T) {

@@ -181,6 +181,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /board/occurrences/{id}/claim", viewer(s.handleClaim))
 	mux.Handle("POST /board/occurrences/{id}/complete", viewer(s.handleComplete))
 	mux.Handle("POST /board/occurrences/{id}/release", viewer(s.handleRelease))
+	mux.Handle("GET /board/occurrences/{id}/do-for", viewer(s.handleDoForSheet))
+	mux.Handle("POST /board/occurrences/{id}/do-for", viewer(s.handleDoFor))
 	mux.Handle("POST /board/completions/{id}/undo", viewer(s.handleUndo))
 	mux.Handle("GET /board/completions/{id}/review", viewer(s.handleReviewSheet))
 	mux.Handle("POST /board/completions/{id}/approve", viewer(s.boardReview(s.Chores.Approve, "Approved. Points added.")))

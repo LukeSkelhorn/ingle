@@ -70,6 +70,9 @@ type Card struct {
 	CompletionID int64 // set when Done
 	CompletedAt  int64 // unix seconds, set when Done
 	JustDone     bool  // completed in the last few seconds (for the tick animation)
+	// DoneBy is the adult who did this person's chore for them (and got
+	// the points), "" when they did it themselves.
+	DoneBy string
 	// Flexible-day chores, not yet done: Flex names the days left ("Today or
 	// Thu"); LastChance marks the last of several days.
 	Flex       string
@@ -283,6 +286,9 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 			card.CompletionID = comp.ID
 			card.CompletedAt = comp.CompletedAt
 			card.JustDone = now.Sub(time.Unix(comp.CompletedAt, 0)) < justDoneFor
+			if comp.ForPersonID != nil {
+				card.DoneBy = byPerson[comp.PersonID].Name
+			}
 		}
 
 		owner := r.AssigneeID
@@ -290,8 +296,12 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 			owner = r.ClaimedBy
 		}
 		if owner == nil && done {
-			// An unclaimed pool chore someone just did: show it under them.
+			// An unclaimed pool chore someone just did: show it under them,
+			// or a shared chore an adult did for someone: under that person.
 			owner = &comp.PersonID
+			if comp.ForPersonID != nil {
+				owner = comp.ForPersonID
+			}
 		}
 		if owner == nil && card.Shared {
 			// Not done yet: in each chosen person's column, as theirs to do.

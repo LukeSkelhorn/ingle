@@ -86,6 +86,7 @@ type Completion struct {
 	ReviewedAt   *int64 `json:"reviewed_at"`
 	Points       int64  `json:"points"`
 	Pence        int64  `json:"pence"`
+	ForPersonID  *int64 `json:"for_person_id"`
 }
 
 type Device struct {

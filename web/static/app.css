@@ -230,6 +230,8 @@ h2 { margin: 0 0 8px; font-size: 1.15rem; }
   touch-action: manipulation;
 }
 div.chore__main { cursor: default; }
+/* A long press opens "I did it", so it mustn't select text or show a menu. */
+.chore__main[data-hold] { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 button.chore__main:active { background: var(--line); }
 .chore__check {
   flex: none; width: 40px; height: 40px; border-radius: 50%; border: 3px solid var(--person, var(--accent));
