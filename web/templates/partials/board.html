@@ -176,21 +176,39 @@
 {{end}}
 
 {{/* "I did it" (doForView): an adult did a child's chore for them and gets
-     the points instead. Opened by a long press on the child's chore. */}}
-{{define "do_for"}}
-<div class="picker" hx-target="#board" hx-swap="outerHTML">
+     the points instead. Opened by a long press on the child's chore. With
+     more than one adult it asks which of them did it, starting on the one
+     who unlocked the board. */}}
+{{define "do_for"}}{{$v := .}}
+<form class="picker" hx-target="#board" hx-swap="outerHTML" onsubmit="return false">
   <h2 class="picker__title" tabindex="-1" autofocus>{{with .Emoji}}<span class="picker__emoji" aria-hidden="true">{{.}}</span> {{end}}{{.Title}}</h2>
   <div class="review__who">
     {{template "avatar" (avatar .Child "md")}}
     <p>{{.Child.Name}}'s chore</p>
   </div>
+  {{if gt (len .Adults) 1}}
+  <p class="picker__ask">Who did it?</p>
+  <div class="picker__people">
+    {{range .Adults}}
+    <label class="picker__person" style="--person: {{.Colour}}">
+      <input class="visually-hidden" type="radio" name="by" value="{{.ID}}"{{if eq .ID $v.Adult.ID}} checked{{end}}>
+      {{template "avatar" (avatar . "lg")}}
+      <span>{{.Name}}</span>
+      {{with $v.Points}}<small class="picker__worth">{{pts .}}</small>{{end}}
+    </label>
+    {{end}}
+  </div>
+  <p class="muted">They get {{if .Points}}{{pts .Points}}{{else}}the credit{{end}}, and it's ticked off for {{.Child.Name}} without any points.</p>
+  {{else}}
+  <input type="hidden" name="by" value="{{.Adult.ID}}">
   <p class="muted">Did it for {{.Child.Name}}? You get {{if .Points}}{{pts .Points}}{{else}}the credit{{end}}, and it's ticked off for {{.Child.Name}} without any points.</p>
+  {{end}}
   <div class="picker__actions">
     <button class="btn btn--primary btn--block" type="button" hx-disabled-elt="this"
-            hx-post="/board/occurrences/{{.OccurrenceID}}/do-for" hx-vals='{"person": "{{.Child.ID}}"}'>I did it</button>
+            hx-post="/board/occurrences/{{.OccurrenceID}}/do-for" hx-vals='{"person": "{{.Child.ID}}"}'>{{if gt (len .Adults) 1}}Done{{else}}I did it{{end}}</button>
     <button class="btn btn--ghost btn--block" type="button" data-close>Cancel</button>
   </div>
-</div>
+</form>
 {{end}}
 
 {{/* An adult's sheet for a done chore: approve or reject if it's waiting,
