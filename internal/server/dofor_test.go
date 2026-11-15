@@ -73,3 +73,36 @@ func TestDoForChildsChore(t *testing.T) {
 		t.Errorf("Mum's balance after undo = %+v", b)
 	}
 }
+
+// With two adults the sheet asks which of them did it, starting on the one
+// signed in, and the one chosen gets the points.
+func TestDoForAnotherAdult(t *testing.T) {
+	h, _, phone := boardHousehold(t)
+	expectPersonCreated(t, phone.post("/admin/people", url.Values{
+		"name": {"Dad"}, "kind": {"adult"}, "colour": {"#0090FF"}, "avatar_mode": {"none"},
+	}))
+	alfie, mum, dad := h.person("Alfie"), h.person("Mum"), h.person("Dad")
+	occ := h.occurrence("Feed the cat")
+	sheet := "/board/occurrences/" + itoa(occ.ID) + "/do-for?person=" + itoa(alfie.ID)
+	post := "/board/occurrences/" + itoa(occ.ID) + "/do-for"
+
+	expect(t, phone.get(sheet), http.StatusOK, "Who did it?",
+		`name="by" value="`+itoa(mum.ID)+`" checked`, `name="by" value="`+itoa(dad.ID)+`"`, "Dad")
+
+	// A child can't be the one who did it.
+	expect(t, phone.post(post, url.Values{"person": {itoa(alfie.ID)}, "by": {itoa(h.person("Isla").ID)}}), http.StatusConflict)
+
+	r := phone.post(post, url.Values{"person": {itoa(alfie.ID)}, "by": {itoa(dad.ID)}})
+	expect(t, r, http.StatusOK, "Done by Dad")
+	if tt := toastOf(t, r); !strings.HasPrefix(tt.Message, "Thanks, Dad!") {
+		t.Errorf("toast = %+v, want Thanks, Dad!", tt)
+	}
+	ch := h.chore("Feed the cat")
+	if b := must(h.st.Q.BalanceForPerson(h.ctx(), dbq.BalanceForPersonParams{HouseholdID: h.hh, PersonID: dad.ID})); b.Points != ch.AdultPoints {
+		t.Errorf("Dad's balance = %+v, want %d points", b, ch.AdultPoints)
+	}
+	if b := must(h.st.Q.BalanceForPerson(h.ctx(), dbq.BalanceForPersonParams{HouseholdID: h.hh, PersonID: mum.ID})); b.Points != 0 {
+		t.Errorf("Mum's balance = %+v, want nothing", b)
+	}
+	expect(t, phone.get("/admin/completions"), http.StatusOK, "Done by Dad for Alfie")
+}
