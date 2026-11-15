@@ -6,6 +6,10 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ## [Unreleased]
 
+### Added
+
+- **Choose who a reward is for.** Admin › Rewards has **Who's it for?**: **Everyone**, the default, which includes people added later, or **Choose people**. Each person's sheet only shows the rewards they can have, and they can only claim or save for those. Admin › People's **Saving for** works the same way. Adults don't have money, so a reward that costs money is only for children. Taking someone off a reward removes their goal for it, but a claim they've already made still waits for an adult. The Rewards list shows who each reward is for. Existing rewards stay for everyone. ([DOM-61](https://linear.app/skeltech/issue/DOM-61))
+
 ### Changed
 
 - **Adults earn points only, not money.** Every chore now has **Adults' points**, which adults get with no money, whoever the chore is for. Before, only "Each of these people" chores had them. Children still get the chore's points and pocket money. In Admin › Chores, a chore for one adult shows only Adults' points, a chore for one child shows only Points and Pocket money, and everything else shows all three. The board shows each person what they'd earn, including in the Up for grabs picker. Adults no longer have a money balance, and Move to bank is only for children. Money adults earned before stays in their history. ([DOM-60](https://linear.app/skeltech/issue/DOM-60))

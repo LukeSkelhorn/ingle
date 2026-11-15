@@ -31,8 +31,47 @@
         {{template "err" index .Errors "cost_pence"}}
       </label>
     </div>
+    <fieldset class="field">
+      <legend>Who's it for?</legend>
+      <div class="segmented">
+        <label><input type="radio" name="reward_who" value="everyone"{{if .Data.Everyone}} checked{{end}}> <span>Everyone</span></label>
+        <label><input type="radio" name="reward_who" value="chosen"{{if not .Data.Everyone}} checked{{end}}> <span>Choose people</span></label>
+      </div>
+      <p class="muted field__hint" data-show-when="reward_who=everyone" data-money-hint="everyone">Including anyone you add later.</p>
+      <div class="people-pick" data-show-when="reward_who=chosen">
+        {{range .Data.People}}
+        <label class="people-pick__item">
+          <input type="checkbox" name="people_ids" value="{{.ID}}" data-kind="{{.Kind}}"{{if $.Data.HasPerson .ID}} checked{{end}}>
+          {{template "avatar" (avatar . "md")}}<span>{{.Name}}</span>
+        </label>
+        {{end}}
+      </div>
+      <p class="muted field__hint" data-money-hint="money" hidden>Adults don't have money, so only children can have a reward that costs money.</p>
+      {{template "err" index .Errors "people_ids"}}
+    </fieldset>
     <button class="btn btn--primary" type="submit">{{if .Data.ID}}Save{{else}}Add reward{{end}}</button>
   </form>
+  <script>
+    // Adults have no money, so a reward that costs money is only for
+    // children: adults can't be ticked for it.
+    (function () {
+      var money = document.querySelector('[name="money"]');
+      if (!money) return;
+      var form = money.form,
+          everyone = form.querySelector('[data-money-hint="everyone"]'),
+          hint = form.querySelector('[data-money-hint="money"]');
+      function update() {
+        var costs = parseFloat(money.value.replace(/[£\s]/g, "")) > 0;
+        form.querySelectorAll('[name="people_ids"][data-kind="adult"]').forEach(function (box) {
+          box.disabled = costs;
+        });
+        everyone.textContent = costs ? "Children only, as it costs money." : "Including anyone you add later.";
+        hint.hidden = !costs;
+      }
+      money.addEventListener("input", update);
+      update();
+    })();
+  </script>
   {{if and .Data.ID (not .Data.Archived)}}
   <section class="card stack">
     <h2>Archive</h2>

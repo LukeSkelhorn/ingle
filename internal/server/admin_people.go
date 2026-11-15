@@ -129,7 +129,7 @@ type personForm struct {
 	Emojis  []string
 
 	Goal    int64        // the reward they're saving for, 0 for none
-	Rewards []dbq.Reward // to pick a goal from (editing only)
+	Rewards []dbq.Reward // the rewards they may have, to pick a goal from (editing only)
 
 	Points pointsPanel // the Adjust points section (editing only)
 	Bank   bankPanel   // a child's Bank balance section (editing only)
@@ -198,7 +198,7 @@ func (s *Server) renderPerson(w http.ResponseWriter, r *http.Request, status int
 	if f.ID != 0 && !f.Archived {
 		// No rewards, no "Saving for" picker.
 		if s.moduleOn(r.Context(), modRewards) {
-			rewards, err := s.Household.Rewards(r.Context(), hhOf(r))
+			rewards, err := s.Household.RewardsFor(r.Context(), hhOf(r), f.ID)
 			if err != nil {
 				s.serverError(w, r, err)
 				return
@@ -376,7 +376,7 @@ func (s *Server) handlePersonUpdate(w http.ResponseWriter, r *http.Request) {
 	flash := "Saved."
 	if r.Form.Has("goal") && s.moduleOn(r.Context(), modRewards) {
 		if p, err = s.savePersonGoal(r, p, newForm(r).optID("goal")); errors.Is(err, chores.ErrNotFound) {
-			flash = "Saved, but that reward has gone, so their goal wasn't changed."
+			flash = "Saved, but that reward has gone or isn't for them, so their goal wasn't changed."
 		} else if err != nil {
 			s.serverError(w, r, err)
 			return

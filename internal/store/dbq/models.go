@@ -229,6 +229,13 @@ type Reward struct {
 	ArchivedAt  *int64 `json:"archived_at"`
 	CreatedAt   int64  `json:"created_at"`
 	Emoji       string `json:"emoji"`
+	Everyone    int64  `json:"everyone"`
+}
+
+type RewardPerson struct {
+	HouseholdID int64 `json:"household_id"`
+	RewardID    int64 `json:"reward_id"`
+	PersonID    int64 `json:"person_id"`
 }
 
 type Session struct {
