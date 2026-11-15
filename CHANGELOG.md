@@ -6,6 +6,10 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ## [Unreleased]
 
+### Changed
+
+- **The board says what's left.** Each column now says "2 left today" instead of "1 of 3 done today", and still "All done today 🎉" at the end. A chore waiting for a grown-up to check counts as done. The screensaver says "2 left" in the same way. A goal now says how much is still needed, e.g. "40 pts to go", "£1.50 to go", or "40 pts and £1.50 to go" when it costs both. This shows on the goal, on the person's own page, and after their balance under their name. It doesn't show once they have enough, or while a claim is waiting. ([DOM-127](https://linear.app/skeltech/issue/DOM-127))
+
 ## [v0.4.2] - 2026-11-15
 
 ### Added

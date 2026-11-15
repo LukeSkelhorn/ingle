@@ -99,7 +99,7 @@ func TestBoardShowsColumnsAndPool(t *testing.T) {
 		}
 	}
 	alfie := section(r.body, "Alfie")
-	for _, want := range []string{"🦖", "Feed the cat", "by 08:00", "0 of 1 done today", "0 pts"} {
+	for _, want := range []string{"🦖", "Feed the cat", "by 08:00", "1 left today", "0 pts"} {
 		if !strings.Contains(alfie, want) {
 			t.Errorf("Alfie's column lacks %q\n%s", want, alfie)
 		}
@@ -131,7 +131,7 @@ func TestBoardCompleteAndUndo(t *testing.T) {
 	occ := h.occurrence("Feed the cat")
 
 	r := wall.post("/board/occurrences/"+itoa(occ.ID)+"/complete", nil)
-	expect(t, r, http.StatusOK, "1 of 1 done today", "chore--done", "chore--just", "2 pts")
+	expect(t, r, http.StatusOK, "All done today", "chore--done", "chore--just", "2 pts")
 	tt := toastOf(t, r)
 	if tt.Message != "Nice one, Alfie!" || !strings.HasPrefix(tt.Undo, "/board/completions/") {
 		t.Errorf("toast = %+v", tt)
@@ -145,7 +145,7 @@ func TestBoardCompleteAndUndo(t *testing.T) {
 
 	h.advance(10 * time.Second)
 	r = wall.post(tt.Undo, nil)
-	expect(t, r, http.StatusOK, "0 of 1 done today")
+	expect(t, r, http.StatusOK, "1 left today")
 	if strings.Contains(section(r.body, "Alfie"), "chore--done") {
 		t.Error("still done after undo")
 	}
@@ -332,7 +332,7 @@ func TestBoardAdultReverse(t *testing.T) {
 	defer cancel()
 	events := openEvents(t, ctx, phone)
 	r = wall.post(reverse, nil)
-	expect(t, r, http.StatusOK, "0 of 1 done today")
+	expect(t, r, http.StatusOK, "1 left today")
 	if tt := toastOf(t, r); tt.Message != "Reversed. Points taken back." {
 		t.Errorf("toast = %+v", tt)
 	}
@@ -396,7 +396,7 @@ func TestAdminCompletions(t *testing.T) {
 	if balance.Points != 3 {
 		t.Errorf("points = %d after reverse, want 3", balance.Points)
 	}
-	expect(t, wall.get("/board"), http.StatusOK, "1 of 2 done today")
+	expect(t, wall.get("/board"), http.StatusOK, "1 left today")
 	expect(t, phone.get("/admin"), http.StatusOK, "reversed a chore", "approved a chore")
 
 	// A week later it's too late to reverse the approved one.
@@ -667,7 +667,10 @@ func TestSaveForAReward(t *testing.T) {
 		t.Errorf("toast = %+v", tt)
 	}
 	col := section(r.body, "Alfie")
-	for _, want := range []string{`class="goal"`, "🧱", "Lego set", "60 of 100 pts", "width: 60%"} {
+	for _, want := range []string{
+		`class="goal"`, "🧱", "Lego set", "60 of 100 pts", "width: 60%",
+		`<span class="goal__togo">40 pts to go</span>`, `<span class="column__togo">40 pts to go</span>`,
+	} {
 		if !strings.Contains(col, want) {
 			t.Errorf("column missing %q", want)
 		}
@@ -686,6 +689,9 @@ func TestSaveForAReward(t *testing.T) {
 		t.Fatal(err)
 	}
 	col = section(wall.get("/board").body, "Alfie")
+	if strings.Contains(col, "to go") {
+		t.Error("reached goal still says how much is to go")
+	}
 	setAt := *h.person("Alfie").GoalSetAt
 	for _, want := range []string{
 		"goal--reached", `data-celebrate="` + itoa(alfie.ID) + ":" + itoa(lego) + ":" + itoa(setAt) + `"`,
@@ -698,7 +704,7 @@ func TestSaveForAReward(t *testing.T) {
 
 	// Claimed: waiting. Approved: the goal is gone.
 	col = section(wall.post("/board/rewards/"+itoa(lego)+"/claim", url.Values{"person": {itoa(alfie.ID)}}).body, "Alfie")
-	if !strings.Contains(col, "goal--waiting") || strings.Contains(col, "data-celebrate") {
+	if !strings.Contains(col, "goal--waiting") || strings.Contains(col, "data-celebrate") || strings.Contains(col, "to go") {
 		t.Errorf("claimed goal should wait without celebrating: %s", col)
 	}
 	pending := must(h.st.Q.ListPendingRedemptions(h.ctx(), h.hh))
@@ -1222,4 +1228,52 @@ func TestEachChore(t *testing.T) {
 	expect(t, wall.get("/board/calendar?chores=1"), http.StatusOK,
 		`/board/calendar/chores/`+itoa(teeth.ID)+`/2026-07-02?person=`+itoa(mum.ID)+`&amp;at="`)
 	expect(t, wall.get("/board/calendar/chores/"+itoa(teeth.ID)+"/2026-07-02?person="+itoa(alfie.ID)), http.StatusOK, "Alfie", "2 pts · £0.10")
+}
+
+// A goal says how much is left to save, on the goal and under the name,
+// for each part of the cost that isn't covered yet.
+func TestGoalToGo(t *testing.T) {
+	h, wall, phone := boardHousehold(t)
+	alfie := h.person("Alfie")
+	sheet := "/board/people/" + itoa(alfie.ID)
+	expectRedirect(t, phone.post("/admin/rewards", url.Values{"title": {"Bike"}, "cost_points": {"100"}, "money": {"3.50"}}), "/admin/rewards")
+	var bike int64
+	for _, rw := range must(h.st.Q.ListRewards(h.ctx(), h.hh)) {
+		if rw.Title == "Bike" {
+			bike = rw.ID
+		}
+	}
+	earn := func(points, pence int64) {
+		t.Helper()
+		if _, err := h.st.Q.InsertLedgerEntry(h.ctx(), dbq.InsertLedgerEntryParams{
+			HouseholdID: h.hh, PersonID: alfie.ID, Points: points, Pence: pence, Kind: "completion", CreatedAt: 1,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	earn(60, 200)
+	expect(t, wall.post(sheet+"/goal", url.Values{"reward": {itoa(bike)}}), http.StatusOK)
+
+	col := section(wall.get("/board").body, "Alfie")
+	for _, want := range []string{
+		`<span class="goal__togo">40 pts and £1.50 to go</span>`,
+		`<span class="column__togo">40 pts and £1.50 to go</span>`,
+	} {
+		if !strings.Contains(col, want) {
+			t.Errorf("column missing %q", want)
+		}
+	}
+	// Their own page shows it on the goal too.
+	expect(t, wall.get(sheet), http.StatusOK, `<span class="goal__togo">40 pts and £1.50 to go</span>`)
+
+	// Once the points are covered, only the money is left.
+	earn(41, 0)
+	col = section(wall.get("/board").body, "Alfie")
+	if !strings.Contains(col, `<span class="goal__togo">£1.50 to go</span>`) || strings.Contains(col, "pts and") {
+		t.Errorf("points covered, want only £1.50 to go: %s", col)
+	}
+
+	// Without a goal there's nothing to go.
+	expect(t, wall.post(sheet+"/goal/clear", nil), http.StatusOK)
+	expectNot(t, wall.get("/board"), "to go")
 }

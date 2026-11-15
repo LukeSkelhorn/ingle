@@ -40,6 +40,9 @@ type progressView struct {
 	Overdue     int
 }
 
+// Left is how many of their chores are still to do.
+func (p progressView) Left() int { return p.Total - p.Done }
+
 func (s *Server) handleScreensaver(w http.ResponseWriter, r *http.Request) {
 	v, err := s.screensaver(r)
 	if err != nil {
