@@ -187,6 +187,32 @@ type LedgerEntry struct {
 	CreatedAt    int64  `json:"created_at"`
 }
 
+type MatchEntry struct {
+	ID            int64  `json:"id"`
+	HouseholdID   int64  `json:"household_id"`
+	PersonID      int64  `json:"person_id"`
+	LedgerEntryID int64  `json:"ledger_entry_id"`
+	CompletionID  *int64 `json:"completion_id"`
+	RewardID      int64  `json:"reward_id"`
+	GoalSetAt     int64  `json:"goal_set_at"`
+	Points        int64  `json:"points"`
+	Pence         int64  `json:"pence"`
+	CreatedAt     int64  `json:"created_at"`
+}
+
+type MatchOffer struct {
+	PersonID    int64 `json:"person_id"`
+	HouseholdID int64 `json:"household_id"`
+	AddPence    int64 `json:"add_pence"`
+	PerPence    int64 `json:"per_pence"`
+	AddPoints   int64 `json:"add_points"`
+	PerPoints   int64 `json:"per_points"`
+	CapPence    int64 `json:"cap_pence"`
+	CapPoints   int64 `json:"cap_points"`
+	SetBy       int64 `json:"set_by"`
+	UpdatedAt   int64 `json:"updated_at"`
+}
+
 type Person struct {
 	ID             int64   `json:"id"`
 	HouseholdID    int64   `json:"household_id"`

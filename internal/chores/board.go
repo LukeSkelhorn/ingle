@@ -208,9 +208,15 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 			c.Waiting = int(h.Waiting)
 		}
 	}
+	gm, err := s.loadGoalMatches(ctx, q, householdID)
+	if err != nil {
+		return Board{}, err
+	}
+	money := s.moduleOn(ctx, q, householdID, moduleMoney)
 	for _, g := range goals {
 		if c := cols[g.PersonID]; c != nil {
 			goal := newGoal(g, c.Points, c.Pence)
+			gm.apply(&goal, c.Person, money)
 			c.Goal = &goal
 		}
 	}
@@ -393,6 +399,11 @@ func (s *Service) Undo(ctx context.Context, householdID, completionID int64) err
 		if c.Status == StatusRejected || c.ReviewedBy != nil ||
 			s.now().Sub(time.Unix(c.CompletedAt, 0)) > UndoWindow {
 			return ErrUndoExpired
+		}
+		if err := q.DeleteMatchForCompletion(ctx, dbq.DeleteMatchForCompletionParams{
+			HouseholdID: householdID, CompletionID: &c.ID,
+		}); err != nil {
+			return fmt.Errorf("delete match: %w", err)
 		}
 		if err := q.DeleteLedgerForCompletion(ctx, dbq.DeleteLedgerForCompletionParams{
 			HouseholdID: householdID, CompletionID: &c.ID,

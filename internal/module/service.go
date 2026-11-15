@@ -49,13 +49,20 @@ func (s *Service) OnChange(fn func(householdID int64)) { s.onChange = fn }
 
 // State returns the household's modules.
 func (s *Service) State(ctx context.Context, householdID int64) (State, error) {
+	return s.StateWith(ctx, s.st.Q, householdID)
+}
+
+// StateWith is State, reading through q when it isn't cached: inside a
+// transaction, pass its queries (SQLite has one connection, so reading
+// outside the transaction would wait for it forever).
+func (s *Service) StateWith(ctx context.Context, q *dbq.Queries, householdID int64) (State, error) {
 	s.mu.Lock()
 	st, ok := s.cache[householdID]
 	s.mu.Unlock()
 	if ok {
 		return st, nil
 	}
-	rows, err := s.st.Q.ListModules(ctx, householdID)
+	rows, err := q.ListModules(ctx, householdID)
 	if err != nil {
 		return State{}, fmt.Errorf("list modules: %w", err)
 	}
@@ -86,10 +93,15 @@ func (s *Service) State(ctx context.Context, householdID int64) (State, error) {
 // Enabled reports whether the module id is on. If the state can't be read
 // it says on, which is how Ingle behaved before modules.
 func (s *Service) Enabled(ctx context.Context, householdID int64, id string) bool {
+	return s.EnabledWith(ctx, s.st.Q, householdID, id)
+}
+
+// EnabledWith is Enabled, reading through q (see StateWith).
+func (s *Service) EnabledWith(ctx context.Context, q *dbq.Queries, householdID int64, id string) bool {
 	if _, ok := s.reg.byID[id]; !ok {
 		return false
 	}
-	st, err := s.State(ctx, householdID)
+	st, err := s.StateWith(ctx, q, householdID)
 	if err != nil {
 		return true
 	}

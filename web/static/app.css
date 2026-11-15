@@ -196,7 +196,16 @@ h2 { margin: 0 0 8px; font-size: 1.15rem; }
 .goal__title { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
 .goal__have { margin-left: auto; color: var(--muted); font-size: 0.9rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .goal__bar { height: 10px; border-radius: 5px; background: var(--line); overflow: hidden; }
+.goal__bar { display: flex; }
 .goal__bar > span { display: block; height: 100%; background: var(--person); transition: width 0.6s ease; }
+/* The matched part: the person's colour, lighter, with a fine stripe so it
+   reads without colour too. */
+.goal__bar > .goal__bar-match {
+  background: repeating-linear-gradient(135deg,
+    color-mix(in srgb, var(--person) 45%, var(--surface)) 0 4px,
+    color-mix(in srgb, var(--person) 30%, var(--surface)) 4px 8px);
+}
+.goal__offer { margin: 0; color: var(--muted); font-size: 0.9rem; }
 .goal__status { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0; }
 .goal__ready { font-weight: 600; }
 .goal__claim { flex: none; min-height: 44px; padding: 8px 18px; touch-action: manipulation; }
@@ -430,6 +439,9 @@ input, select, textarea { -webkit-user-select: text; user-select: text; }
 .list__actions select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 .row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .row > .field + .field { margin-top: 0; }
+/* Match savings: "Add [0.10] for every [1.00] they earn" as one sentence. */
+.match-rate { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.field .match-rate input:not([type=radio]):not([type=checkbox]):not([type=file]) { width: 6.5em; }
 .times { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .times legend { width: 100%; }
 .times input[type="time"] { width: auto; min-width: 8.5em; }

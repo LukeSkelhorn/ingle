@@ -21,6 +21,15 @@ Each release's section is also its GitHub release notes (`task release:notes`).
   - **Downtime:** if Ingle was off on the 1st, it catches up when it starts.
 
   ([DOM-99](https://linear.app/skeltech/issue/DOM-99))
+- **Match savings towards a goal.** On a child's page in Admin › People, **Match savings** adds a bit extra whenever they earn from chores while saving for a goal. It's off to start with.
+  - **Rate:** for example "Add 10p for every £1 they earn" and "Add 1 point for every 10 points". Either can be left blank. Each chore is matched in proportion, rounded down.
+  - **Limit:** an optional most, all told, for money and for points.
+  - **Up to the goal:** matching stops once they have enough for the goal, and never takes them past it. Nothing is matched while a claim is waiting.
+  - **What the child sees:** their goal shows "Mum adds 10p for every £1 you earn", and the matched part of the bar in a lighter, striped shade. Their history reads "Matched by Mum".
+  - **Taking it back:** if they change or remove their goal without claiming it, what was matched towards it is taken back, but never more than they have. Undoing or reversing a chore takes its match back too. They keep it if they claim the reward, or if an adult archives the reward. Anything taken back no longer counts towards the limit.
+  - **Only chores count:** interest, adjustments and bank moves aren't matched. Adults are never matched.
+
+  ([DOM-100](https://linear.app/skeltech/issue/DOM-100))
 
 ### Changed
 

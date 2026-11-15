@@ -99,6 +99,61 @@
     </ul>
     {{end}}
   </section>
+  {{if and $.Data.ID (moduleOn "rewards") (eq $.Data.Kind "child")}}{{with $.Data.Match}}
+  <section class="card stack" id="match">
+    <h2>Match savings</h2>
+    <p class="muted">Add a bit extra whenever {{$.Data.Name}} earns from chores while they're saving for a goal. It's added to their balance as "Matched by {{with .Current}}{{.SetByName}}{{else}}you{{end}}", and their goal shows the matched part. It stops once they have enough for the goal. If they change or remove the goal without claiming it, what was matched towards it is taken back.</p>
+    {{with .Current}}<p>✓ Matching is on.{{with worth .HeldPoints .HeldPence}} Matched so far: <strong>{{.}}</strong>{{end}}
+      {{- if .Capped}}{{with worth .CapLeftPoints .CapLeftPence}} · {{.}} left before the limit{{else}} · the limit is reached{{end}}{{end}}.</p>{{end}}
+    <form class="stack" method="post" action="/admin/people/{{$.Data.ID}}/match">
+      {{if moduleOn "money"}}
+      <fieldset class="field">
+        <legend>Money</legend>
+        <div class="match-rate">
+          <span>Add</span>
+          <input name="match_add_money" value="{{.AddMoney}}" inputmode="decimal" autocomplete="off" placeholder="0.10" aria-label="Money to add">
+          <span>for every</span>
+          <input name="match_per_money" value="{{.PerMoney}}" inputmode="decimal" autocomplete="off" placeholder="1.00" aria-label="Money they earn">
+          <span>they earn</span>
+        </div>
+        {{template "err" index $.Errors "match_money"}}
+      </fieldset>
+      {{end}}
+      <fieldset class="field">
+        <legend>Points</legend>
+        <div class="match-rate">
+          <span>Add</span>
+          <input name="match_add_points" value="{{.AddPoints}}" inputmode="numeric" autocomplete="off" placeholder="1" aria-label="Points to add">
+          <span>for every</span>
+          <input name="match_per_points" value="{{.PerPoints}}" inputmode="numeric" autocomplete="off" placeholder="10" aria-label="Points they earn">
+          <span>they earn</span>
+        </div>
+        {{template "err" index $.Errors "match_points"}}
+      </fieldset>
+      <div class="row">
+        {{if moduleOn "money"}}
+        <label class="field field--short">
+          <span>Most money, all told</span>
+          <input name="match_cap_money" value="{{.CapMoney}}" inputmode="decimal" autocomplete="off" placeholder="No limit">
+          {{template "err" index $.Errors "match_cap_money"}}
+        </label>
+        {{end}}
+        <label class="field field--short">
+          <span>Most points, all told</span>
+          <input name="match_cap_points" value="{{.CapPoints}}" inputmode="numeric" autocomplete="off" placeholder="No limit">
+          {{template "err" index $.Errors "match_cap_points"}}
+        </label>
+      </div>
+      <p class="muted">Leave an amount to add blank to not match it. Leave the limits blank for no limit; anything taken back counts again.</p>
+      <button class="btn btn--primary" type="submit">{{if .Current}}Save matching{{else}}Start matching{{end}}</button>
+    </form>
+    {{if .Current}}
+    <form method="post" action="/admin/people/{{$.Data.ID}}/match/remove">
+      <button class="btn btn--ghost" type="submit">Stop matching</button>
+    </form>
+    {{end}}
+  </section>
+  {{end}}{{end}}
   {{if and (moduleOn "money") (not $.Data.IsAdult)}}{{with $.Data.Bank}}
   <section class="card stack" id="bank-balance">
     <h2>Bank balance</h2>
