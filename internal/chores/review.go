@@ -160,6 +160,9 @@ func (s *Service) Reverse(ctx context.Context, householdID, completionID, review
 				return fmt.Errorf("ledger: %w", err)
 			}
 		}
+		if err := takeBackCompletionMatch(ctx, q, c, title, ts); err != nil {
+			return err
+		}
 		if err := q.ReopenOccurrence(ctx, dbq.ReopenOccurrenceParams{HouseholdID: householdID, ID: c.OccurrenceID}); err != nil {
 			return fmt.Errorf("reopen occurrence: %w", err)
 		}

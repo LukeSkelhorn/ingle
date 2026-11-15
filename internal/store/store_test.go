@@ -673,3 +673,89 @@ func TestV03MigrationsAfterV024(t *testing.T) {
 		}
 	}
 }
+
+func TestGoalMatchMigration(t *testing.T) {
+	st := openTest(t)
+	ctx := t.Context()
+	sub, err := fs.Sub(migrations, "migrations/sqlite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := goose.NewProvider(goose.DialectSQLite3, st.DB, sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.DownTo(ctx, 27); err != nil {
+		t.Fatalf("DownTo(27): %v", err)
+	}
+	exec := func(q string, args ...any) error {
+		_, err := st.DB.ExecContext(ctx, q, args...)
+		return err
+	}
+	for _, q := range []string{
+		`INSERT INTO households (id, name, created_at) VALUES (1, 'Home', 1)`,
+		`INSERT INTO people (id, household_id, name, kind, colour, created_at) VALUES (1, 1, 'Alfie', 'child', '#4A90D9', 1)`,
+		`INSERT INTO people (id, household_id, name, kind, colour, created_at) VALUES (2, 1, 'Mum', 'adult', '#4A90D9', 1)`,
+		`INSERT INTO ledger_entries (id, household_id, person_id, points, pence, kind, created_at) VALUES (1, 1, 1, 5, 50, 'completion', 1)`,
+		`INSERT INTO ledger_entries (id, household_id, person_id, points, pence, kind, created_at) VALUES (2, 1, 1, 0, 6, 'interest', 2)`,
+		`INSERT INTO interest_payments (household_id, person_id, period, points, pence, carry_points, carry_pence, ledger_entry_id, created_at) VALUES (1, 1, '2026-10', 0, 6, 0, 0, 2, 2)`,
+	} {
+		if err := exec(q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	if err := exec(`INSERT INTO ledger_entries (household_id, person_id, points, pence, kind, created_at) VALUES (1, 1, 0, 5, 'match', 3)`); err == nil {
+		t.Fatal("'match' allowed before 00028")
+	}
+	if _, err := p.Up(ctx); err != nil {
+		t.Fatalf("Up: %v", err)
+	}
+	for _, q := range []string{
+		`INSERT INTO ledger_entries (id, household_id, person_id, points, pence, kind, note, created_by, created_at) VALUES (3, 1, 1, 0, 5, 'match', 'Matched by Mum', 2, 3)`,
+		`INSERT INTO match_offers (person_id, household_id, add_pence, per_pence, add_points, per_points, set_by, updated_at) VALUES (1, 1, 10, 100, 0, 0, 2, 3)`,
+		`INSERT INTO match_entries (household_id, person_id, ledger_entry_id, completion_id, reward_id, goal_set_at, points, pence, created_at) VALUES (1, 1, 3, NULL, 9, 3, 0, 5, 3)`,
+	} {
+		if err := exec(q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	// An add needs a per.
+	if err := exec(`INSERT INTO match_offers (person_id, household_id, add_pence, per_pence, add_points, per_points, set_by, updated_at) VALUES (2, 1, 10, 0, 0, 0, 2, 3)`); err == nil {
+		t.Error("an offer with nothing to earn for it was allowed")
+	}
+	count := func(q string) int {
+		var n int
+		if err := st.DB.QueryRowContext(ctx, q).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	if n := count(`SELECT COUNT(*) FROM ledger_entries`); n != 3 {
+		t.Errorf("%d entries after up, want 3", n)
+	}
+	if n := count(`SELECT COUNT(*) FROM pragma_foreign_key_check`); n != 0 {
+		t.Errorf("%d broken foreign keys", n)
+	}
+	// A match_entries row goes with its ledger entry.
+	if err := exec(`DELETE FROM ledger_entries WHERE id = 3`); err != nil {
+		t.Fatal(err)
+	}
+	if n := count(`SELECT COUNT(*) FROM match_entries`); n != 0 {
+		t.Errorf("%d match entries left after their ledger entry went", n)
+	}
+	if err := exec(`INSERT INTO ledger_entries (id, household_id, person_id, points, pence, kind, created_at) VALUES (3, 1, 1, 0, 5, 'match', 3)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.DownTo(ctx, 27); err != nil {
+		t.Fatalf("DownTo(27) again: %v", err)
+	}
+	if n := count(`SELECT COUNT(*) FROM ledger_entries`); n != 2 {
+		t.Errorf("%d entries after down, want the 2 that aren't matches", n)
+	}
+	if n := count(`SELECT COUNT(*) FROM interest_payments WHERE ledger_entry_id = 2`); n != 1 {
+		t.Errorf("interest payment lost its ledger entry")
+	}
+	if _, err := p.Up(ctx); err != nil {
+		t.Fatalf("Up again: %v", err)
+	}
+}

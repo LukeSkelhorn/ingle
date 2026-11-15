@@ -136,6 +136,7 @@ type personForm struct {
 
 	Points pointsPanel // the Adjust points section (editing only)
 	Bank   bankPanel   // a child's Bank balance section (editing only)
+	Match  matchPanel  // a child's Match savings section (editing only)
 }
 
 // pointsPanel is the person page's Points section: their balance, the
@@ -220,6 +221,10 @@ func (s *Server) renderPerson(w http.ResponseWriter, r *http.Request, status int
 			return
 		}
 		if err := s.loadBankPanel(r, &f); err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+		if err := s.loadMatchPanel(r, &f); err != nil {
 			s.serverError(w, r, err)
 			return
 		}

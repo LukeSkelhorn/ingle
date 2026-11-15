@@ -107,7 +107,7 @@ func (s *Server) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 // activityActor names who did something when no person did (the schedule
 // or idle lock, monthly interest, the household code).
 func activityActor(verb string) string {
-	if (strings.HasPrefix(verb, "board.") && verb != "board.unlocked_code") || verb == "interest.paid" {
+	if (strings.HasPrefix(verb, "board.") && verb != "board.unlocked_code") || verb == "interest.paid" || verb == "match.taken_back" {
 		return "Ingle"
 	}
 	return "Someone"
@@ -125,6 +125,12 @@ func (s *Server) activityLine(a dbq.ListRecentActivityWithActorRow) string {
 			return "removed " + *a.SubjectPerson + "'s bank balance"
 		case "interest.paid":
 			return "paid " + *a.SubjectPerson + " their monthly interest"
+		case "match.set":
+			return "set up matching for " + *a.SubjectPerson
+		case "match.off":
+			return "stopped matching for " + *a.SubjectPerson
+		case "match.taken_back":
+			return "took back " + *a.SubjectPerson + "'s match after their goal changed"
 		}
 	}
 	if a.SubjectPence != nil && a.SubjectPerson != nil {
@@ -218,6 +224,9 @@ var activityText = map[string]string{
 	"holiday.ended":           "ended a holiday early",
 	"holiday.removed":         "removed a holiday",
 	"interest.paid":           "paid monthly interest",
+	"match.set":               "set up matching",
+	"match.off":               "stopped matching",
+	"match.taken_back":        "took back a match",
 }
 
 // Settings.

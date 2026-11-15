@@ -112,12 +112,13 @@
         {{- if .CostPence}}{{money .HavePence}} of {{money .CostPence}}{{end -}}
       </span>
     </p>
-    <div class="goal__bar" role="img" aria-label="Saving for {{.Title}}: {{.Percent}}%"><span style="width: {{.Percent}}%"></span></div>
+    {{template "goal_bar" .}}
     <p class="goal__status">
       {{- if .Waiting}}<span class="tag tag--wait">Waiting for a grown-up</span>
       {{- else if .Reached}}<span class="goal__ready">You've saved enough!</span>
       {{- else}}<span class="muted">{{worth .NeedPoints .NeedPence}} to go</span>{{end -}}
     </p>
+    {{if not (or .Waiting .Reached)}}{{template "goal_offer" .}}{{end}}
   </div>
   {{end}}
 
@@ -161,6 +162,7 @@
     {{- else if eq .Kind "waiting"}}{{or .Title "A reward"}} <span class="tag tag--wait">waiting</span>
     {{- else if eq .Kind "payout"}}{{money (neg .Pence)}} moved to your bank
     {{- else if eq .Kind "interest"}}<span aria-hidden="true">🐷</span> Interest from the Bank of Mum and Dad
+    {{- else if eq .Kind "match"}}<span aria-hidden="true">🤝</span> {{or .Note "Matched"}}{{with .Title}} · {{.}}{{end}}
     {{- else}}{{or .Note "Adjustment"}}{{end}}
     <small class="muted">{{when .At}}</small></span>
   <span class="money-line__amount{{if or (gt .Points 0) (gt .Pence 0)}} money-line__amount--plus{{end}}">{{change .Points .Pence}}</span>

@@ -362,11 +362,35 @@
       {{- if .CostPence}}{{money .HavePence}} of {{money .CostPence}}{{end -}}
     </span>
   </p>
-  <div class="goal__bar" role="img" aria-label="Saving for {{.Title}}: {{.Percent}}%"><span style="width: {{.Percent}}%"></span></div>
+  {{template "goal_bar" .}}
   {{if .Waiting}}<p class="goal__status"><span class="tag tag--wait">Waiting for a grown-up</span></p>
   {{else if .Reached}}<p class="goal__status"><span class="goal__ready">You've saved enough!</span>
     <button class="btn btn--primary goal__claim" type="button" hx-disabled-elt="this"
             hx-post="/board/rewards/{{.RewardID}}/claim" hx-vals='{"person": "{{$pid}}"}'>Claim</button></p>
+  {{else}}{{template "goal_offer" .}}
   {{end}}
 </div>
+{{end}}{{end}}
+
+{{/* A goal's progress bar (chores.Goal): what they saved, then the part an
+     adult matched in a lighter shade. */}}
+{{define "goal_bar"}}
+<div class="goal__bar" role="img" aria-label="Saving for {{.Title}}: {{.Percent}}%
+  {{- with worth .MatchedPoints .MatchedPence}}, including {{.}} matched{{end}}">
+  {{- if .MatchPercent}}<span style="width: {{.OwnPercent}}%"></span><span class="goal__bar-match" style="width: {{.MatchPercent}}%"></span>
+  {{- else}}<span style="width: {{.Percent}}%"></span>{{end -}}
+</div>
+{{end}}
+
+{{/* What an adult adds while a child saves for this goal (chores.Goal's
+     Offer): "Mum adds 10p for every £1 you earn (£3.80 left to match)". */}}
+{{define "goal_offer"}}{{with .Offer}}
+<p class="goal__offer"><span aria-hidden="true">🤝</span>
+  {{- if .Spent}} {{.SetByName}}'s matching has reached its limit.
+  {{- else}} {{.SetByName}} adds
+  {{- if .Money}} {{money .AddPence}} for every {{money .PerPence}}{{end}}
+  {{- if and .Money .Points}} and{{end}}
+  {{- if .Points}} {{pts .AddPoints}} for every {{pts .PerPoints}}{{end}} you earn
+  {{- if .Capped}}{{with worth .CapLeftPoints .CapLeftPence}} ({{.}} left to match){{end}}{{end}}.
+  {{- end}}</p>
 {{end}}{{end}}

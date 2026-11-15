@@ -117,6 +117,10 @@ func New(d Deps) (*Server, error) {
 		s.Modules = module.NewService(d.Store, module.NewRegistry())
 	}
 	s.registerModules(s.Modules.Registry())
+	if d.Chores != nil {
+		// Matching savings checks the rewards and money modules.
+		d.Chores.SetModules(s.Modules.EnabledWith)
+	}
 	// Switching a module on or off changes every page; displays reload.
 	s.Modules.OnChange(func(householdID int64) {
 		s.lockEvents.publish(householdID, "")

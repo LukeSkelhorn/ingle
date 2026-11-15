@@ -30,6 +30,8 @@ type fixture struct {
 	adult dbq.Person
 	kid   dbq.Person
 	kid2  dbq.Person
+
+	chores int // doChore's count, for unique titles
 }
 
 func newFixture(t *testing.T) *fixture {
