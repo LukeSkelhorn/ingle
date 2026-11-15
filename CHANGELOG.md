@@ -6,6 +6,8 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ## [Unreleased]
 
+## [v0.4.2] - 2026-11-15
+
 ### Added
 
 - **Choose who a reward is for.** Admin › Rewards has **Who's it for?**: **Everyone**, the default, which includes people added later, or **Choose people**. Each person's sheet only shows the rewards they can have, and they can only claim or save for those. Admin › People's **Saving for** works the same way. Adults don't have money, so a reward that costs money is only for children. Taking someone off a reward removes their goal for it, but a claim they've already made still waits for an adult. The Rewards list shows who each reward is for. Existing rewards stay for everyone. ([DOM-61](https://linear.app/skeltech/issue/DOM-61))
