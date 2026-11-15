@@ -171,6 +171,7 @@ h2 { margin: 0 0 8px; font-size: 1.15rem; }
 .column__who { display: flex; flex-direction: column; min-width: 0; }
 .column__name { font-size: 1.3rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .column__balance { color: var(--muted); font-variant-numeric: tabular-nums; }
+.column__togo { color: var(--fg); font-weight: 600; white-space: nowrap; }
 .column__waiting { align-self: flex-start; margin-top: 2px; }
 .column__empty { margin: 8px 0 0; color: var(--muted); }
 /* Admin › Settings › Holiday mode. */
@@ -195,6 +196,7 @@ h2 { margin: 0 0 8px; font-size: 1.15rem; }
 .goal__emoji { font-size: 1.4rem; line-height: 1; }
 .goal__title { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
 .goal__have { margin-left: auto; color: var(--muted); font-size: 0.9rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.goal__togo { color: var(--fg); font-weight: 600; font-size: 0.9rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .goal__bar { height: 10px; border-radius: 5px; background: var(--line); overflow: hidden; }
 .goal__bar { display: flex; }
 .goal__bar > span { display: block; height: 100%; background: var(--person); transition: width 0.6s ease; }

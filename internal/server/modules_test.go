@@ -117,7 +117,7 @@ func TestPhotosModuleOff(t *testing.T) {
 	expect(t, phone.get("/admin/photos"), http.StatusNotFound)
 	notContains(t, phone.get("/admin"), `href="/admin/photos"`)
 	// The screensaver itself stays: clock and chores.
-	expect(t, wall.get("/screensaver"), http.StatusOK, "saver__time", "0 of 1")
+	expect(t, wall.get("/screensaver"), http.StatusOK, "saver__time", "1 left")
 }
 
 func TestCalendarModuleOff(t *testing.T) {

@@ -245,6 +245,7 @@ func (s *Server) staticFuncs() template.FuncMap {
 		"orNames":   func(ps []dbq.Person) string { return joinNames(ps, "or") },
 		"shortDate": shortDate,
 		"worth":     s.worth,
+		"togo":      s.togo,
 		"pts":       pts,
 		"inc":       func(i int) int { return i + 1 },
 		"signedPts": signedPts,
@@ -290,6 +291,22 @@ func (s *Server) worth(points, pence int64) string {
 		parts = append(parts, s.Locale.FormatMoney(pence))
 	}
 	return strings.Join(parts, " · ")
+}
+
+// togo says how much is left to save for a goal: "40 pts to go",
+// "£1.50 to go", or "40 pts and £1.50 to go". It's "" when nothing is left.
+func (s *Server) togo(points, pence int64) string {
+	var parts []string
+	if points > 0 {
+		parts = append(parts, pts(points))
+	}
+	if pence > 0 {
+		parts = append(parts, s.Locale.FormatMoney(pence))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, " and ") + " to go"
 }
 
 // pts formats a points count: "1 pt", "12 pts", "−5 pts" (with a real

@@ -278,11 +278,17 @@ func (g Goal) Emoji() string {
 // matched part.
 func (g Goal) OwnPercent() int { return g.Percent - g.MatchPercent }
 
-// NeedPoints is how many more points they need for it.
-func (g Goal) NeedPoints() int64 { return g.CostPoints - g.HavePoints }
+// NeedPoints is how many more points they need for it, never below 0.
+func (g Goal) NeedPoints() int64 { return max(g.CostPoints-g.HavePoints, 0) }
 
-// NeedPence is how much more money they need for it.
-func (g Goal) NeedPence() int64 { return g.CostPence - g.HavePence }
+// NeedPence is how much more money they need for it, never below 0.
+func (g Goal) NeedPence() int64 { return max(g.CostPence-g.HavePence, 0) }
+
+// ShowToGo is whether to say how much is left to save ("40 pts to go"):
+// not once they have enough, nor while a claim for it is waiting.
+func (g Goal) ShowToGo() bool {
+	return !g.Reached && !g.Waiting && (g.NeedPoints() > 0 || g.NeedPence() > 0)
+}
 
 // newGoal works out progress towards row from what the person can spend.
 // For a reward that costs points and money, progress is the slower of the

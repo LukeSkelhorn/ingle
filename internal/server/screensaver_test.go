@@ -114,7 +114,7 @@ func TestScreensaverPanel(t *testing.T) {
 	h, wall, phone := boardHousehold(t)
 	// No calendars yet: clock and chores only.
 	r := wall.get("/screensaver")
-	expect(t, r, http.StatusOK, `class="saver__time">00:30<`, "Wednesday", "0 of 1", "Tap anywhere")
+	expect(t, r, http.StatusOK, `class="saver__time">00:30<`, "Wednesday", "1 left", "Tap anywhere")
 	if strings.Contains(r.body, "Today") {
 		t.Errorf("shows a Today heading with no calendars\n%s", r.body)
 	}
