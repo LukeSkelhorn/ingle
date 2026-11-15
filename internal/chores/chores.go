@@ -56,6 +56,7 @@ var (
 	ErrInsufficientBalance = errors.New("not enough points or money")
 	ErrInvalidRRule        = errors.New("invalid recurrence rule")
 	ErrNotChild            = errors.New("only children can do this")
+	ErrInvalidRate         = errors.New("invalid interest rate")
 )
 
 // Window is how many days ahead occurrences are materialised.

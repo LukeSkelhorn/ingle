@@ -117,7 +117,10 @@ type personForm struct {
 	Photo      string // current photo URL
 	SortOrder  int64
 	Pictures   bool // picture cards on the board
-	Archived   bool
+	// InterestOn shows "Earns interest" (the household pays interest);
+	// EarnsInterest is whether this child does.
+	InterestOn, EarnsInterest bool
+	Archived                  bool
 
 	IsAdult  bool
 	HasPIN   bool
@@ -169,6 +172,7 @@ func (s *Server) personFormFor(r *http.Request, p dbq.Person) personForm {
 	f := newPersonForm()
 	f.ID, f.Name, f.Kind, f.Colour, f.SortOrder = p.ID, p.Name, p.Kind, p.Colour, p.SortOrder
 	f.Pictures = p.PictureCards == 1
+	f.EarnsInterest = p.InterestOptOut == 0
 	f.Archived = p.ArchivedAt != nil
 	f.IsAdult = p.Kind == household.KindAdult
 	f.HasPIN = p.PinHash != nil
@@ -205,6 +209,12 @@ func (s *Server) renderPerson(w http.ResponseWriter, r *http.Request, status int
 			}
 			f.Rewards = rewards
 		}
+		in, err := s.Chores.InterestSettings(r.Context(), hhOf(r))
+		if err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+		f.InterestOn = in.On()
 		if err := s.loadPointsPanel(r, &f); err != nil {
 			s.serverError(w, r, err)
 			return
@@ -267,6 +277,9 @@ func (s *Server) readPersonForm(w http.ResponseWriter, r *http.Request, f *perso
 	f.Emoji = fm.str("emoji")
 	f.SortOrder = fm.int("sort_order", "Use a number from 0 to 999.")
 	f.Pictures = fm.checked("picture_cards")
+	if r.Form.Has("interest_shown") {
+		f.EarnsInterest = fm.checked("earns_interest")
+	}
 
 	in = household.PersonInput{Name: f.Name, Kind: f.Kind, Colour: f.Colour, SortOrder: f.SortOrder, PictureCards: f.Pictures}
 	switch f.AvatarMode {
@@ -374,6 +387,17 @@ func (s *Server) handlePersonUpdate(w http.ResponseWriter, r *http.Request) {
 		_ = s.Avatars.Remove(name)
 	}
 	flash := "Saved."
+	// The checkbox is only on the form while interest is on.
+	if r.Form.Has("interest_shown") && p.Kind == household.KindChild {
+		optOut := !newForm(r).checked("earns_interest")
+		if optOut != (p.InterestOptOut == 1) {
+			if err := s.Chores.SetInterestOptOut(r.Context(), hhOf(r), p.ID, optOut); err != nil {
+				s.serverError(w, r, err)
+				return
+			}
+			p.InterestOptOut = boolInt64(optOut)
+		}
+	}
 	if r.Form.Has("goal") && s.moduleOn(r.Context(), modRewards) {
 		if p, err = s.savePersonGoal(r, p, newForm(r).optID("goal")); errors.Is(err, chores.ErrNotFound) {
 			flash = "Saved, but that reward has gone or isn't for them, so their goal wasn't changed."
@@ -542,4 +566,11 @@ func conflictMessage(err error) (string, bool) {
 		return "That person couldn't be found.", true
 	}
 	return "", false
+}
+
+func boolInt64(b bool) int64 {
+	if b {
+		return 1
+	}
+	return 0
 }

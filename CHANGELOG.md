@@ -10,6 +10,17 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 - **Choose who a reward is for.** Admin › Rewards has **Who's it for?**: **Everyone**, the default, which includes people added later, or **Choose people**. Each person's sheet only shows the rewards they can have, and they can only claim or save for those. Admin › People's **Saving for** works the same way. Adults don't have money, so a reward that costs money is only for children. Taking someone off a reward removes their goal for it, but a claim they've already made still waits for an adult. The Rewards list shows who each reward is for. Existing rewards stay for everyone. ([DOM-61](https://linear.app/skeltech/issue/DOM-61))
 - **An adult can do a child's chore and get the points.** When a child is ill, away or busy, press and hold their chore on the board and choose **I did it**. The adult gets their points for it, with no money. The child gets nothing for it, but the chore is ticked off on their column and counts towards their "All done today". It needs an adult signed in on their phone, or unlocked on the wall display. A chore that needs checking doesn't wait, because an adult did it. Undo works as usual. Admin › Completions shows "Done by Mum for Alfie", and the adult's history says who it was for. ([DOM-67](https://linear.app/skeltech/issue/DOM-67))
+- **Bank of Mum and Dad: monthly interest.** Admin › Settings › **Bank of Mum and Dad** pays children interest on what they keep in Ingle. It's off to start with.
+  - **Rate:** a % a month, which the setting also shows as about a % a year.
+  - **What earns it:** money, points, or both.
+  - **Cap:** an optional most-per-month for money and for points.
+  - **When:** interest is paid on the 1st, on the lowest balance each child had during the month, so spending early in the month counts against it. Fractions of a penny or point carry over to the next month.
+  - **History:** each payment reads "Interest from the Bank of Mum and Dad".
+  - **My money:** shows the interest so far and "If you keep saving…" what the balance will be in a year.
+  - **Who:** every child earns it, unless **Earns interest** is unticked on their page in Admin › People. Adults never earn interest.
+  - **Downtime:** if Ingle was off on the 1st, it catches up when it starts.
+
+  ([DOM-99](https://linear.app/skeltech/issue/DOM-99))
 
 ### Changed
 

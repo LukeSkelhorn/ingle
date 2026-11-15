@@ -549,6 +549,70 @@ func TestCompletionForPersonMigration(t *testing.T) {
 	}
 }
 
+// 00027 rebuilds ledger_entries to allow 'interest': existing entries and
+// the bank transfers pointing at them survive, both ways.
+func TestInterestMigration(t *testing.T) {
+	st := openTest(t)
+	ctx := t.Context()
+	sub, err := fs.Sub(migrations, "migrations/sqlite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := goose.NewProvider(goose.DialectSQLite3, st.DB, sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.DownTo(ctx, 26); err != nil {
+		t.Fatalf("DownTo(26): %v", err)
+	}
+	exec := func(q string, args ...any) error {
+		_, err := st.DB.ExecContext(ctx, q, args...)
+		return err
+	}
+	for _, q := range []string{
+		`INSERT INTO households (id, name, created_at) VALUES (1, 'Home', 1)`,
+		`INSERT INTO people (id, household_id, name, kind, colour, created_at) VALUES (1, 1, 'Alfie', 'child', '#4A90D9', 1)`,
+		`INSERT INTO ledger_entries (id, household_id, person_id, points, pence, kind, created_at) VALUES (1, 1, 1, 5, 50, 'completion', 1)`,
+		`INSERT INTO ledger_entries (id, household_id, person_id, points, pence, kind, created_at) VALUES (2, 1, 1, 0, -50, 'payout', 2)`,
+		`INSERT INTO transfer_requests (household_id, person_id, pence, status, requested_at, ledger_entry_id) VALUES (1, 1, 50, 'approved', 2, 2)`,
+	} {
+		if err := exec(q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	if err := exec(`INSERT INTO ledger_entries (household_id, person_id, points, pence, kind, created_at) VALUES (1, 1, 0, 1, 'interest', 3)`); err == nil {
+		t.Fatal("'interest' allowed before 00027")
+	}
+	if _, err := p.Up(ctx); err != nil {
+		t.Fatalf("Up: %v", err)
+	}
+	if err := exec(`INSERT INTO ledger_entries (id, household_id, person_id, points, pence, kind, created_at) VALUES (3, 1, 1, 0, 1, 'interest', 3)`); err != nil {
+		t.Fatalf("interest entry: %v", err)
+	}
+	count := func(q string) int {
+		var n int
+		if err := st.DB.QueryRowContext(ctx, q).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	if n := count(`SELECT COUNT(*) FROM ledger_entries`); n != 3 {
+		t.Errorf("%d entries after up, want 3", n)
+	}
+	if n := count(`SELECT COUNT(*) FROM pragma_foreign_key_check`); n != 0 {
+		t.Errorf("%d broken foreign keys", n)
+	}
+	if _, err := p.DownTo(ctx, 26); err != nil {
+		t.Fatalf("DownTo(26) again: %v", err)
+	}
+	if n := count(`SELECT COUNT(*) FROM ledger_entries`); n != 2 {
+		t.Errorf("%d entries after down, want the 2 that aren't interest", n)
+	}
+	if _, err := p.Up(ctx); err != nil {
+		t.Fatalf("Up again: %v", err)
+	}
+}
+
 // v0.3's migrations (modules, bank requests, bank balances) come after
 // v0.2.4's 14 and 15, so a database upgraded from v0.2.4 runs just them.
 func TestV03MigrationsAfterV024(t *testing.T) {

@@ -85,3 +85,19 @@ WHERE l.household_id = sqlc.arg(household_id) AND l.person_id = sqlc.arg(person_
   AND l.id < sqlc.arg(before_id)
 ORDER BY l.id DESC
 LIMIT sqlc.arg(lim);
+
+-- name: BalanceBeforeForPerson :one
+-- A person's balance from every entry made before before_unix.
+SELECT
+    CAST(COALESCE(SUM(points), 0) AS INTEGER) AS points,
+    CAST(COALESCE(SUM(pence), 0) AS INTEGER) AS pence
+FROM ledger_entries
+WHERE household_id = sqlc.arg(household_id) AND person_id = sqlc.arg(person_id)
+  AND created_at < sqlc.arg(before_unix);
+
+-- name: ListLedgerChangesBetween :many
+-- A person's entries made in [from_unix, to_unix), oldest first.
+SELECT points, pence FROM ledger_entries
+WHERE household_id = sqlc.arg(household_id) AND person_id = sqlc.arg(person_id)
+  AND created_at >= sqlc.arg(from_unix) AND created_at < sqlc.arg(to_unix)
+ORDER BY created_at, id;

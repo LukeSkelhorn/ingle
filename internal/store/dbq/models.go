@@ -152,6 +152,25 @@ type HouseholdSetting struct {
 	UnlockCodeLength       *int64  `json:"unlock_code_length"`
 	CalendarIdleMinutes    int64   `json:"calendar_idle_minutes"`
 	CalendarChores         int64   `json:"calendar_chores"`
+	InterestRateBp         int64   `json:"interest_rate_bp"`
+	InterestMoney          int64   `json:"interest_money"`
+	InterestPoints         int64   `json:"interest_points"`
+	InterestCapPence       int64   `json:"interest_cap_pence"`
+	InterestCapPoints      int64   `json:"interest_cap_points"`
+	InterestSince          *int64  `json:"interest_since"`
+}
+
+type InterestPayment struct {
+	ID            int64  `json:"id"`
+	HouseholdID   int64  `json:"household_id"`
+	PersonID      int64  `json:"person_id"`
+	Period        string `json:"period"`
+	Points        int64  `json:"points"`
+	Pence         int64  `json:"pence"`
+	CarryPoints   int64  `json:"carry_points"`
+	CarryPence    int64  `json:"carry_pence"`
+	LedgerEntryID *int64 `json:"ledger_entry_id"`
+	CreatedAt     int64  `json:"created_at"`
 }
 
 type LedgerEntry struct {
@@ -169,22 +188,23 @@ type LedgerEntry struct {
 }
 
 type Person struct {
-	ID           int64   `json:"id"`
-	HouseholdID  int64   `json:"household_id"`
-	Name         string  `json:"name"`
-	Kind         string  `json:"kind"`
-	Colour       string  `json:"colour"`
-	Avatar       *string `json:"avatar"`
-	PinHash      *string `json:"pin_hash"`
-	SortOrder    int64   `json:"sort_order"`
-	ArchivedAt   *int64  `json:"archived_at"`
-	CreatedAt    int64   `json:"created_at"`
-	Email        *string `json:"email"`
-	PasswordHash *string `json:"password_hash"`
-	PinLength    *int64  `json:"pin_length"`
-	GoalRewardID *int64  `json:"goal_reward_id"`
-	GoalSetAt    *int64  `json:"goal_set_at"`
-	PictureCards int64   `json:"picture_cards"`
+	ID             int64   `json:"id"`
+	HouseholdID    int64   `json:"household_id"`
+	Name           string  `json:"name"`
+	Kind           string  `json:"kind"`
+	Colour         string  `json:"colour"`
+	Avatar         *string `json:"avatar"`
+	PinHash        *string `json:"pin_hash"`
+	SortOrder      int64   `json:"sort_order"`
+	ArchivedAt     *int64  `json:"archived_at"`
+	CreatedAt      int64   `json:"created_at"`
+	Email          *string `json:"email"`
+	PasswordHash   *string `json:"password_hash"`
+	PinLength      *int64  `json:"pin_length"`
+	GoalRewardID   *int64  `json:"goal_reward_id"`
+	GoalSetAt      *int64  `json:"goal_set_at"`
+	PictureCards   int64   `json:"picture_cards"`
+	InterestOptOut int64   `json:"interest_opt_out"`
 }
 
 type PersonBank struct {

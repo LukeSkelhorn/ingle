@@ -239,6 +239,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /admin/settings/unlock-code", admin(s.handleUnlockCodeSet))
 	mux.Handle("POST /admin/settings/unlock-code/clear", admin(s.handleUnlockCodeClear))
 	mux.Handle("POST /admin/settings/holidays", admin(s.handleHolidayAdd))
+	mux.Handle("POST /admin/settings/interest", admin(s.handleInterestUpdate))
 	mux.Handle("POST /admin/settings/holidays/{id}/end", admin(s.handleHolidayEnd))
 	mux.Handle("POST /admin/settings/holidays/{id}/delete", admin(s.handleHolidayRemove))
 	if s.Takeout != nil {

@@ -71,6 +71,12 @@
   <p class="person__balance">{{pts .Points}}{{if .Pence}} <span class="person__money">{{money .Pence}}</span>{{end}}
     {{- with worth .HeldPoints .HeldPence}} <span class="person__held">({{.}} held)</span>{{end}}</p>
   <p class="person__week">This week: {{with net .WeekPoints .WeekPence}}{{.}}{{else}}nothing yet{{end}}</p>
+  {{with .Interest}}
+  <div class="money-interest">
+    <p>🐷 Interest so far: <strong>{{or .SoFar "nothing yet"}}</strong></p>
+    {{with .Saving}}<p class="muted">{{.}}</p>{{end}}
+  </div>
+  {{end}}
   {{with .InBank}}
   <p class="money-inbank" title="{{.Label}}">🏦 In my bank: <strong>{{money .Pence}}</strong> <small class="muted">· {{.Label}} · updated {{updatedAgo .UpdatedAt}}</small></p>
   {{end}}
@@ -154,6 +160,7 @@
     {{- else if eq .Kind "redemption"}}{{or .Title .Note "A reward"}}
     {{- else if eq .Kind "waiting"}}{{or .Title "A reward"}} <span class="tag tag--wait">waiting</span>
     {{- else if eq .Kind "payout"}}{{money (neg .Pence)}} moved to your bank
+    {{- else if eq .Kind "interest"}}<span aria-hidden="true">🐷</span> Interest from the Bank of Mum and Dad
     {{- else}}{{or .Note "Adjustment"}}{{end}}
     <small class="muted">{{when .At}}</small></span>
   <span class="money-line__amount{{if or (gt .Points 0) (gt .Pence 0)}} money-line__amount--plus{{end}}">{{change .Points .Pence}}</span>

@@ -9,6 +9,34 @@ import (
 	"context"
 )
 
+const balanceBeforeForPerson = `-- name: BalanceBeforeForPerson :one
+SELECT
+    CAST(COALESCE(SUM(points), 0) AS INTEGER) AS points,
+    CAST(COALESCE(SUM(pence), 0) AS INTEGER) AS pence
+FROM ledger_entries
+WHERE household_id = ?1 AND person_id = ?2
+  AND created_at < ?3
+`
+
+type BalanceBeforeForPersonParams struct {
+	HouseholdID int64 `json:"household_id"`
+	PersonID    int64 `json:"person_id"`
+	BeforeUnix  int64 `json:"before_unix"`
+}
+
+type BalanceBeforeForPersonRow struct {
+	Points int64 `json:"points"`
+	Pence  int64 `json:"pence"`
+}
+
+// A person's balance from every entry made before before_unix.
+func (q *Queries) BalanceBeforeForPerson(ctx context.Context, arg BalanceBeforeForPersonParams) (BalanceBeforeForPersonRow, error) {
+	row := q.db.QueryRowContext(ctx, balanceBeforeForPerson, arg.HouseholdID, arg.PersonID, arg.BeforeUnix)
+	var i BalanceBeforeForPersonRow
+	err := row.Scan(&i.Points, &i.Pence)
+	return i, err
+}
+
 const balanceForPerson = `-- name: BalanceForPerson :one
 SELECT
     CAST(COALESCE(SUM(points), 0) AS INTEGER) AS points,
@@ -189,6 +217,54 @@ func (q *Queries) InsertLedgerEntry(ctx context.Context, arg InsertLedgerEntryPa
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const listLedgerChangesBetween = `-- name: ListLedgerChangesBetween :many
+SELECT points, pence FROM ledger_entries
+WHERE household_id = ?1 AND person_id = ?2
+  AND created_at >= ?3 AND created_at < ?4
+ORDER BY created_at, id
+`
+
+type ListLedgerChangesBetweenParams struct {
+	HouseholdID int64 `json:"household_id"`
+	PersonID    int64 `json:"person_id"`
+	FromUnix    int64 `json:"from_unix"`
+	ToUnix      int64 `json:"to_unix"`
+}
+
+type ListLedgerChangesBetweenRow struct {
+	Points int64 `json:"points"`
+	Pence  int64 `json:"pence"`
+}
+
+// A person's entries made in [from_unix, to_unix), oldest first.
+func (q *Queries) ListLedgerChangesBetween(ctx context.Context, arg ListLedgerChangesBetweenParams) ([]ListLedgerChangesBetweenRow, error) {
+	rows, err := q.db.QueryContext(ctx, listLedgerChangesBetween,
+		arg.HouseholdID,
+		arg.PersonID,
+		arg.FromUnix,
+		arg.ToUnix,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListLedgerChangesBetweenRow{}
+	for rows.Next() {
+		var i ListLedgerChangesBetweenRow
+		if err := rows.Scan(&i.Points, &i.Pence); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listLedgerHistory = `-- name: ListLedgerHistory :many
