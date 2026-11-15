@@ -107,6 +107,47 @@
   </section>
   {{end}}
 
+  {{with .Data.Interest}}
+  <section class="card stack" id="interest">
+    <h2>Bank of Mum and Dad</h2>
+    <p class="muted">Show the kids that saving pays. Each month, every child earns a little interest on what they kept in Ingle, and it's added to their history. Adults never earn interest. You can switch it off for a child on their page in People.</p>
+    <form class="stack" method="post" action="/admin/settings/interest">
+      <label class="check">
+        <input type="checkbox" name="interest_on" value="1"{{if .On}} checked{{end}}>
+        <span>Pay interest</span>
+      </label>
+      <div class="stack" data-show-when="interest_on=1">
+        <label class="field field--short">
+          <span>Rate (% a month)</span>
+          <input name="interest_rate" value="{{.Rate}}" inputmode="decimal" autocomplete="off" placeholder="1">
+          <small class="muted">Paid on the 1st, on the lowest balance each child had during the month.{{with .Yearly}} That's about {{.}}% a year.{{end}}</small>
+          {{template "err" index $.Errors "interest_rate"}}
+        </label>
+        <fieldset class="field">
+          <legend>What earns interest</legend>
+          <label class="check"><input type="checkbox" name="interest_money" value="1"{{if .Money}} checked{{end}}> <span>Money</span></label>
+          <label class="check"><input type="checkbox" name="interest_points" value="1"{{if .Points}} checked{{end}}> <span>Points</span></label>
+          {{template "err" index $.Errors "interest_what"}}
+        </fieldset>
+        <div class="row">
+          <label class="field field--short">
+            <span>Most money a month</span>
+            <input name="interest_cap_money" value="{{.CapMoney}}" inputmode="decimal" autocomplete="off" placeholder="No limit">
+            {{template "err" index $.Errors "interest_cap_money"}}
+          </label>
+          <label class="field field--short">
+            <span>Most points a month</span>
+            <input name="interest_cap_points" value="{{.CapPoints}}" inputmode="numeric" autocomplete="off" placeholder="No limit">
+            {{template "err" index $.Errors "interest_cap_points"}}
+          </label>
+        </div>
+        <small class="muted">Leave these blank for no limit.</small>
+      </div>
+      <button class="btn btn--primary" type="submit">Save interest</button>
+    </form>
+  </section>
+  {{end}}
+
   <section class="card stack" id="unlock-code">
     <h2>Household unlock code</h2>
     <p class="muted">A locked display shows photos and the clock only. Anyone can unlock it with this code (share it with the kids) or with an adult's PIN. Unlocking the board never opens admin.</p>

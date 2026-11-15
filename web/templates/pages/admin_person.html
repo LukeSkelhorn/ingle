@@ -53,6 +53,14 @@
       <span>Picture cards
         <small class="muted">Big picture tiles in their column, for children who can't read yet.</small></span>
     </label>
+    {{if and .Data.ID .Data.InterestOn}}
+    <input type="hidden" name="interest_shown" value="1">
+    <label class="check" data-show-when="kind=child">
+      <input type="checkbox" name="earns_interest" value="1"{{if .Data.EarnsInterest}} checked{{end}}>
+      <span>Earns interest
+        <small class="muted">Monthly interest from the Bank of Mum and Dad, set in <a href="/admin/settings#interest">Settings</a>.</small></span>
+    </label>
+    {{end}}
     {{if .Data.Rewards}}
     <label class="field">
       <span>Saving for</span>

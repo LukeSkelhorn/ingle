@@ -39,6 +39,7 @@ var Tables = []Table{
 	{Name: "sessions", Key: "household_id", Skip: true},
 	{Name: "devices", Key: "household_id", Omit: []string{"token_hash"}},
 	{Name: "transfer_requests", Key: "household_id"},
+	{Name: "interest_payments", Key: "household_id"},
 	{Name: "ledger_entries", Key: "household_id"},
 	{Name: "completions", Key: "household_id"},
 	{Name: "redemptions", Key: "household_id"},

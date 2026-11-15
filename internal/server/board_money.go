@@ -33,6 +33,43 @@ type myMoneyView struct {
 	InBank  *chores.Bank         // what's in their real bank, nil if not set up
 	Page    moneyHistoryView     // the first page of history
 	Admin   bool                 // on Admin › People, not in the board's sheet
+	// Interest is the Bank of Mum and Dad, for a child who earns it.
+	Interest *moneyInterest
+}
+
+// moneyInterest is what a child has earned in interest so far, and what
+// keeping their balance for a year would come to.
+type moneyInterest struct {
+	SoFar  string // "34p and 12 pts", or "" for nothing yet
+	Saving string // "If you keep saving £10.00, you'll have about £11.27 this time next year."
+}
+
+// newMoneyInterest describes interest for a child with the available
+// balance in sum, who has earned soFarPoints and soFarPence.
+func (s *Server) newMoneyInterest(in chores.Interest, sum chores.Summary, soFarPoints, soFarPence int64) *moneyInterest {
+	and := func(points, pence int64) string {
+		var parts []string
+		if pence > 0 {
+			parts = append(parts, s.Locale.FormatMoney(pence))
+		}
+		if points > 0 {
+			parts = append(parts, pts(points))
+		}
+		return strings.Join(parts, " and ")
+	}
+	mi := &moneyInterest{SoFar: and(soFarPoints, soFarPence)}
+	var nowPoints, nowPence, thenPoints, thenPence int64
+	if in.Points && sum.Points > 0 {
+		nowPoints, thenPoints = sum.Points, chores.InterestAfter(sum.Points, in.RateBP, in.CapPoints, 12)
+	}
+	if in.Money && sum.Pence > 0 {
+		nowPence, thenPence = sum.Pence, chores.InterestAfter(sum.Pence, in.RateBP, in.CapPence, 12)
+	}
+	if thenPoints > nowPoints || thenPence > nowPence {
+		mi.Saving = "If you keep saving " + and(nowPoints, nowPence) + ", you'll have about " +
+			and(thenPoints, thenPence) + " this time next year."
+	}
+	return mi
 }
 
 // minTransfer is the least a child can ask to move to their bank, and the
@@ -373,6 +410,17 @@ func (s *Server) myMoney(r *http.Request, p dbq.Person, base, token string) (myM
 	}
 	if v.InBank, err = s.Chores.PersonBank(ctx, hhOf(r), p.ID); err != nil {
 		return myMoneyView{}, err
+	}
+	in, err := s.Chores.InterestSettings(ctx, hhOf(r))
+	if err != nil {
+		return myMoneyView{}, err
+	}
+	if in.Earns(sum.Person) {
+		points, pence, err := s.Chores.InterestTotals(ctx, hhOf(r), p.ID)
+		if err != nil {
+			return myMoneyView{}, err
+		}
+		v.Interest = s.newMoneyInterest(in, sum, points, pence)
 	}
 	v.Page.History, v.Page.Next, err = s.Chores.History(ctx, hhOf(r), p.ID, s.now().AddDate(0, 0, -moneyHistoryDays), 0)
 	return v, err
