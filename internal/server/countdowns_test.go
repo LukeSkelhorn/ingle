@@ -114,6 +114,46 @@ func TestCountdownsModuleOff(t *testing.T) {
 	notContains(t, wall.get("/screensaver"), "Sports day")
 	notContains(t, phone.get("/admin/people/"+itoa(h.person("Alfie").ID)), "birth_day")
 	notContains(t, phone.get("/admin"), `href="/admin/countdowns"`)
+	notContains(t, wall.get("/board/calendar?view=month&from=2026-07-01"), "Sports day")
+}
+
+// Countdowns and birthdays show in the calendar on their day, and open the
+// Countdowns view.
+func TestCountdownsInCalendar(t *testing.T) {
+	h, wall, phone := boardHousehold(t)
+	alfie, isla := h.person("Alfie"), h.person("Isla")
+	add := func(v url.Values) {
+		t.Helper()
+		v.Set("suggest_offered", "1")
+		if r := phone.post("/admin/countdowns", v); r.status != http.StatusSeeOther {
+			t.Fatalf("add %s: %d", v.Get("title"), r.status)
+		}
+	}
+	add(url.Values{"title": {"Holiday to Spain"}, "emoji": {"🏖️"}, "on_date": {"2026-07-04"}, "people_ids": {itoa(alfie.ID)}})
+	add(url.Values{"title": {"Sports day"}, "emoji": {"⚽"}, "on_date": {"2026-07-10"}})
+	add(url.Values{"title": {"Anniversary"}, "on_date": {"2020-07-08"}, "yearly": {"1"}})
+	add(url.Values{"title": {"Panto"}, "emoji": {"🎭"}, "on_date": {"2026-12-20"}})
+	bday, year := "07-02", int64(2017)
+	if err := h.srv.Chores.SetBirthday(h.ctx(), h.hh, alfie.ID, &bday, &year); err != nil {
+		t.Fatal(err)
+	}
+
+	week := wall.get("/board/calendar")
+	expect(t, week, http.StatusOK, "🏖️ Holiday to Spain", "🎂 Alfie&#39;s birthday (turns 9)",
+		`cal-item--countdown" type="button" style="--item: `+alfie.Colour+`" data-view-to="countdowns" data-close>`)
+	notContains(t, week, "Sports day", "Panto")
+	month := wall.get("/board/calendar?view=month&from=2026-07-01")
+	expect(t, month, http.StatusOK, "Holiday to Spain", "Alfie&#39;s birthday", "Sports day", "Anniversary")
+	notContains(t, month, "Panto")
+	// A yearly one shows every year.
+	expect(t, wall.get("/board/calendar/day/2026-07-08"), http.StatusOK, "Anniversary")
+
+	// One person: theirs, and those for nobody.
+	forIsla := wall.get("/board/calendar?view=month&from=2026-07-01&person=" + itoa(isla.ID))
+	expect(t, forIsla, http.StatusOK, "Sports day", "Anniversary")
+	notContains(t, forIsla, "Holiday to Spain", "Alfie&#39;s birthday")
+	expect(t, wall.get("/board/calendar?view=month&from=2026-07-01&person="+itoa(alfie.ID)), http.StatusOK,
+		"Holiday to Spain", "Alfie&#39;s birthday", "Sports day")
 }
 
 func TestKidAddsCountdown(t *testing.T) {

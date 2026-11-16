@@ -1,5 +1,6 @@
-{{/* The board calendar: a week or month of calendar-feed events and
-     chores. It's read-only: chores open a sheet saying what they are, and
+{{/* The board calendar: a week or month of calendar-feed events,
+     holidays, countdowns and chores. A countdown opens the Countdowns
+     view. It's read-only: chores open a sheet saying what they are, and
      are only ticked off from the chores view. The page loads it into
      #calendar and re-fetches data-src when the board changes. */}}
 {{define "calendar"}}
@@ -82,7 +83,7 @@
 {{define "cal_list"}}
 {{if or .AllDay .Items}}
 <ul class="cal__items">
-  {{range .AllDay}}<li>{{if .EventURL}}<button class="cal-item{{template "cal_item_class" .}}" type="button"{{with .Colour}} style="--item: {{.}}"{{end}} hx-get="{{.EventURL}}" hx-target="#sheet-body" hx-swap="innerHTML"><span class="cal-item__title">{{.Title}}</span>{{template "cal_owner" .}}{{template "cal_feed" .}}</button>{{else}}<span class="cal-item{{template "cal_item_class" .}}"{{with .Colour}} style="--item: {{.}}"{{end}}><span class="cal-item__title">{{.Title}}</span></span>{{end}}</li>{{end}}
+  {{range .AllDay}}<li>{{if .Countdown}}<button class="cal-item{{template "cal_item_class" .}} cal-item--countdown" type="button"{{with .Colour}} style="--item: {{.}}"{{end}} data-view-to="countdowns" data-close><span class="cal-item__title">{{.Title}}</span></button>{{else if .EventURL}}<button class="cal-item{{template "cal_item_class" .}}" type="button"{{with .Colour}} style="--item: {{.}}"{{end}} hx-get="{{.EventURL}}" hx-target="#sheet-body" hx-swap="innerHTML"><span class="cal-item__title">{{.Title}}</span>{{template "cal_owner" .}}{{template "cal_feed" .}}</button>{{else}}<span class="cal-item{{template "cal_item_class" .}}"{{with .Colour}} style="--item: {{.}}"{{end}}><span class="cal-item__title">{{.Title}}</span></span>{{end}}</li>{{end}}
   {{range .Items}}
   {{if .IsChore}}
   <li><button class="cal-item{{template "cal_item_class" .}}" type="button"{{with .Colour}} style="--item: {{.}}"{{end}}
