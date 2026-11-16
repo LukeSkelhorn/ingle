@@ -206,5 +206,10 @@ func TestAdminLinksShowInTheAdminBar(t *testing.T) {
 	h := newHarness(t)
 	h.srv.AdminLinks = []module.NavItem{{Key: "/admin/billing", Label: "Billing", Path: "/admin/billing"}}
 	d := h.setUp()
-	expect(t, d.get("/admin"), http.StatusOK, `<a href="/admin/billing">Billing</a>`)
+	r := d.get("/admin")
+	expect(t, r, http.StatusOK)
+	// Extra links go at the end of the ⚙ Settings menu.
+	if _, menu := adminBar(t, r); !strings.HasSuffix(strings.TrimSpace(strings.Split(menu, "</div>")[0]), `<a href="/admin/billing">Billing</a>`) {
+		t.Errorf("Billing isn't last in the ⚙ Settings menu: %s", menu)
+	}
 }

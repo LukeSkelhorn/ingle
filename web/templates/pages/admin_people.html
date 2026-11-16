@@ -65,20 +65,7 @@
   {{end}}
 </main>
 <script>
-  // ⋯ menus: one open at a time, closed by a tap elsewhere or Escape.
   (function () {
-    var menus = document.querySelectorAll("details.menu");
-    document.addEventListener("click", function (e) {
-      menus.forEach(function (m) { if (m.open && !m.contains(e.target)) m.open = false; });
-    });
-    document.addEventListener("keydown", function (e) {
-      if (e.key === "Escape") menus.forEach(function (m) { m.open = false; });
-    });
-    menus.forEach(function (m) {
-      m.addEventListener("toggle", function () {
-        if (m.open) menus.forEach(function (o) { if (o !== m) o.open = false; });
-      });
-    });
     // The Adjust points pop-up: open when the page comes with it; closing
     // it (Escape or a tap outside) goes back to the plain list.
     var d = document.querySelector("dialog[data-open]");

@@ -48,6 +48,9 @@ type Router interface {
 // NavItem is a link in the admin bar. Key matches the page's view.Nav.
 type NavItem struct {
 	Key, Label, Path string
+	// InSettings lists the link in the admin bar's ⚙ Settings menu, for
+	// pages that are only needed now and then, instead of in the bar.
+	InSettings bool
 }
 
 // Loop is a background job, run for each household that has the module on.

@@ -575,9 +575,18 @@ input, select, textarea { -webkit-user-select: text; user-select: text; }
 }
 .admin__version { margin-top: 24px; text-align: center; font-size: 0.85rem; }
 .admin__brand { font-weight: 700; color: var(--fg); text-decoration: none; }
-.admin__nav { display: flex; gap: 4px; overflow-x: auto; flex: 1 1 auto; min-width: 0; -webkit-overflow-scrolling: touch; }
-.admin__nav a { padding: 8px 12px; border-radius: 8px; text-decoration: none; color: var(--fg); white-space: nowrap; }
-.admin__nav a[aria-current=page] { background: var(--bg); color: var(--accent-ink); font-weight: 600; }
+.admin__nav { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; flex: 1 1 auto; min-width: 0; }
+.admin__nav a, .admin__more { padding: 8px 12px; border-radius: 8px; text-decoration: none; color: var(--fg); white-space: nowrap; }
+.admin__nav a[aria-current=page], .admin__more[aria-current] { background: var(--bg); color: var(--accent-ink); font-weight: 600; }
+/* ⚙ Settings: the occasional admin pages, in a drop-down. */
+.menu--nav { margin-right: 0; }
+.admin__more { list-style: none; cursor: pointer; display: block; }
+.admin__more::-webkit-details-marker { display: none; }
+.admin__more::after { content: " ▾"; font-size: 0.8em; color: var(--muted); }
+.admin__more:hover, .menu--nav[open] > .admin__more { background: var(--line); }
+.admin__more:focus-visible { outline: 2px solid var(--accent); }
+.menu--nav .menu__panel { left: 0; right: auto; }
+.menu--nav .menu__panel a[aria-current=page] { background: var(--bg); }
 .admin__me { display: flex; align-items: center; gap: 4px; }
 .admin__me form { margin: 0; }
 .admin__main { max-width: 760px; margin: 0 auto; padding: 20px 16px 48px; overflow-wrap: anywhere; }
@@ -664,7 +673,14 @@ details.card .list { margin: 8px -20px -20px; }
   body { font-size: 17px; }
   .row { grid-template-columns: 1fr; }
   .row > .field + .field { margin-top: 14px; }
-  .admin__nav { order: 3; flex-basis: 100%; flex-wrap: wrap; overflow: visible; }
+  /* One row at 375px: People … Rewards and ⚙. Narrower, it wraps. */
+  .admin__nav { order: 3; flex-basis: 100%; gap: 0; font-size: 15px; }
+  .admin__nav > a, .admin__more { padding: 8px; }
+  .admin__more-text, .admin__more::after { display: none; }
+  .admin__more { font-size: 18px; line-height: 21px; padding: 8px; }
+  .menu--nav .menu__panel { font-size: 17px; }
+  .menu--nav { margin-left: auto; }
+  .menu--nav .menu__panel { left: auto; right: 0; }
   .admin__name { display: none; }
   .admin__me { margin-left: auto; }
   .card { padding: 16px; }

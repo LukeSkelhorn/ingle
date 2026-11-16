@@ -37,15 +37,52 @@ func (s *Server) moduleOn(ctx context.Context, id string) bool {
 	return s.Modules.Enabled(ctx, householdIn(ctx), id)
 }
 
-// moduleNav is the admin bar links of the modules that are on.
-func (s *Server) moduleNav(ctx context.Context) []module.NavItem {
-	var nav []module.NavItem
-	for _, m := range s.Modules.Registry().All() {
-		if s.moduleOn(ctx, m.ID()) {
-			nav = append(nav, m.AdminNav()...)
+// adminNav is the admin bar's links: the everyday pages in the bar, and
+// the occasional ones in its ⚙ Settings menu.
+type adminNav struct {
+	Bar, Menu []module.NavItem
+}
+
+// MenuHas reports whether the page key is in the ⚙ Settings menu, so the
+// menu's button can show as the current section.
+func (n adminNav) MenuHas(key string) bool {
+	for _, it := range n.Menu {
+		if it.Key == key {
+			return true
 		}
 	}
-	return append(nav, s.AdminLinks...)
+	return false
+}
+
+// adminNav builds the admin bar for the modules that are on. Core pages come
+// first in each part; extra links (s.AdminLinks) go at the end of the menu.
+func (s *Server) adminNav(ctx context.Context) adminNav {
+	nav := adminNav{
+		Bar: []module.NavItem{
+			{Key: "people", Label: "People", Path: "/admin/people"},
+			{Key: "chores", Label: "Chores", Path: "/admin/chores"},
+			{Key: "completions", Label: "Completions", Path: "/admin/completions"},
+		},
+		Menu: []module.NavItem{{Key: "settings", Label: "Settings", Path: "/admin/settings"}},
+	}
+	for _, m := range s.Modules.Registry().All() {
+		if !s.moduleOn(ctx, m.ID()) {
+			continue
+		}
+		for _, it := range m.AdminNav() {
+			if it.InSettings {
+				nav.Menu = append(nav.Menu, it)
+			} else {
+				nav.Bar = append(nav.Bar, it)
+			}
+		}
+	}
+	nav.Menu = append(nav.Menu,
+		module.NavItem{Key: "devices", Label: "Devices", Path: "/admin/devices"},
+		module.NavItem{Key: "modules", Label: "Modules", Path: "/admin/modules"},
+	)
+	nav.Menu = append(nav.Menu, s.AdminLinks...)
+	return nav
 }
 
 // requireModule answers 404 while the module id is off.
@@ -177,7 +214,7 @@ func (moneyModule) Description() string {
 func (moneyModule) Requires() []string { return nil }
 func (moneyModule) DefaultOn() bool    { return true }
 func (moneyModule) AdminNav() []module.NavItem {
-	return []module.NavItem{{Key: "bank", Label: "Bank", Path: "/admin/bank"}}
+	return []module.NavItem{{Key: "bank", Label: "Bank", Path: "/admin/bank", InSettings: true}}
 }
 func (moneyModule) Loops() []module.Loop { return nil }
 
@@ -252,7 +289,7 @@ func (photosModule) Description() string {
 func (photosModule) Requires() []string { return nil }
 func (photosModule) DefaultOn() bool    { return true }
 func (photosModule) AdminNav() []module.NavItem {
-	return []module.NavItem{{Key: "photos", Label: "Photos", Path: "/admin/photos"}}
+	return []module.NavItem{{Key: "photos", Label: "Photos", Path: "/admin/photos", InSettings: true}}
 }
 
 func (m photosModule) Loops() []module.Loop {
@@ -288,7 +325,7 @@ func (calendarModule) Description() string {
 func (calendarModule) Requires() []string { return nil }
 func (calendarModule) DefaultOn() bool    { return true }
 func (calendarModule) AdminNav() []module.NavItem {
-	return []module.NavItem{{Key: "calendars", Label: "Calendars", Path: "/admin/calendars"}}
+	return []module.NavItem{{Key: "calendars", Label: "Calendars", Path: "/admin/calendars", InSettings: true}}
 }
 
 func (m calendarModule) Loops() []module.Loop {
