@@ -47,6 +47,9 @@ type Settings struct {
 	// UnlockCodeLength is how many digits the code has, or 0 if not known
 	// (a code set before lengths were stored, until it next unlocks).
 	UnlockCodeLength int
+	// KeepHistoryMonths is how much history the nightly clear-out keeps:
+	// 12 or 24 months, or 0 for everything.
+	KeepHistoryMonths int
 
 	dayStart, lockFrom, lockUntil time.Duration
 }
@@ -148,7 +151,12 @@ type Input struct {
 	LockFrom               string
 	LockUntil              string
 	LockIdleHours          int64
+	KeepHistoryMonths      int
 }
+
+// KeepHistoryChoices are the Keep history options, in months; 0 keeps
+// everything.
+var KeepHistoryChoices = []int{0, 24, 12}
 
 // Service loads, caches and updates settings.
 type Service struct {
@@ -265,6 +273,9 @@ func (s *Service) Update(ctx context.Context, householdID, actorID int64, in Inp
 	if in.LockIdleHours < 0 || in.LockIdleHours > 72 {
 		errs.Add("lock_idle_hours", "Choose between 0 (never) and 72 hours.")
 	}
+	if in.KeepHistoryMonths != 0 && in.KeepHistoryMonths != 12 && in.KeepHistoryMonths != 24 {
+		errs.Add("keep_history_months", "Choose how much history to keep.")
+	}
 	if err := errs.Err(); err != nil {
 		return err
 	}
@@ -285,6 +296,7 @@ func (s *Service) Update(ctx context.Context, householdID, actorID int64, in Inp
 			LockFrom:               in.LockFrom,
 			LockUntil:              in.LockUntil,
 			LockIdleHours:          in.LockIdleHours,
+			KeepHistoryMonths:      int64(in.KeepHistoryMonths),
 			UpdatedAt:              now.Unix(),
 			HouseholdID:            householdID,
 		}); err != nil {
@@ -346,6 +358,7 @@ func resolve(name string, row dbq.HouseholdSetting) (Settings, error) {
 		LockIdleHours:          row.LockIdleHours,
 		UnlockCodeHash:         code,
 		UnlockCodeLength:       codeLength,
+		KeepHistoryMonths:      int(row.KeepHistoryMonths),
 		dayStart:               dayStart,
 		lockFrom:               lockFrom,
 		lockUntil:              lockUntil,

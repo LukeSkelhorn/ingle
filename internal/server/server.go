@@ -49,6 +49,9 @@ type Deps struct {
 	Routes func(s *Server, mux *http.ServeMux)
 	// AdminLinks are extra links in the Admin bar, after the modules'.
 	AdminLinks []module.NavItem
+	// NoClearOut says the nightly history clear-out doesn't run (SQLite
+	// with backups off), so Admin › Settings says Keep history does nothing.
+	NoClearOut bool
 	Auth       *auth.Service
 	Settings   *settings.Service
 	Chores     *chores.Service

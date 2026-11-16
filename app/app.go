@@ -338,6 +338,9 @@ func build(ctx context.Context, opts Options) (*core, error) {
 		TrustedProxies: cfg.TrustedProxies,
 		Version:        c.version,
 		SignIn:         signIn,
+		// On SQLite the clear-out follows the nightly backup, so with
+		// backups off there's none.
+		NoClearOut: cfg.BackupKeep == 0 && store.EngineOf(db) == store.SQLite,
 	})
 	if err != nil {
 		return nil, err
@@ -355,11 +358,43 @@ func (c *core) runJobs(ctx context.Context) {
 		if err := backup.Check(c.cfg.BackupDir); err != nil {
 			c.log.Warn("backup dir not writable; nightly backups will fail", slog.String("dir", c.cfg.BackupDir), slog.Any("err", err))
 		}
-		wg.Go(func() { backupLoop(ctx, c.log, c.db, filepath.Dir(c.cfg.DBPath), c.cfg, c.backupLoc) })
+		wg.Go(func() { backupLoop(ctx, c.log, c.db, filepath.Dir(c.cfg.DBPath), c.cfg, c.backupLoc, c.clearHistory) })
+	} else if store.EngineOf(c.db) == store.Postgres {
+		// Postgres has its own backups, so the clear-out runs at backup
+		// time without one.
+		wg.Go(func() { nightlyLoop(ctx, c.cfg.BackupAt, c.backupLoc, c.clearHistory) })
 	}
 	// The modules' background jobs: calendar feeds and the photos folder.
 	wg.Go(func() { c.srv.RunModuleLoops(ctx) })
 	wg.Wait()
+}
+
+// clearHistory clears out each household's history older than its Keep
+// history setting, then, on SQLite, VACUUMs so the file shrinks.
+func (c *core) clearHistory(ctx context.Context) {
+	cleared := false
+	eachHousehold(ctx, c.log, c.households, func(ctx context.Context, householdID int64) {
+		log := c.log.With(slog.Int64("household", householdID))
+		n, err := c.chores.ClearHistory(ctx, householdID)
+		if err != nil {
+			if ctx.Err() == nil {
+				log.Error("history.clear_failed", slog.Any("err", err))
+			}
+			return
+		}
+		if n.Any() {
+			cleared = true
+			log.Info("history.cleared",
+				slog.Int64("ledger_folded", n.Folded), slog.Int64("completions", n.Completions),
+				slog.Int64("occurrences", n.Occurrences), slog.Int64("claims", n.Redemptions),
+				slog.Int64("bank_requests", n.Transfers), slog.Int64("activity", n.Activity))
+		}
+	})
+	if cleared && store.EngineOf(c.db) == store.SQLite {
+		if _, err := c.db.ExecContext(ctx, "VACUUM"); err != nil && ctx.Err() == nil {
+			c.log.Error("history.vacuum_failed", slog.Any("err", err))
+		}
+	}
 }
 
 // eachHousehold runs fn for every household, logging a failure to list
@@ -504,12 +539,11 @@ func lockLoop(ctx context.Context, log *slog.Logger, svc *lock.Service, househol
 	}
 }
 
-// backupLoop writes a backup every day at cfg.BackupAt household time,
-// keeping the newest cfg.BackupKeep.
-func backupLoop(ctx context.Context, log *slog.Logger, db *sql.DB, dataDir string, cfg config.Config, loc func() *time.Location) {
+// nightlyLoop runs job every day at clock (HH:MM) in loc's time zone.
+func nightlyLoop(ctx context.Context, clock string, loc func() *time.Location, job func(context.Context)) {
 	for {
 		// Re-read the timezone each night: it can change in Admin › Settings.
-		next := backup.Next(time.Now(), loc(), cfg.BackupAt)
+		next := backup.Next(time.Now(), loc(), clock)
 		t := time.NewTimer(time.Until(next))
 		select {
 		case <-ctx.Done():
@@ -517,18 +551,28 @@ func backupLoop(ctx context.Context, log *slog.Logger, db *sql.DB, dataDir strin
 			return
 		case <-t.C:
 		}
+		job(ctx)
+	}
+}
+
+// backupLoop writes a backup every day at cfg.BackupAt household time,
+// keeping the newest cfg.BackupKeep. After each good backup it runs after
+// (the history clear-out), so that never runs without a fresh backup.
+func backupLoop(ctx context.Context, log *slog.Logger, db *sql.DB, dataDir string, cfg config.Config, loc func() *time.Location, after func(context.Context)) {
+	nightlyLoop(ctx, cfg.BackupAt, loc, func(ctx context.Context) {
 		start := time.Now()
 		path, err := backup.Run(ctx, db, dataDir, cfg.BackupDir, cfg.BackupKeep, start.In(loc()))
 		if err != nil {
 			if ctx.Err() == nil {
 				log.Error("backup.failed", slog.Any("err", err))
 			}
-			continue
+			return
 		}
 		var size int64
 		if fi, err := os.Stat(path); err == nil {
 			size = fi.Size()
 		}
 		log.Info("backup.done", slog.String("path", path), slog.Int64("bytes", size), slog.Duration("took", time.Since(start)))
-	}
+		after(ctx)
+	})
 }

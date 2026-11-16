@@ -10,7 +10,8 @@ ON CONFLICT (household_id) DO NOTHING;
 UPDATE household_settings
 SET timezone = ?, day_starts_at = ?, admin_idle_minutes = ?, screensaver_idle_minutes = ?,
     calendar_idle_minutes = ?, calendar_chores = ?,
-    lock_days = ?, lock_from = ?, lock_until = ?, lock_idle_hours = ?, updated_at = ?
+    lock_days = ?, lock_from = ?, lock_until = ?, lock_idle_hours = ?, keep_history_months = ?,
+    updated_at = ?
 WHERE household_id = ?
 RETURNING *;
 

@@ -247,10 +247,16 @@ type settingsForm struct {
 	LockFrom               string
 	LockUntil              string
 	LockIdleHours          int64
-	HasUnlockCode          bool
-	Timezones              []string
-	Holiday                holidayForm
-	Interest               interestForm
+	// KeepHistoryMonths is the Keep history choice (0 for everything);
+	// SavedKeepHistory is what's saved, so the page can ask before a
+	// shorter one is saved. NoClearOut says nothing is cleared (SQLite
+	// with backups off).
+	KeepHistoryMonths, SavedKeepHistory int
+	NoClearOut                          bool
+	HasUnlockCode                       bool
+	Timezones                           []string
+	Holiday                             holidayForm
+	Interest                            interestForm
 }
 
 // weekdayOption is one checkbox of the lock schedule.
@@ -283,6 +289,8 @@ func (s *Server) settingsForm(set settings.Settings) settingsForm {
 		LockFrom:               set.LockFrom,
 		LockUntil:              set.LockUntil,
 		LockIdleHours:          set.LockIdleHours,
+		KeepHistoryMonths:      set.KeepHistoryMonths,
+		SavedKeepHistory:       set.KeepHistoryMonths,
 		HasUnlockCode:          set.HasUnlockCode(),
 	}
 }
@@ -299,6 +307,7 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 func (s *Server) renderSettings(w http.ResponseWriter, r *http.Request, status int, f settingsForm, errs map[string]string, flash string) {
 	f.Timezones = timezoneOptions(f.Timezone)
 	f.CanTakeout, f.StartsAgain = s.Takeout != nil, s.ResolveHousehold == nil
+	f.NoClearOut = s.NoClearOut
 	if err := s.loadHolidays(r, &f.Holiday); err != nil {
 		s.serverError(w, r, err)
 		return
@@ -336,9 +345,11 @@ func (s *Server) handleSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 		LockFrom:               f.str("lock_from"),
 		LockUntil:              f.str("lock_until"),
 		LockIdleHours:          f.int("lock_idle_hours", "Choose between 0 (never) and 72 hours."),
+		KeepHistoryMonths:      int(f.int("keep_history_months", "Choose how much history to keep.")),
 	}
 	if set, err := s.Settings.Get(r.Context(), hhOf(r)); err == nil {
 		data.HasUnlockCode = set.HasUnlockCode()
+		data.SavedKeepHistory = set.KeepHistoryMonths
 	}
 	if !f.ok() {
 		s.renderSettings(w, r, http.StatusUnprocessableEntity, data, f.errs, "")
@@ -351,6 +362,7 @@ func (s *Server) handleSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 		CalendarIdleMinutes:    data.CalendarIdleMinutes,
 		CalendarChores:         data.CalendarChores,
 		LockDays:               data.LockDays, LockFrom: data.LockFrom, LockUntil: data.LockUntil, LockIdleHours: data.LockIdleHours,
+		KeepHistoryMonths: data.KeepHistoryMonths,
 	})
 	if errs, ok := validationErrors(err); ok {
 		s.renderSettings(w, r, http.StatusUnprocessableEntity, data, errs, "")
@@ -360,6 +372,7 @@ func (s *Server) handleSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
+	data.SavedKeepHistory = data.KeepHistoryMonths
 	s.renderSettings(w, r, http.StatusOK, data, nil, "Settings saved.")
 }
 
