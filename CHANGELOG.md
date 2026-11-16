@@ -6,6 +6,8 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ## [Unreleased]
 
+## [v0.4.4] - 2026-11-16
+
 ### Added
 
 - **Countdowns.** Count down the days to birthdays, holidays and big days. It's a new module, on by default.
@@ -16,7 +18,7 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ### Changed
 
-- **Saving goals say what's left.** The goal under a child's name, and the Saving for box in My money, now say how much is left to save ("40 pts to go") instead of "60 of 100 pts". The bar still shows how far along they are.
+- **Saving goals say what's left.** The goal under a child's name, and the Saving for box in My money, now say how much is left to save ("40 pts to go") instead of "60 of 100 pts". The bar still shows how far along they are. ([DOM-113](https://linear.app/skeltech/issue/DOM-113))
 
 ## [v0.4.3] - 2026-11-16
 
