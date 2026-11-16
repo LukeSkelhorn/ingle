@@ -227,6 +227,9 @@ var activityText = map[string]string{
 	"match.set":               "set up matching",
 	"match.off":               "stopped matching",
 	"match.taken_back":        "took back a match",
+	"countdown.added":         "added a countdown",
+	"countdown.changed":       "changed a countdown",
+	"countdown.removed":       "removed a countdown",
 }
 
 // Settings.

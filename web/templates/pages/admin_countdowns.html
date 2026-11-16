@@ -1,0 +1,36 @@
+{{define "bodyclass"}}admin{{end}}
+{{define "content"}}
+{{template "admin_nav" .}}
+<main class="admin__main">
+  <div class="admin__head">
+    <h1>Countdowns</h1>
+    <a class="btn btn--primary" href="/admin/countdowns/new">Add a countdown</a>
+  </div>
+  {{template "flash" .}}
+  <p class="muted">The next three show on the board, and all of them in its Countdowns view. Birthdays come from each person in <a href="/admin/people">People</a>.</p>
+  <ul class="list card">
+    {{range .Data.Upcoming}}
+    <li>{{if .Birthday}}<a class="list__row" href="/admin/people/{{.Person.ID}}">{{else}}<a class="list__row" href="/admin/countdowns/{{.ID}}">{{end}}
+      {{if .People}}<span class="avatar-stack" aria-hidden="true">{{range .People}}{{template "avatar" (avatar . "sm")}}{{end}}</span>{{end}}
+      <span class="list__main"><strong>{{with .Emoji}}{{.}} {{end}}{{.Title}}</strong>
+        <small class="muted">{{.When}}{{with .Turns}} · turns {{.}}{{end}} · {{.Kind}}</small></span>
+      <span class="list__value">{{.Label}}</span>
+      <span aria-hidden="true">›</span>
+    </a></li>
+    {{else}}
+    <li class="list__empty muted">No countdowns yet. Add one, or a birthday in People.</li>
+    {{end}}
+  </ul>
+  {{if .Data.Passed}}
+  <details class="card">
+    <summary>Passed ({{len .Data.Passed}})</summary>
+    <ul class="list">
+      {{range .Data.Passed}}
+      <li class="list__row"><span class="list__main">{{with .Emoji}}{{.}} {{end}}{{.Title}}<small class="muted">{{.When}}</small></span>
+        <form method="post" action="/admin/countdowns/{{.ID}}/delete"><button class="btn" type="submit">Delete</button></form></li>
+      {{end}}
+    </ul>
+  </details>
+  {{end}}
+</main>
+{{end}}

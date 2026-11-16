@@ -1,0 +1,26 @@
+{{define "bodyclass"}}admin{{end}}
+{{define "content"}}
+{{template "admin_nav" .}}
+<main class="admin__main">
+  <p><a href="/admin/countdowns">‹ Countdowns</a></p>
+  <h1>{{if .Data.ID}}{{.Data.Title}}{{else}}Add a countdown{{end}}</h1>
+  {{template "flash" .}}
+  <form class="card stack" method="post" action="{{if .Data.ID}}/admin/countdowns/{{.Data.ID}}{{else}}/admin/countdowns{{end}}">
+    {{template "countdown_fields" (dict "F" .Data "Errors" .Errors)}}
+    <fieldset class="field">
+      <legend>Who's it for? (optional)</legend>
+      <p class="muted field__hint">Tick anyone it's for, like Mum for a baby due, or everyone going on holiday. Their pictures show next to it.</p>
+      {{template "people_pick" (dict "People" .Data.People "Name" "people_ids" "Multi" true "Chosen" .Data.PeopleIDs)}}
+      {{template "err" index .Errors "people_ids"}}
+    </fieldset>
+    <button class="btn btn--primary" type="submit">{{if .Data.ID}}Save{{else}}Add countdown{{end}}</button>
+  </form>
+  {{if .Data.ID}}
+  <section class="card stack">
+    <h2>Delete</h2>
+    <p class="muted">Takes it off the board.</p>
+    <form method="post" action="/admin/countdowns/{{.Data.ID}}/delete"><button class="btn btn--danger" type="submit">Delete countdown</button></form>
+  </section>
+  {{end}}
+</main>
+{{end}}

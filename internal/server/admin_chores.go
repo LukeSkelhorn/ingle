@@ -268,7 +268,6 @@ type choreForm struct {
 	MonthDays []int
 }
 
-// HasPerson is used by the shared chore's people checkboxes.
 // TimeInputs are the Done by inputs to show: each time, then a blank one
 // for adding another (while there's room).
 func (f choreForm) TimeInputs() []string {
@@ -303,8 +302,6 @@ func showBeforeLabel(m int64) string {
 	}
 	return strconv.FormatInt(m, 10) + " minutes"
 }
-
-func (f choreForm) HasPerson(id int64) bool { return slices.Contains(f.PeopleIDs, id) }
 
 // HasDay is used by the template's day checkboxes.
 func (f choreForm) HasDay(d time.Weekday) bool { return slices.Contains(f.Days, d) }
@@ -473,7 +470,6 @@ func (s *Server) readChoreForm(w http.ResponseWriter, r *http.Request, f *choreF
 		f.MonthDay = n
 	}
 	f.Back = choreBack(fm.str("back"), f.People)
-	f.PeopleIDs = nil
 	pick := "people_ids"
 	if f.Mode == chores.ModeEach {
 		pick = "each_ids"
@@ -485,11 +481,7 @@ func (s *Server) readChoreForm(w http.ResponseWriter, r *http.Request, f *choreF
 	if fm.str("adult_points") != "" {
 		f.AdultPoints = fm.int("adult_points", "Enter a whole number of points.")
 	}
-	for _, v := range r.Form[pick] {
-		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
-			f.PeopleIDs = append(f.PeopleIDs, n)
-		}
-	}
+	f.PeopleIDs = fm.ids(pick)
 	f.AssigneeID = 0
 	if id := fm.optID("assignee_id"); id != nil {
 		f.AssigneeID = *id

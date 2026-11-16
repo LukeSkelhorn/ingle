@@ -136,7 +136,7 @@ func (q *Queries) DeleteSessionsForPerson(ctx context.Context, arg DeleteSession
 }
 
 const getSessionByToken = `-- name: GetSessionByToken :one
-SELECT sessions.token_hash, sessions.household_id, sessions.person_id, sessions.kind, sessions.device_id, sessions.user_agent, sessions.created_at, sessions.last_seen_at, people.id, people.household_id, people.name, people.kind, people.colour, people.avatar, people.pin_hash, people.sort_order, people.archived_at, people.created_at, people.email, people.password_hash, people.pin_length, people.goal_reward_id, people.goal_set_at, people.picture_cards, people.interest_opt_out
+SELECT sessions.token_hash, sessions.household_id, sessions.person_id, sessions.kind, sessions.device_id, sessions.user_agent, sessions.created_at, sessions.last_seen_at, people.id, people.household_id, people.name, people.kind, people.colour, people.avatar, people.pin_hash, people.sort_order, people.archived_at, people.created_at, people.email, people.password_hash, people.pin_length, people.goal_reward_id, people.goal_set_at, people.picture_cards, people.interest_opt_out, people.birthday, people.birth_year, people.can_add_countdowns
 FROM sessions
 JOIN people ON people.id = sessions.person_id
 WHERE sessions.token_hash = ?
@@ -176,6 +176,9 @@ func (q *Queries) GetSessionByToken(ctx context.Context, tokenHash []byte) (GetS
 		&i.Person.GoalSetAt,
 		&i.Person.PictureCards,
 		&i.Person.InterestOptOut,
+		&i.Person.Birthday,
+		&i.Person.BirthYear,
+		&i.Person.CanAddCountdowns,
 	)
 	return i, err
 }

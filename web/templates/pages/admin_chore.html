@@ -31,27 +31,13 @@
     </fieldset>
     <fieldset class="field" data-show-when="mode=assigned">
       <legend>Assigned to</legend>
-      <div class="people-pick">
-        {{range .Data.People}}
-        <label class="people-pick__item">
-          <input type="radio" name="assignee_id" value="{{.ID}}" data-kind="{{.Kind}}"{{if eq .ID $.Data.AssigneeID}} checked{{end}}>
-          {{template "avatar" (avatar . "md")}}<span>{{.Name}}</span>
-        </label>
-        {{end}}
-      </div>
+      {{template "people_pick" (dict "People" .Data.People "Name" "assignee_id" "Chosen" .Data.AssigneeID)}}
       {{template "err" index .Errors "assignee_id"}}
     </fieldset>
     <fieldset class="field" data-show-when="mode=shared">
       <legend>Any of</legend>
       <p class="muted field__hint">It shows in each of their columns, and whoever does it first gets the points.</p>
-      <div class="people-pick">
-        {{range .Data.People}}
-        <label class="people-pick__item">
-          <input type="checkbox" name="people_ids" value="{{.ID}}"{{if $.Data.HasPerson .ID}} checked{{end}}>
-          {{template "avatar" (avatar . "md")}}<span>{{.Name}}</span>
-        </label>
-        {{end}}
-      </div>
+      {{template "people_pick" (dict "People" .Data.People "Name" "people_ids" "Multi" true "Chosen" .Data.PeopleIDs)}}
       {{template "err" index .Errors "people_ids"}}
     </fieldset>
     <fieldset class="field" data-show-when="mode=each">
@@ -62,14 +48,7 @@
         <label><input type="radio" name="each_who" value="chosen"{{if not .Data.Everyone}} checked{{end}}> <span>Choose people</span></label>
       </div>
       <p class="muted field__hint" data-show-when="each_who=everyone">Including anyone you add later.</p>
-      <div class="people-pick" data-show-when="each_who=chosen">
-        {{range .Data.People}}
-        <label class="people-pick__item">
-          <input type="checkbox" name="each_ids" value="{{.ID}}"{{if $.Data.HasPerson .ID}} checked{{end}}>
-          {{template "avatar" (avatar . "md")}}<span>{{.Name}}</span>
-        </label>
-        {{end}}
-      </div>
+      {{template "people_pick" (dict "People" .Data.People "Name" "each_ids" "Multi" true "Chosen" .Data.PeopleIDs "Show" "each_who=chosen")}}
       {{template "err" index .Errors "each_ids"}}
     </fieldset>
 

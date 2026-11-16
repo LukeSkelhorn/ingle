@@ -12,6 +12,7 @@
   </div>
   {{else}}
   {{with .Holiday}}<p class="board__holiday">🏖️ On holiday {{.Until $.Day}}</p>{{end}}
+  {{template "countdown_strip" .Countdowns}}
   <div class="columns">
     {{range $col := .Columns}}
     <section class="column" style="--person: {{.Person.Colour}}" aria-label="{{.Person.Name}}" data-person="{{.Person.ID}}">
@@ -375,11 +376,6 @@
   <p class="goal__line">
     <span class="goal__emoji" aria-hidden="true">{{.Emoji}}</span>
     <span class="goal__title">{{.Title}}</span>
-    <span class="goal__have">
-      {{- if .CostPoints}}{{.HavePoints}} of {{pts .CostPoints}}{{end}}
-      {{- if and .CostPoints .CostPence}} · {{end}}
-      {{- if .CostPence}}{{money .HavePence}} of {{money .CostPence}}{{end -}}
-    </span>
     {{- if .ShowToGo}}<span class="goal__togo">{{togo .NeedPoints .NeedPence}}</span>{{end}}
   </p>
   {{template "goal_bar" .}}
@@ -396,7 +392,8 @@
      adult matched in a lighter shade. */}}
 {{define "goal_bar"}}
 <div class="goal__bar" role="img" aria-label="Saving for {{.Title}}: {{.Percent}}%
-  {{- with worth .MatchedPoints .MatchedPence}}, including {{.}} matched{{end}}">
+  {{- with worth .MatchedPoints .MatchedPence}}, including {{.}} matched{{end}}
+  {{- if .ShowToGo}}, {{togo .NeedPoints .NeedPence}}{{end}}">
   {{- if .MatchPercent}}<span style="width: {{.OwnPercent}}%"></span><span class="goal__bar-match" style="width: {{.MatchPercent}}%"></span>
   {{- else}}<span style="width: {{.Percent}}%"></span>{{end -}}
 </div>

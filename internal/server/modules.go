@@ -30,6 +30,7 @@ func (s *Server) registerModules(reg *module.Registry) {
 	reg.Register(moneyModule{s})
 	reg.Register(photosModule{s})
 	reg.Register(calendarModule{s})
+	reg.Register(countdownsModule{s})
 }
 
 // moduleOn reports whether the module id is on for the household.

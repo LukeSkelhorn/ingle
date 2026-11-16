@@ -201,7 +201,7 @@ func TestChoreFormShared(t *testing.T) {
 	}
 	expect(t, phone.get("/admin/chores/"+itoa(cat.ID)), http.StatusOK,
 		`name="mode" value="shared" checked`,
-		`name="people_ids" value="`+itoa(alfie.ID)+`" checked`, `name="people_ids" value="`+itoa(isla.ID)+`" checked`)
+		`name="people_ids" value="`+itoa(alfie.ID)+`" data-kind="child" checked`, `name="people_ids" value="`+itoa(isla.ID)+`" data-kind="child" checked`)
 
 	// Nobody ticked.
 	chore.Del("people_ids")

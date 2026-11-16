@@ -106,18 +106,13 @@
     <p class="goal__line">
       <span class="goal__emoji" aria-hidden="true">{{.Emoji}}</span>
       <span class="goal__title">{{.Title}}</span>
-      <span class="goal__have">
-        {{- if .CostPoints}}{{.HavePoints}} of {{pts .CostPoints}}{{end}}
-        {{- if and .CostPoints .CostPence}} · {{end}}
-        {{- if .CostPence}}{{money .HavePence}} of {{money .CostPence}}{{end -}}
-      </span>
+      {{- if .ShowToGo}}<span class="goal__togo">{{togo .NeedPoints .NeedPence}}</span>{{end}}
     </p>
     {{template "goal_bar" .}}
-    <p class="goal__status">
+    {{if or .Waiting .Reached}}<p class="goal__status">
       {{- if .Waiting}}<span class="tag tag--wait">Waiting for a grown-up</span>
-      {{- else if .Reached}}<span class="goal__ready">You've saved enough!</span>
-      {{- else}}<span class="muted">{{worth .NeedPoints .NeedPence}} to go</span>{{end -}}
-    </p>
+      {{- else}}<span class="goal__ready">You've saved enough!</span>{{end -}}
+    </p>{{end}}
     {{if not (or .Waiting .Reached)}}{{template "goal_offer" .}}{{end}}
   </div>
   {{end}}

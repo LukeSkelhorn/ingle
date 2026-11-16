@@ -668,7 +668,7 @@ func TestSaveForAReward(t *testing.T) {
 	}
 	col := section(r.body, "Alfie")
 	for _, want := range []string{
-		`class="goal"`, "🧱", "Lego set", "60 of 100 pts", "width: 60%",
+		`class="goal"`, "🧱", "Lego set", "width: 60%", "Saving for Lego set: 60%, 40 pts to go",
 		`<span class="goal__togo">40 pts to go</span>`, `<span class="column__togo">40 pts to go</span>`,
 	} {
 		if !strings.Contains(col, want) {
@@ -677,6 +677,10 @@ func TestSaveForAReward(t *testing.T) {
 	}
 	if strings.Contains(col, "data-celebrate") {
 		t.Error("celebrating before the goal is reached")
+	}
+	// It says what's left, not how far along (DOM-113).
+	if strings.Contains(col, "60 of 100") {
+		t.Error(`goal still says "60 of 100"`)
 	}
 	expect(t, wall.get(sheet), http.StatusOK, "Saving for", "Stop saving", "Your goal")
 	expect(t, wall.post(goal, nil), http.StatusBadRequest)
@@ -1166,8 +1170,8 @@ func TestEachChore(t *testing.T) {
 	}
 	expect(t, phone.get("/admin/chores"), http.StatusOK, "Everyone · Every day", "Each: Mum and Isla · Every day")
 	expect(t, phone.get("/admin/chores/"+itoa(exercise.ID)), http.StatusOK,
-		`name="each_who" value="chosen" checked`, `name="each_ids" value="`+itoa(mum.ID)+`" checked`,
-		`name="each_ids" value="`+itoa(isla.ID)+`" checked`, `name="adult_points" value="2"`)
+		`name="each_who" value="chosen" checked`, `name="each_ids" value="`+itoa(mum.ID)+`" data-kind="adult" checked`,
+		`name="each_ids" value="`+itoa(isla.ID)+`" data-kind="child" checked`, `name="adult_points" value="2"`)
 	expect(t, phone.get("/admin/chores/"+itoa(teeth.ID)), http.StatusOK, `name="each_who" value="everyone" checked`)
 	// Alfie's filter includes the Everyone chore, not Exercise.
 	if body := phone.get("/admin/chores?person=" + itoa(alfie.ID)).body; !strings.Contains(body, "Brush teeth") || strings.Contains(body, "Exercise") {

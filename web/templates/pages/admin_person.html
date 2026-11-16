@@ -48,6 +48,30 @@
       <small class="muted">JPEG, PNG or GIF up to 8 MB. It's cropped to a square.</small>
       {{template "err" index .Errors "photo"}}
     </label>
+    {{if moduleOn "countdowns"}}
+    <input type="hidden" name="countdowns_shown" value="1">
+    <fieldset class="field">
+      <legend>Birthday (optional)</legend>
+      <div class="birthday">
+        <select name="birth_day" aria-label="Day">
+          <option value="">Day</option>
+          {{range .Data.BirthDays}}<option value="{{.}}"{{if eq . $.Data.Birthday.Day}} selected{{end}}>{{.}}</option>{{end}}
+        </select>
+        <select name="birth_month" aria-label="Month">
+          <option value="">Month</option>
+          {{range .Data.BirthMonths}}<option value="{{index . 0}}"{{if eq (index . 0) $.Data.Birthday.Month}} selected{{end}}>{{index . 1}}</option>{{end}}
+        </select>
+        <input name="birth_year" value="{{.Data.Birthday.Year}}" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" placeholder="Year" aria-label="Year (optional)" autocomplete="off">
+      </div>
+      <small class="muted">Counts down on the board every year. With the year, it says how old they're turning.</small>
+      {{template "err" index .Errors "birthday"}}
+    </fieldset>
+    <label class="check" data-show-when="kind=child">
+      <input type="checkbox" name="can_add_countdowns" value="1"{{if .Data.CanAddCountdowns}} checked{{end}}>
+      <span>Can add countdowns
+        <small class="muted">They can add their own countdowns on a household display, after their PIN.</small></span>
+    </label>
+    {{end}}
     <label class="check" data-show-when="kind=child">
       <input type="checkbox" name="picture_cards" value="1"{{if .Data.Pictures}} checked{{end}}>
       <span>Picture cards
