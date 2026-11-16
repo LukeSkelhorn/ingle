@@ -3,6 +3,7 @@ package chores
 import (
 	"errors"
 	"slices"
+	"strconv"
 	"testing"
 	"time"
 
@@ -85,6 +86,46 @@ func TestCountdowns(t *testing.T) {
 	// On the day.
 	if c := f.countdowns("2026-12-25", false)[0]; c.Label() != "Today!" || c.Sentence() != "Christmas is today!" {
 		t.Errorf("on the day = %q / %q", c.Label(), c.Sentence())
+	}
+}
+
+func TestCountdownsOn(t *testing.T) {
+	f := newFixture(t)
+	f.countdown(CountdownInput{Title: "Christmas", Emoji: "🎄", OnDate: "2025-12-25", Yearly: true})
+	f.countdown(CountdownInput{Title: "Bonfire night", OnDate: "2026-11-05"})
+	bday, year := "01-02", int64(2017)
+	if err := f.svc.SetBirthday(t.Context(), f.hh, f.kid.ID, &bday, &year); err != nil {
+		t.Fatal(err)
+	}
+	on := func(first, last string) map[string][]string {
+		t.Helper()
+		got, err := f.svc.CountdownsOn(t.Context(), f.hh, f.day(first), f.day(last))
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := map[string][]string{}
+		for d, cs := range got {
+			for _, c := range cs {
+				s := c.Title
+				if c.Turns > 0 {
+					s += " " + strconv.Itoa(c.Turns)
+				}
+				out[d] = append(out[d], s)
+			}
+		}
+		return out
+	}
+	// Across the new year: this year's Christmas, next year's birthday.
+	got := on("2026-12-21", "2027-01-31")
+	if len(got) != 2 || !slices.Equal(got["2026-12-25"], []string{"Christmas"}) || !slices.Equal(got["2027-01-02"], []string{"Alfie's birthday 10"}) {
+		t.Errorf("Dec–Jan = %v", got)
+	}
+	// A one-off shows on its day only, even once it's gone.
+	if got := on("2026-11-02", "2026-11-08"); !slices.Equal(got["2026-11-05"], []string{"Bonfire night"}) || len(got) != 1 {
+		t.Errorf("Bonfire week = %v", got)
+	}
+	if got := on("2027-11-01", "2027-11-30"); len(got) != 0 {
+		t.Errorf("Nov 2027 = %v, want nothing", got)
 	}
 }
 

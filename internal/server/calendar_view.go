@@ -103,6 +103,13 @@ func (f calFilter) keepsHoliday(h chores.Holiday) bool {
 	return f.Person == 0 || h.Person == nil || h.Person.ID == f.Person
 }
 
+// keepsCountdown reports whether c shows: it's for nobody in particular,
+// or for the chosen person (a birthday is for its person).
+func (f calFilter) keepsCountdown(c chores.Countdown) bool {
+	return f.Person == 0 || len(c.People) == 0 ||
+		slices.ContainsFunc(c.People, func(p dbq.Person) bool { return p.ID == f.Person })
+}
+
 // keepsChore reports whether c shows for the chosen person: theirs, shared
 // with them, or up for grabs.
 func (f calFilter) keepsChore(c *chores.CalChore) bool {
@@ -139,7 +146,10 @@ type calItem struct {
 	Feed   string // an event's calendar
 	// EventURL opens an event's sheet.
 	EventURL string
-	Chore    *chores.CalChore
+	// Countdown is set for a countdown or birthday: it opens the
+	// Countdowns view.
+	Countdown bool
+	Chore     *chores.CalChore
 	// Person is whose chore or calendar it is; nil for a chore up for grabs
 	// or a family event.
 	Person *dbq.Person
@@ -425,6 +435,12 @@ func (s *Server) calendarDays(r *http.Request, loc locale.Locale, first, last, t
 	if err != nil {
 		return nil, err
 	}
+	var cds map[string][]chores.Countdown
+	if s.moduleOn(ctx, modCountdowns) {
+		if cds, err = s.Chores.CountdownsOn(ctx, hhOf(r), first, last); err != nil {
+			return nil, err
+		}
+	}
 	var events []calendar.Event
 	if s.Calendars != nil && s.moduleOn(ctx, modCalendar) {
 		events = s.Calendars.Upcoming(hhOf(r), first, last.AddDate(0, 0, 1))
@@ -445,6 +461,16 @@ func (s *Server) calendarDays(r *http.Request, loc locale.Locale, first, last, t
 			it := calItem{Title: "🏖️ Holiday", When: "All day"}
 			if h.Person != nil {
 				it.Title, it.Colour = "🏖️ "+h.Person.Name+" away", h.Person.Colour
+			}
+			day.AllDay = append(day.AllDay, it)
+		}
+		for _, c := range cds[date] {
+			if !f.keepsCountdown(c) {
+				continue
+			}
+			it := calItem{Title: countdownTitle(c), When: "All day", Countdown: true}
+			if p := c.Person(); p != nil {
+				it.Colour = p.Colour
 			}
 			day.AllDay = append(day.AllDay, it)
 		}
@@ -499,6 +525,19 @@ func (s *Server) calendarDays(r *http.Request, loc locale.Locale, first, last, t
 		days = append(days, day)
 	}
 	return days, nil
+}
+
+// countdownTitle is a countdown on the calendar: "🏖️ Holiday to Spain",
+// "🎂 Sam's birthday (turns 9)".
+func countdownTitle(c chores.Countdown) string {
+	t := c.Title
+	if c.Emoji != "" {
+		t = c.Emoji + " " + t
+	}
+	if c.Turns > 0 {
+		t += " (turns " + strconv.Itoa(c.Turns) + ")"
+	}
+	return t
 }
 
 // calDaySheet is the sheet listing one day.

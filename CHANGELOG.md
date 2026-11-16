@@ -6,6 +6,10 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ## [Unreleased]
 
+### Added
+
+- **Countdowns in the calendar.** Countdowns and birthdays show in the board calendar on their day, like "🎂 Sam's birthday (turns 9)", in the colour of the person they're for. Tap one to open the Countdowns view. Choosing a person in the calendar keeps their countdowns and the ones that aren't for anyone. ([DOM-134](https://linear.app/skeltech/issue/DOM-134))
+
 ## [v0.4.4] - 2026-11-16
 
 ### Added
