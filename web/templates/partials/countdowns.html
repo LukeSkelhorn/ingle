@@ -26,7 +26,7 @@
 <button type="button" class="countdown-strip" data-view-to="countdowns" aria-label="Countdowns: {{range $i, $c := .}}{{if $i}}, {{end}}{{$c.Title}} {{$c.Label}}{{end}}">
   {{range .}}
   <span class="countdown-chip{{if .Today}} countdown-chip--today{{end}}"{{with .Person}} style="--person: {{.Colour}}"{{end}}>
-    {{if .Person}}{{template "avatar" (avatar .Person "xs")}}{{end}}{{with .Emoji}}<span aria-hidden="true">{{.}}</span>{{end}}
+    {{template "countdown_faces" .People}}{{with .Emoji}}<span aria-hidden="true">{{.}}</span>{{end}}
     <span class="countdown-chip__title">{{.Title}}</span>
     <span class="countdown-chip__when">{{.Label}}</span>
   </span>
@@ -34,6 +34,9 @@
 </button>
 {{end}}
 {{end}}
+
+{{/* Who a countdown is for, as small overlapping faces. */}}
+{{define "countdown_faces"}}{{if .}}<span class="avatar-stack avatar-stack--xs" aria-hidden="true">{{range .}}{{template "avatar" (avatar . "xs")}}{{end}}</span>{{end}}{{end}}
 
 {{/* The board's Countdowns view (countdownsBoardView), loaded when it's
      shown. */}}
@@ -47,7 +50,7 @@
       <span class="countdown__what">
         <strong class="countdown__title">{{.Title}}</strong>
         <span class="countdown__date">{{.When}}{{with .Turns}} · turns {{.}}{{end}}</span>
-        {{if and .Person .Emoji}}<span class="countdown__who">{{template "avatar" (avatar .Person "xs")}} {{.Person.Name}}</span>{{end}}
+        {{if and .People (or .Emoji (gt (len .People) 1))}}<span class="countdown__who">{{template "countdown_faces" .People}} {{names .People}}</span>{{end}}
       </span>
       {{if .Today}}<span class="countdown__days countdown__days--today">Today! 🎉</span>
       {{else}}<span class="countdown__days"><b>{{.Days}}</b> <small>{{.DaysWord}}</small></span>{{end}}

@@ -7,15 +7,12 @@
   {{template "flash" .}}
   <form class="card stack" method="post" action="{{if .Data.ID}}/admin/countdowns/{{.Data.ID}}{{else}}/admin/countdowns{{end}}">
     {{template "countdown_fields" (dict "F" .Data "Errors" .Errors)}}
-    <label class="field">
-      <span>For (optional)</span>
-      <select name="person_id">
-        <option value=""{{if not .Data.PersonID}} selected{{end}}>Nobody in particular</option>
-        {{range .Data.People}}<option value="{{.ID}}"{{if eq .ID $.Data.PersonID}} selected{{end}}>{{.Name}}</option>{{end}}
-      </select>
-      <small class="muted">Shows their picture next to it, like a baby due for Mum.</small>
-      {{template "err" index .Errors "person_id"}}
-    </label>
+    <fieldset class="field">
+      <legend>Who's it for? (optional)</legend>
+      <p class="muted field__hint">Tick anyone it's for, like Mum for a baby due, or everyone going on holiday. Their pictures show next to it.</p>
+      {{template "people_pick" (dict "People" .Data.People "Name" "people_ids" "Multi" true "Chosen" .Data.PeopleIDs)}}
+      {{template "err" index .Errors "people_ids"}}
+    </fieldset>
     <button class="btn btn--primary" type="submit">{{if .Data.ID}}Save{{else}}Add countdown{{end}}</button>
   </form>
   {{if .Data.ID}}

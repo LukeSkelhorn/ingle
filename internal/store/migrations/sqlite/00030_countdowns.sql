@@ -17,13 +17,22 @@ CREATE TABLE countdowns (
     emoji        TEXT    NOT NULL DEFAULT '',
     on_date      TEXT    NOT NULL CHECK (date(on_date) IS on_date),
     yearly       INTEGER NOT NULL DEFAULT 0 CHECK (yearly IN (0, 1)),
-    person_id    INTEGER REFERENCES people (id) ON DELETE SET NULL,
     added_by     INTEGER REFERENCES people (id) ON DELETE SET NULL,
     created_at   INTEGER NOT NULL
 ) STRICT;
 CREATE INDEX countdowns_household_idx ON countdowns (household_id, on_date);
 
+-- Who a countdown is for, if anyone: their pictures show next to it.
+CREATE TABLE countdown_people (
+    household_id INTEGER NOT NULL REFERENCES households (id) ON DELETE CASCADE,
+    countdown_id INTEGER NOT NULL REFERENCES countdowns (id) ON DELETE CASCADE,
+    person_id    INTEGER NOT NULL REFERENCES people (id) ON DELETE CASCADE,
+    PRIMARY KEY (countdown_id, person_id)
+) STRICT;
+CREATE INDEX countdown_people_household_idx ON countdown_people (household_id);
+
 -- +goose Down
+DROP TABLE countdown_people;
 DROP TABLE countdowns;
 ALTER TABLE people DROP COLUMN can_add_countdowns;
 ALTER TABLE people DROP COLUMN birth_year;

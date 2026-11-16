@@ -18,7 +18,7 @@
   {{end}}
 </div>
 {{end}}
-{{with .Countdown}}<p class="saver__countdown">{{if .Person}}{{template "avatar" (avatar .Person "xs")}} {{end}}{{with .Emoji}}{{.}} {{end}}{{.Sentence}}</p>{{end}}
+{{with .Countdown}}<p class="saver__countdown">{{with .People}}{{template "countdown_faces" .}} {{end}}{{with .Emoji}}{{.}} {{end}}{{.Sentence}}</p>{{end}}
 {{if .People}}
 <ul class="saver__people" aria-label="Chores today">
   {{range .People}}

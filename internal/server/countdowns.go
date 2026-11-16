@@ -97,31 +97,30 @@ func (s *Server) handleCountdowns(w http.ResponseWriter, r *http.Request) {
 // countdownForm is the countdown form, in admin or (for a child) in the
 // board's sheet.
 type countdownForm struct {
-	ID       int64
-	Title    string
-	Emoji    emojiField
-	OnDate   string
-	Yearly   bool
-	PersonID int64        // who it's for, 0 for nobody
-	People   []dbq.Person // to choose from (admin only)
-	Min      string       // the earliest day a one-off can be, YYYY-MM-DD
+	ID        int64
+	Title     string
+	Emoji     emojiField
+	OnDate    string
+	Yearly    bool
+	PeopleIDs []int64      // who it's for, if anyone
+	People    []dbq.Person // to choose from (admin only)
+	Min       string       // the earliest day a one-off can be, YYYY-MM-DD
 }
 
 func newCountdownForm() countdownForm {
 	return countdownForm{Emoji: newEmojiField(emoji.Countdown, "")}
 }
 
-func countdownFormFor(c dbq.Countdown) countdownForm {
-	f := countdownForm{
+func (s *Server) countdownFormFor(r *http.Request, c dbq.Countdown) (countdownForm, error) {
+	people, err := s.Chores.CountdownPeople(r.Context(), hhOf(r), c.ID)
+	return countdownForm{
 		ID: c.ID, Title: c.Title, Emoji: newEmojiField(emoji.Countdown, c.Emoji), OnDate: c.OnDate, Yearly: c.Yearly == 1,
-	}
-	if c.PersonID != nil {
-		f.PersonID = *c.PersonID
-	}
-	return f
+		PeopleIDs: people,
+	}, err
 }
 
 // readCountdownForm reads the form; withPerson takes "For" too (admin).
+// Without it, who it's for stays as in f.
 func (s *Server) readCountdownForm(w http.ResponseWriter, r *http.Request, f *countdownForm, withPerson bool) (chores.CountdownInput, error) {
 	if err := parseForm(w, r); err != nil {
 		return chores.CountdownInput{}, err
@@ -133,12 +132,9 @@ func (s *Server) readCountdownForm(w http.ResponseWriter, r *http.Request, f *co
 	f.Yearly = fm.checked("yearly")
 	in := chores.CountdownInput{Title: f.Title, Emoji: f.Emoji.Value, OnDate: f.OnDate, Yearly: f.Yearly}
 	if withPerson {
-		in.PersonID = fm.optID("person_id")
-		f.PersonID = 0
-		if in.PersonID != nil {
-			f.PersonID = *in.PersonID
-		}
+		f.PeopleIDs = fm.ids("people_ids")
 	}
+	in.PeopleIDs = f.PeopleIDs // a child keeps who it's for as it was
 	return in, nil
 }
 
@@ -189,7 +185,12 @@ func (s *Server) handleCountdownEdit(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	s.renderCountdown(w, r, http.StatusOK, countdownFormFor(c), nil, "")
+	f, err := s.countdownFormFor(r, c)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	s.renderCountdown(w, r, http.StatusOK, f, nil, "")
 }
 
 func (s *Server) handleCountdownCreate(w http.ResponseWriter, r *http.Request) {
@@ -220,7 +221,11 @@ func (s *Server) handleCountdownUpdate(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	f := countdownFormFor(c)
+	f, err := s.countdownFormFor(r, c)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
 	in, err := s.readCountdownForm(w, r, &f, true)
 	if err != nil {
 		http.Error(w, "bad form", http.StatusBadRequest)
@@ -480,7 +485,12 @@ func (s *Server) handleKidCountdownEdit(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	s.renderCountdownMine(w, r, http.StatusOK, p, token, countdownFormFor(c), nil, "")
+	f, err := s.countdownFormFor(r, c)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	s.renderCountdownMine(w, r, http.StatusOK, p, token, f, nil, "")
 }
 
 func (s *Server) handleKidCountdownUpdate(w http.ResponseWriter, r *http.Request) {
@@ -492,13 +502,16 @@ func (s *Server) handleKidCountdownUpdate(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	f := countdownFormFor(c)
+	f, err := s.countdownFormFor(r, c)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
 	in, err := s.readCountdownForm(w, r, &f, false)
 	if err != nil {
 		http.Error(w, "bad form", http.StatusBadRequest)
 		return
 	}
-	in.PersonID = c.PersonID // a child can't change who it's for
 	if err := s.Chores.UpdateCountdown(r.Context(), hhOf(r), p.ID, c.ID, in, s.boardDay(r)); err != nil {
 		if errs, ok := validationErrors(err); ok {
 			s.renderCountdownMine(w, r, http.StatusUnprocessableEntity, p, token, f, errs, "")

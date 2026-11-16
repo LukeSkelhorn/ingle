@@ -41,7 +41,7 @@ func TestCountdowns(t *testing.T) {
 	f := newFixture(t)
 	ctx := t.Context()
 	f.countdown(CountdownInput{Title: "Christmas", Emoji: "🎄", OnDate: "2025-12-25", Yearly: true})
-	f.countdown(CountdownInput{Title: "Holiday to Spain", OnDate: "2026-11-05", PersonID: &f.kid.ID})
+	f.countdown(CountdownInput{Title: "Holiday to Spain", OnDate: "2026-11-05", PeopleIDs: []int64{f.kid.ID, f.adult.ID, f.kid.ID}})
 	f.countdown(CountdownInput{Title: "Bonfire night", OnDate: "2026-11-05"})
 	bday := "11-03"
 	year := int64(2017)
@@ -55,11 +55,14 @@ func TestCountdowns(t *testing.T) {
 		t.Fatalf("countdowns = %q, want %q", got, want)
 	}
 	cs := f.countdowns("2026-11-02", false)
-	if cs[0].Turns != 9 || !cs[0].Birthday || cs[0].Person == nil || cs[0].Person.ID != f.kid.ID {
+	if cs[0].Turns != 9 || !cs[0].Birthday || len(cs[0].People) != 1 || cs[0].Person().ID != f.kid.ID {
 		t.Errorf("birthday = %+v, want Alfie turning 9", cs[0])
 	}
-	if cs[2].Person == nil || cs[2].Person.Name != "Alfie" {
-		t.Errorf("Spain is for %v, want Alfie", cs[2].Person)
+	if len(cs[2].People) != 2 || !slices.ContainsFunc(cs[2].People, func(p dbq.Person) bool { return p.ID == f.kid.ID }) {
+		t.Errorf("Spain is for %v, want Alfie and a grown-up", cs[2].People)
+	}
+	if len(cs[3].People) != 0 {
+		t.Errorf("Christmas is for %v, want nobody", cs[3].People)
 	}
 	if cs[3].Next != "2026-12-25" || cs[3].When() != "Fri 25 Dec" {
 		t.Errorf("Christmas next = %s (%s)", cs[3].Next, cs[3].When())
@@ -135,7 +138,7 @@ func TestCountdownChecks(t *testing.T) {
 		{CountdownInput{Title: "Trip", OnDate: "2026-11-01"}, "on_date"}, // yesterday
 		{CountdownInput{Title: "Trip", OnDate: "2060-01-01"}, "on_date"},
 		{CountdownInput{Title: "Trip", OnDate: "2026-12-01", Emoji: "ab"}, "emoji"},
-		{CountdownInput{Title: "Trip", OnDate: "2026-12-01", PersonID: &other}, "person_id"},
+		{CountdownInput{Title: "Trip", OnDate: "2026-12-01", PeopleIDs: []int64{f.kid.ID, other}}, "people_ids"},
 	} {
 		_, err := f.svc.AddCountdown(ctx, f.hh, f.adult.ID, c.in, day)
 		var ve valid.Errors

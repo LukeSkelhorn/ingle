@@ -38,14 +38,7 @@
         <label><input type="radio" name="reward_who" value="chosen"{{if not .Data.Everyone}} checked{{end}}> <span>Choose people</span></label>
       </div>
       <p class="muted field__hint" data-show-when="reward_who=everyone" data-money-hint="everyone">Including anyone you add later.</p>
-      <div class="people-pick" data-show-when="reward_who=chosen">
-        {{range .Data.People}}
-        <label class="people-pick__item">
-          <input type="checkbox" name="people_ids" value="{{.ID}}" data-kind="{{.Kind}}"{{if $.Data.HasPerson .ID}} checked{{end}}>
-          {{template "avatar" (avatar . "md")}}<span>{{.Name}}</span>
-        </label>
-        {{end}}
-      </div>
+      {{template "people_pick" (dict "People" .Data.People "Name" "people_ids" "Multi" true "Chosen" .Data.PeopleIDs "Show" "reward_who=chosen")}}
       <p class="muted field__hint" data-money-hint="money" hidden>Adults don't have money, so only children can have a reward that costs money.</p>
       {{template "err" index .Errors "people_ids"}}
     </fieldset>

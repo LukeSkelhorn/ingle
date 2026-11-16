@@ -12,7 +12,6 @@ CREATE TABLE countdowns (
     emoji        text   NOT NULL DEFAULT '',
     on_date      text   NOT NULL CHECK (on_date ~ '^\d{4}-\d{2}-\d{2}$' AND pg_input_is_valid(on_date, 'date')),
     yearly       bigint NOT NULL DEFAULT 0 CHECK (yearly IN (0, 1)),
-    person_id    bigint REFERENCES people (id) ON DELETE SET NULL,
     added_by     bigint REFERENCES people (id) ON DELETE SET NULL,
     created_at   bigint NOT NULL
 );
@@ -24,7 +23,22 @@ CREATE POLICY household ON countdowns
     USING (household_id = ingle_household())
     WITH CHECK (household_id = ingle_household());
 
+CREATE TABLE countdown_people (
+    household_id bigint NOT NULL REFERENCES households (id) ON DELETE CASCADE,
+    countdown_id bigint NOT NULL REFERENCES countdowns (id) ON DELETE CASCADE,
+    person_id    bigint NOT NULL REFERENCES people (id) ON DELETE CASCADE,
+    PRIMARY KEY (countdown_id, person_id)
+);
+CREATE INDEX countdown_people_household_idx ON countdown_people (household_id);
+
+ALTER TABLE countdown_people ENABLE ROW LEVEL SECURITY;
+ALTER TABLE countdown_people FORCE ROW LEVEL SECURITY;
+CREATE POLICY household ON countdown_people
+    USING (household_id = ingle_household())
+    WITH CHECK (household_id = ingle_household());
+
 -- +goose Down
+DROP TABLE countdown_people;
 DROP TABLE countdowns;
 ALTER TABLE people DROP COLUMN can_add_countdowns;
 ALTER TABLE people DROP COLUMN birth_year;

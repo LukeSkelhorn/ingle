@@ -16,20 +16,21 @@ var countdownToken = regexp.MustCompile(`\?t=([A-Za-z0-9_-]+)`)
 
 func TestCountdownsAdmin(t *testing.T) {
 	h, wall, phone := boardHousehold(t)
-	alfie := h.person("Alfie")
+	alfie, isla := h.person("Alfie"), h.person("Isla")
 
 	expect(t, phone.get("/admin/countdowns"), http.StatusOK, "No countdowns yet", `href="/admin/countdowns/new"`)
 	expect(t, phone.get("/admin"), http.StatusOK, `href="/admin/countdowns"`)
-	expect(t, phone.get("/admin/countdowns/new"), http.StatusOK, `name="on_date"`, `name="yearly"`, `name="person_id"`, "🎂")
+	expect(t, phone.get("/admin/countdowns/new"), http.StatusOK, `name="on_date"`, `name="yearly"`, `type="checkbox" name="people_ids"`, "🎂")
 
 	// Errors keep what was typed.
 	expect(t, phone.post("/admin/countdowns", url.Values{"title": {"Seaside"}, "emoji": {"🏖️"}, "on_date": {"2026-06-01"}}),
 		http.StatusUnprocessableEntity, "That day has already been", `value="Seaside"`)
 	// No emoji chosen: it offers one first.
-	expect(t, phone.post("/admin/countdowns", url.Values{"title": {"Holiday to Spain"}, "on_date": {"2026-07-04"}, "person_id": {itoa(alfie.ID)}}),
+	expect(t, phone.post("/admin/countdowns", url.Values{"title": {"Holiday to Spain"}, "on_date": {"2026-07-04"}, "people_ids": {itoa(alfie.ID)}}),
 		http.StatusUnprocessableEntity, "We picked 🏖️ for this countdown")
 	expectRedirect(t, phone.post("/admin/countdowns", url.Values{
-		"title": {"Holiday to Spain"}, "emoji": {"🏖️"}, "suggest_offered": {"1"}, "on_date": {"2026-07-04"}, "person_id": {itoa(alfie.ID)},
+		"title": {"Holiday to Spain"}, "emoji": {"🏖️"}, "suggest_offered": {"1"}, "on_date": {"2026-07-04"},
+		"people_ids": {itoa(alfie.ID), itoa(isla.ID)},
 	}), "/admin/countdowns?flash=Added+Holiday+to+Spain.")
 	expectRedirect(t, phone.post("/admin/countdowns", url.Values{
 		"title": {"Christmas"}, "emoji": {"🎄"}, "on_date": {"2025-12-25"}, "yearly": {"1"},
@@ -75,12 +76,16 @@ func TestCountdownsAdmin(t *testing.T) {
 	// Edit and delete.
 	spain := countdownNamed(t, h, "Holiday to Spain")
 	expect(t, phone.get("/admin/countdowns/"+itoa(spain.ID)), http.StatusOK, `value="Holiday to Spain"`, `value="2026-07-04"`,
-		`<option value="`+itoa(alfie.ID)+`" selected>Alfie</option>`)
+		`name="people_ids" value="`+itoa(alfie.ID)+`" data-kind="child" checked`,
+		`name="people_ids" value="`+itoa(isla.ID)+`" data-kind="child" checked`)
+	expect(t, wall.get("/board/countdowns"), http.StatusOK, "Alfie and Isla")
 	expectRedirect(t, phone.post("/admin/countdowns/"+itoa(spain.ID), url.Values{
 		"title": {"Spain!"}, "emoji": {"✈️"}, "on_date": {"2026-07-05"},
 	}), "/admin/countdowns?flash=Saved+Spain%21.")
-	if c := countdownNamed(t, h, "Spain!"); c.PersonID != nil || c.OnDate != "2026-07-05" {
+	if c := countdownNamed(t, h, "Spain!"); c.OnDate != "2026-07-05" {
 		t.Errorf("after edit: %+v", c)
+	} else if ids := must(h.st.Q.ListPeopleForCountdown(h.ctx(), dbq.ListPeopleForCountdownParams{HouseholdID: h.hh, CountdownID: c.ID})); len(ids) != 0 {
+		t.Errorf("after edit it's for %v, want nobody", ids)
 	}
 	expectRedirect(t, phone.post("/admin/countdowns/"+itoa(spain.ID)+"/delete", nil), "/admin/countdowns?flash=Deleted+Spain%21.")
 	expect(t, phone.get("/admin/countdowns/"+itoa(spain.ID)), http.StatusNotFound)
@@ -136,7 +141,7 @@ func TestKidAddsCountdown(t *testing.T) {
 	expect(t, wall.post("/board/countdowns/by/"+alfie+"/pin", url.Values{"pin": {"0000"}}), http.StatusUnauthorized, "Wrong PIN")
 	r := wall.post("/board/countdowns/by/"+alfie+"/pin", url.Values{"pin": {"1357"}})
 	expect(t, r, http.StatusOK, "Add a countdown", `name="title"`, `name="on_date"`)
-	notContains(t, r, `name="person_id"`)
+	notContains(t, r, `name="people_ids"`)
 	m := countdownToken.FindStringSubmatch(r.body)
 	if m == nil {
 		t.Fatalf("no token in\n%s", r.body)

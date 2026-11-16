@@ -30,8 +30,8 @@ type Countdown struct {
 	ID       int64 // 0 for a birthday
 	Title    string
 	Emoji    string
-	Person   *dbq.Person // who it's for (the birthday person), nil for nobody
-	OnDate   string      // as saved, YYYY-MM-DD; for a birthday, the next one
+	People   []dbq.Person // who it's for (the birthday person), if anyone
+	OnDate   string       // as saved, YYYY-MM-DD; for a birthday, the next one
 	Yearly   bool
 	Birthday bool
 	AddedBy  int64  // who added it, 0 if not known
@@ -39,6 +39,15 @@ type Countdown struct {
 	Days     int    // days from today to Next; below 0 once a one-off has passed
 	Turns    int    // the age a birthday person turns, 0 if not known
 	today    string
+}
+
+// Person is the first person it's for, nil for nobody: their colour tints
+// it.
+func (c Countdown) Person() *dbq.Person {
+	if len(c.People) == 0 {
+		return nil
+	}
+	return &c.People[0]
 }
 
 // Passed reports whether a one-off countdown's day has gone.
@@ -159,15 +168,25 @@ func (s *Service) Countdowns(ctx context.Context, householdID int64, boardDay ti
 	if err != nil {
 		return nil, fmt.Errorf("list people: %w", err)
 	}
-	return countdownViews(rows, people, boardDay, withPassed), nil
+	links, err := q.ListCountdownPeople(ctx, householdID)
+	if err != nil {
+		return nil, fmt.Errorf("list countdown people: %w", err)
+	}
+	return countdownViews(rows, people, links, boardDay, withPassed), nil
 }
 
-func countdownViews(rows []dbq.Countdown, people []dbq.Person, boardDay time.Time, withPassed bool) []Countdown {
+func countdownViews(rows []dbq.Countdown, people []dbq.Person, links []dbq.ListCountdownPeopleRow, boardDay time.Time, withPassed bool) []Countdown {
 	today := time.Date(boardDay.Year(), boardDay.Month(), boardDay.Day(), 0, 0, 0, 0, time.UTC)
 	todayS := today.Format(DateLayout)
 	byID := make(map[int64]*dbq.Person, len(people))
 	for i := range people {
 		byID[people[i].ID] = &people[i]
+	}
+	forID := make(map[int64][]dbq.Person)
+	for _, l := range links {
+		if p := byID[l.PersonID]; p != nil {
+			forID[l.CountdownID] = append(forID[l.CountdownID], *p)
+		}
 	}
 	var out []Countdown
 	for _, r := range rows {
@@ -176,9 +195,7 @@ func countdownViews(rows []dbq.Countdown, people []dbq.Person, boardDay time.Tim
 			continue
 		}
 		c := Countdown{ID: r.ID, Title: r.Title, Emoji: r.Emoji, OnDate: r.OnDate, Yearly: r.Yearly == 1, today: todayS}
-		if r.PersonID != nil {
-			c.Person = byID[*r.PersonID] // nil once archived
-		}
+		c.People = forID[r.ID]
 		if r.AddedBy != nil {
 			c.AddedBy = *r.AddedBy
 		}
@@ -200,7 +217,7 @@ func countdownViews(rows []dbq.Countdown, people []dbq.Person, boardDay time.Tim
 		}
 		next := nextOn(month, day, today)
 		c := Countdown{
-			Title: possessive(p.Name) + " birthday", Emoji: "🎂", Person: p, Birthday: true, Yearly: true,
+			Title: possessive(p.Name) + " birthday", Emoji: "🎂", People: []dbq.Person{*p}, Birthday: true, Yearly: true,
 			Next: next.Format(DateLayout), Days: daysBetween(today, next), today: todayS,
 		}
 		c.OnDate = c.Next
@@ -330,11 +347,11 @@ func (s *Service) SetCanAddCountdowns(ctx context.Context, householdID, personID
 
 // CountdownInput is a countdown being added or changed.
 type CountdownInput struct {
-	Title    string
-	Emoji    string
-	OnDate   string // YYYY-MM-DD
-	Yearly   bool
-	PersonID *int64 // who it's for, nil for nobody
+	Title     string
+	Emoji     string
+	OnDate    string // YYYY-MM-DD
+	Yearly    bool
+	PeopleIDs []int64 // who it's for, if anyone
 }
 
 // Countdown is one saved countdown.
@@ -365,12 +382,36 @@ func (s *Service) checkCountdown(ctx context.Context, q *dbq.Queries, householdI
 	case on.Year() > boardDay.Year()+20:
 		errs.Add("on_date", "Choose a day in the next 20 years.")
 	}
-	if in.PersonID != nil {
-		if _, err := getPerson(ctx, q, householdID, *in.PersonID); err != nil {
-			errs.Add("person_id", "Choose someone in the household.")
+	slices.Sort(in.PeopleIDs)
+	in.PeopleIDs = slices.Compact(in.PeopleIDs)
+	for _, id := range in.PeopleIDs {
+		if _, err := getPerson(ctx, q, householdID, id); err != nil {
+			errs.Add("people_ids", "Choose people in the household.")
+			break
 		}
 	}
 	return errs.Err()
+}
+
+// CountdownPeople is who a saved countdown is for, in board order.
+func (s *Service) CountdownPeople(ctx context.Context, householdID, id int64) ([]int64, error) {
+	ids, err := s.st.Q.ListPeopleForCountdown(ctx, dbq.ListPeopleForCountdownParams{HouseholdID: householdID, CountdownID: id})
+	if err != nil {
+		return nil, fmt.Errorf("list countdown people: %w", err)
+	}
+	return ids, nil
+}
+
+func setCountdownPeople(ctx context.Context, q *dbq.Queries, householdID, id int64, people []int64) error {
+	if err := q.DeleteCountdownPeople(ctx, dbq.DeleteCountdownPeopleParams{HouseholdID: householdID, CountdownID: id}); err != nil {
+		return fmt.Errorf("clear countdown people: %w", err)
+	}
+	for _, p := range people {
+		if err := q.AddCountdownPerson(ctx, dbq.AddCountdownPersonParams{HouseholdID: householdID, CountdownID: id, PersonID: p}); err != nil {
+			return fmt.Errorf("add countdown person: %w", err)
+		}
+	}
+	return nil
 }
 
 // AddCountdown adds a countdown. Errors are valid.Errors for the form.
@@ -383,10 +424,13 @@ func (s *Service) AddCountdown(ctx context.Context, householdID, actorID int64, 
 		var err error
 		id, err = q.InsertCountdown(ctx, dbq.InsertCountdownParams{
 			HouseholdID: householdID, Title: in.Title, Emoji: in.Emoji, OnDate: in.OnDate, Yearly: boolInt(in.Yearly),
-			PersonID: in.PersonID, AddedBy: &actorID, CreatedAt: s.now().Unix(),
+			AddedBy: &actorID, CreatedAt: s.now().Unix(),
 		})
 		if err != nil {
 			return fmt.Errorf("insert countdown: %w", err)
+		}
+		if err := setCountdownPeople(ctx, q, householdID, id, in.PeopleIDs); err != nil {
+			return err
 		}
 		return s.logCountdown(ctx, q, householdID, actorID, "countdown.added", id)
 	})
@@ -403,10 +447,13 @@ func (s *Service) UpdateCountdown(ctx context.Context, householdID, actorID, id 
 			return err
 		}
 		if err := q.UpdateCountdown(ctx, dbq.UpdateCountdownParams{
-			Title: in.Title, Emoji: in.Emoji, OnDate: in.OnDate, Yearly: boolInt(in.Yearly), PersonID: in.PersonID,
+			Title: in.Title, Emoji: in.Emoji, OnDate: in.OnDate, Yearly: boolInt(in.Yearly),
 			HouseholdID: householdID, ID: id,
 		}); err != nil {
 			return fmt.Errorf("update countdown: %w", err)
+		}
+		if err := setCountdownPeople(ctx, q, householdID, id, in.PeopleIDs); err != nil {
+			return err
 		}
 		return s.logCountdown(ctx, q, householdID, actorID, "countdown.changed", id)
 	})

@@ -9,6 +9,21 @@ import (
 	"context"
 )
 
+const addCountdownPerson = `-- name: AddCountdownPerson :exec
+INSERT INTO countdown_people (household_id, countdown_id, person_id) VALUES (?, ?, ?)
+`
+
+type AddCountdownPersonParams struct {
+	HouseholdID int64 `json:"household_id"`
+	CountdownID int64 `json:"countdown_id"`
+	PersonID    int64 `json:"person_id"`
+}
+
+func (q *Queries) AddCountdownPerson(ctx context.Context, arg AddCountdownPersonParams) error {
+	_, err := q.db.ExecContext(ctx, addCountdownPerson, arg.HouseholdID, arg.CountdownID, arg.PersonID)
+	return err
+}
+
 const deleteCountdown = `-- name: DeleteCountdown :exec
 DELETE FROM countdowns WHERE household_id = ? AND id = ?
 `
@@ -23,8 +38,22 @@ func (q *Queries) DeleteCountdown(ctx context.Context, arg DeleteCountdownParams
 	return err
 }
 
+const deleteCountdownPeople = `-- name: DeleteCountdownPeople :exec
+DELETE FROM countdown_people WHERE household_id = ? AND countdown_id = ?
+`
+
+type DeleteCountdownPeopleParams struct {
+	HouseholdID int64 `json:"household_id"`
+	CountdownID int64 `json:"countdown_id"`
+}
+
+func (q *Queries) DeleteCountdownPeople(ctx context.Context, arg DeleteCountdownPeopleParams) error {
+	_, err := q.db.ExecContext(ctx, deleteCountdownPeople, arg.HouseholdID, arg.CountdownID)
+	return err
+}
+
 const getCountdown = `-- name: GetCountdown :one
-SELECT id, household_id, title, emoji, on_date, yearly, person_id, added_by, created_at FROM countdowns WHERE household_id = ? AND id = ?
+SELECT id, household_id, title, emoji, on_date, yearly, added_by, created_at FROM countdowns WHERE household_id = ? AND id = ?
 `
 
 type GetCountdownParams struct {
@@ -42,7 +71,6 @@ func (q *Queries) GetCountdown(ctx context.Context, arg GetCountdownParams) (Cou
 		&i.Emoji,
 		&i.OnDate,
 		&i.Yearly,
-		&i.PersonID,
 		&i.AddedBy,
 		&i.CreatedAt,
 	)
@@ -50,8 +78,8 @@ func (q *Queries) GetCountdown(ctx context.Context, arg GetCountdownParams) (Cou
 }
 
 const insertCountdown = `-- name: InsertCountdown :one
-INSERT INTO countdowns (household_id, title, emoji, on_date, yearly, person_id, added_by, created_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO countdowns (household_id, title, emoji, on_date, yearly, added_by, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?)
 RETURNING id
 `
 
@@ -61,7 +89,6 @@ type InsertCountdownParams struct {
 	Emoji       string `json:"emoji"`
 	OnDate      string `json:"on_date"`
 	Yearly      int64  `json:"yearly"`
-	PersonID    *int64 `json:"person_id"`
 	AddedBy     *int64 `json:"added_by"`
 	CreatedAt   int64  `json:"created_at"`
 }
@@ -73,7 +100,6 @@ func (q *Queries) InsertCountdown(ctx context.Context, arg InsertCountdownParams
 		arg.Emoji,
 		arg.OnDate,
 		arg.Yearly,
-		arg.PersonID,
 		arg.AddedBy,
 		arg.CreatedAt,
 	)
@@ -82,8 +108,45 @@ func (q *Queries) InsertCountdown(ctx context.Context, arg InsertCountdownParams
 	return id, err
 }
 
+const listCountdownPeople = `-- name: ListCountdownPeople :many
+SELECT cp.countdown_id, cp.person_id
+FROM countdown_people cp
+JOIN people p ON p.id = cp.person_id
+WHERE cp.household_id = ? AND p.archived_at IS NULL
+ORDER BY cp.countdown_id, p.sort_order, p.id
+`
+
+type ListCountdownPeopleRow struct {
+	CountdownID int64 `json:"countdown_id"`
+	PersonID    int64 `json:"person_id"`
+}
+
+// Every countdown's people who are still active, in board order.
+func (q *Queries) ListCountdownPeople(ctx context.Context, householdID int64) ([]ListCountdownPeopleRow, error) {
+	rows, err := q.db.QueryContext(ctx, listCountdownPeople, householdID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCountdownPeopleRow{}
+	for rows.Next() {
+		var i ListCountdownPeopleRow
+		if err := rows.Scan(&i.CountdownID, &i.PersonID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCountdowns = `-- name: ListCountdowns :many
-SELECT id, household_id, title, emoji, on_date, yearly, person_id, added_by, created_at FROM countdowns WHERE household_id = ? ORDER BY on_date, id
+SELECT id, household_id, title, emoji, on_date, yearly, added_by, created_at FROM countdowns WHERE household_id = ? ORDER BY on_date, id
 `
 
 func (q *Queries) ListCountdowns(ctx context.Context, householdID int64) ([]Countdown, error) {
@@ -102,13 +165,48 @@ func (q *Queries) ListCountdowns(ctx context.Context, householdID int64) ([]Coun
 			&i.Emoji,
 			&i.OnDate,
 			&i.Yearly,
-			&i.PersonID,
 			&i.AddedBy,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPeopleForCountdown = `-- name: ListPeopleForCountdown :many
+SELECT cp.person_id
+FROM countdown_people cp
+JOIN people p ON p.id = cp.person_id
+WHERE cp.household_id = ? AND cp.countdown_id = ? AND p.archived_at IS NULL
+ORDER BY p.sort_order, p.id
+`
+
+type ListPeopleForCountdownParams struct {
+	HouseholdID int64 `json:"household_id"`
+	CountdownID int64 `json:"countdown_id"`
+}
+
+func (q *Queries) ListPeopleForCountdown(ctx context.Context, arg ListPeopleForCountdownParams) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, listPeopleForCountdown, arg.HouseholdID, arg.CountdownID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int64{}
+	for rows.Next() {
+		var person_id int64
+		if err := rows.Scan(&person_id); err != nil {
+			return nil, err
+		}
+		items = append(items, person_id)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -156,7 +254,7 @@ func (q *Queries) SetPersonCanAddCountdowns(ctx context.Context, arg SetPersonCa
 }
 
 const updateCountdown = `-- name: UpdateCountdown :exec
-UPDATE countdowns SET title = ?, emoji = ?, on_date = ?, yearly = ?, person_id = ?
+UPDATE countdowns SET title = ?, emoji = ?, on_date = ?, yearly = ?
 WHERE household_id = ? AND id = ?
 `
 
@@ -165,7 +263,6 @@ type UpdateCountdownParams struct {
 	Emoji       string `json:"emoji"`
 	OnDate      string `json:"on_date"`
 	Yearly      int64  `json:"yearly"`
-	PersonID    *int64 `json:"person_id"`
 	HouseholdID int64  `json:"household_id"`
 	ID          int64  `json:"id"`
 }
@@ -176,7 +273,6 @@ func (q *Queries) UpdateCountdown(ctx context.Context, arg UpdateCountdownParams
 		arg.Emoji,
 		arg.OnDate,
 		arg.Yearly,
-		arg.PersonID,
 		arg.HouseholdID,
 		arg.ID,
 	)

@@ -96,9 +96,14 @@ type Countdown struct {
 	Emoji       string `json:"emoji"`
 	OnDate      string `json:"on_date"`
 	Yearly      int64  `json:"yearly"`
-	PersonID    *int64 `json:"person_id"`
 	AddedBy     *int64 `json:"added_by"`
 	CreatedAt   int64  `json:"created_at"`
+}
+
+type CountdownPerson struct {
+	HouseholdID int64 `json:"household_id"`
+	CountdownID int64 `json:"countdown_id"`
+	PersonID    int64 `json:"person_id"`
 }
 
 type Device struct {

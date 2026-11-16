@@ -323,6 +323,7 @@ button.chore__main:active { background: var(--line); }
 .avatar-stack { display: inline-flex; flex: none; }
 .avatar-stack .avatar { box-shadow: 0 0 0 2px var(--surface); }
 .avatar-stack .avatar + .avatar { margin-left: -12px; }
+.avatar-stack--xs .avatar + .avatar { margin-left: -6px; }
 .chore__with { display: inline-flex; align-items: center; }
 .chore__with .avatar { box-shadow: 0 0 0 2px var(--surface); }
 .chore__with .avatar + .avatar { margin-left: -6px; }

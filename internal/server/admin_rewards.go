@@ -4,7 +4,6 @@ import (
 	"errors"
 	"net/http"
 	"slices"
-	"strconv"
 
 	"github.com/lukeskelhorn/ingle/internal/emoji"
 	"github.com/lukeskelhorn/ingle/internal/household"
@@ -84,9 +83,6 @@ type rewardForm struct {
 	PeopleIDs   []int64      // who it's for when it isn't everyone
 	People      []dbq.Person // active people, to choose from
 }
-
-// HasPerson is used by the people checkboxes.
-func (f rewardForm) HasPerson(id int64) bool { return slices.Contains(f.PeopleIDs, id) }
 
 func newRewardForm() rewardForm {
 	return rewardForm{Emoji: newEmojiField(emoji.Reward, ""), Everyone: true}
@@ -182,12 +178,7 @@ func (s *Server) readRewardForm(w http.ResponseWriter, r *http.Request, f *rewar
 	}
 	// A form without the choice (an older page) is for everyone.
 	f.Everyone = fm.str("reward_who") != "chosen"
-	f.PeopleIDs = nil
-	for _, v := range r.Form["people_ids"] {
-		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
-			f.PeopleIDs = append(f.PeopleIDs, n)
-		}
-	}
+	f.PeopleIDs = fm.ids("people_ids")
 	return household.RewardInput{
 		Title: f.Title, Emoji: f.Emoji.Value, Description: f.Description, CostPoints: f.CostPoints, CostPence: pence,
 		Chosen: !f.Everyone, PeopleIDs: f.PeopleIDs,

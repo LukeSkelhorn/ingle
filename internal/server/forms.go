@@ -54,6 +54,18 @@ func (f *form) optID(name string) *int64 {
 	return &n
 }
 
+// ids is the people (or other rows) ticked in a people_pick, ignoring
+// anything that isn't an id.
+func (f *form) ids(name string) []int64 {
+	var out []int64
+	for _, v := range f.r.Form[name] {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
 // ok reports whether the form parsed without field errors. Handlers check it
 // before calling the domain, so a value that failed to parse (and read as
 // zero) is never saved.

@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/fs"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -261,6 +262,7 @@ func (s *Server) staticFuncs() template.FuncMap {
 			return done * 100 / total
 		},
 		"dict":     dict,
+		"chosen":   chosen,
 		"list":     func(v ...string) []string { return v },
 		"activity": describeActivity,
 		// activityLine is the feed's phrase for an activity row, with
@@ -368,6 +370,18 @@ func (s *Server) change(points, pence int64) string {
 
 // dict builds a map from alternating keys and values, for passing several
 // values to a partial.
+// chosen reports whether id is ticked in a people_pick: sel is one id
+// (int64) or several ([]int64).
+func chosen(sel any, id int64) bool {
+	switch v := sel.(type) {
+	case int64:
+		return v == id
+	case []int64:
+		return slices.Contains(v, id)
+	}
+	return false
+}
+
 func dict(kv ...any) (map[string]any, error) {
 	if len(kv)%2 != 0 {
 		return nil, fmt.Errorf("dict: odd number of arguments")
