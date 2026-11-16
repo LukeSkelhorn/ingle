@@ -63,6 +63,20 @@
       <small class="muted">0 turns this off.</small>
       {{template "err" index .Errors "lock_idle_hours"}}
     </label>
+    <label class="field field--short">
+      <span>Keep history</span>
+      <select name="keep_history_months"{{if not .Data.NoClearOut}} data-keep-history="{{.Data.SavedKeepHistory}}"{{end}}>
+        <option value="0"{{if eq .Data.KeepHistoryMonths 0}} selected{{end}}>Everything</option>
+        <option value="24"{{if eq .Data.KeepHistoryMonths 24}} selected{{end}}>24 months</option>
+        <option value="12"{{if eq .Data.KeepHistoryMonths 12}} selected{{end}}>12 months</option>
+      </select>
+      {{- if .Data.NoClearOut}}
+      <small class="muted">Backups are off, so nothing is cleared out. Turn on backups to use this.</small>
+      {{- else}}
+      <small class="muted">Older chores, claims, bank requests and activity are cleared out each night, after the backup. Points and money stay the same: older ones are added up into one Brought forward line.</small>
+      {{- end}}
+      {{template "err" index .Errors "keep_history_months"}}
+    </label>
     <button class="btn btn--primary" type="submit">Save settings</button>
   </form>
 

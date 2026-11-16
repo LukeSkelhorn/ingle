@@ -10,7 +10,7 @@ import (
 )
 
 const getSettings = `-- name: GetSettings :one
-SELECT household_id, timezone, day_starts_at, admin_idle_minutes, updated_at, screensaver_idle_minutes, unlock_code_hash, lock_days, lock_from, lock_until, lock_idle_hours, unlock_code_length, calendar_idle_minutes, calendar_chores, interest_rate_bp, interest_money, interest_points, interest_cap_pence, interest_cap_points, interest_since FROM household_settings WHERE household_id = ?
+SELECT household_id, timezone, day_starts_at, admin_idle_minutes, updated_at, screensaver_idle_minutes, unlock_code_hash, lock_days, lock_from, lock_until, lock_idle_hours, unlock_code_length, calendar_idle_minutes, calendar_chores, interest_rate_bp, interest_money, interest_points, interest_cap_pence, interest_cap_points, interest_since, keep_history_months FROM household_settings WHERE household_id = ?
 `
 
 func (q *Queries) GetSettings(ctx context.Context, householdID int64) (HouseholdSetting, error) {
@@ -37,6 +37,7 @@ func (q *Queries) GetSettings(ctx context.Context, householdID int64) (Household
 		&i.InterestCapPence,
 		&i.InterestCapPoints,
 		&i.InterestSince,
+		&i.KeepHistoryMonths,
 	)
 	return i, err
 }
@@ -99,9 +100,10 @@ const updateSettings = `-- name: UpdateSettings :one
 UPDATE household_settings
 SET timezone = ?, day_starts_at = ?, admin_idle_minutes = ?, screensaver_idle_minutes = ?,
     calendar_idle_minutes = ?, calendar_chores = ?,
-    lock_days = ?, lock_from = ?, lock_until = ?, lock_idle_hours = ?, updated_at = ?
+    lock_days = ?, lock_from = ?, lock_until = ?, lock_idle_hours = ?, keep_history_months = ?,
+    updated_at = ?
 WHERE household_id = ?
-RETURNING household_id, timezone, day_starts_at, admin_idle_minutes, updated_at, screensaver_idle_minutes, unlock_code_hash, lock_days, lock_from, lock_until, lock_idle_hours, unlock_code_length, calendar_idle_minutes, calendar_chores, interest_rate_bp, interest_money, interest_points, interest_cap_pence, interest_cap_points, interest_since
+RETURNING household_id, timezone, day_starts_at, admin_idle_minutes, updated_at, screensaver_idle_minutes, unlock_code_hash, lock_days, lock_from, lock_until, lock_idle_hours, unlock_code_length, calendar_idle_minutes, calendar_chores, interest_rate_bp, interest_money, interest_points, interest_cap_pence, interest_cap_points, interest_since, keep_history_months
 `
 
 type UpdateSettingsParams struct {
@@ -115,6 +117,7 @@ type UpdateSettingsParams struct {
 	LockFrom               string `json:"lock_from"`
 	LockUntil              string `json:"lock_until"`
 	LockIdleHours          int64  `json:"lock_idle_hours"`
+	KeepHistoryMonths      int64  `json:"keep_history_months"`
 	UpdatedAt              int64  `json:"updated_at"`
 	HouseholdID            int64  `json:"household_id"`
 }
@@ -131,6 +134,7 @@ func (q *Queries) UpdateSettings(ctx context.Context, arg UpdateSettingsParams) 
 		arg.LockFrom,
 		arg.LockUntil,
 		arg.LockIdleHours,
+		arg.KeepHistoryMonths,
 		arg.UpdatedAt,
 		arg.HouseholdID,
 	)
@@ -156,6 +160,7 @@ func (q *Queries) UpdateSettings(ctx context.Context, arg UpdateSettingsParams) 
 		&i.InterestCapPence,
 		&i.InterestCapPoints,
 		&i.InterestSince,
+		&i.KeepHistoryMonths,
 	)
 	return i, err
 }

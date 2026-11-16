@@ -44,6 +44,14 @@
     document.addEventListener("submit", function (e) {
       var q = e.target.dataset && e.target.dataset.confirm;
       if (q && !confirm(q)) e.preventDefault();
+      // A Keep history choice shorter than the saved one asks first.
+      var keep = e.target.querySelector && e.target.querySelector("select[data-keep-history]");
+      if (!keep || e.defaultPrevented) return;
+      var months = Number(keep.value), saved = Number(keep.dataset.keepHistory);
+      if (months > 0 && (saved === 0 || months < saved) &&
+          !confirm("History older than " + months + " months will be deleted tonight. Your backups keep a copy.")) {
+        e.preventDefault();
+      }
     });
     // "Another time" on the chore form adds a Done by input, up to data-max.
     document.addEventListener("click", function (e) {
