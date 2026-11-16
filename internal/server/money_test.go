@@ -159,7 +159,9 @@ func TestMyMoneyHistory(t *testing.T) {
 
 	r := wall.post("/board/money/"+alfie+"/pin", url.Values{"pin": {"1357"}})
 	expect(t, r, http.StatusOK, "Saving for", "Lego", "to go", "Sweets", "waiting", "Tidied up", "data-my-money", "Show more")
-	notContains(t, r, "Old bonus")
+	notContains(t, r, "Old bonus", " of 100")
+	// The goal says what's left, as on the board (DOM-113).
+	expect(t, r, http.StatusOK, `<span class="goal__togo">58 pts to go</span>`)
 	tok := moneyToken.FindStringSubmatch(r.body)[1]
 	more := regexp.MustCompile(`hx-get="([^"]+/history\?[^"]+)"`)
 	m := more.FindStringSubmatch(r.body)
