@@ -15,7 +15,6 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/auth"
 	"github.com/lukeskelhorn/ingle/internal/avatar"
 	"github.com/lukeskelhorn/ingle/internal/locale"
-	"github.com/lukeskelhorn/ingle/internal/module"
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 	"github.com/lukeskelhorn/ingle/internal/valid"
 	"github.com/lukeskelhorn/ingle/web"
@@ -179,8 +178,8 @@ func (s *Server) householdFuncs(ctx context.Context) template.FuncMap {
 		// moduleOn "rewards" reports whether a module is switched on, so
 		// pages and partials can hide its pieces.
 		"moduleOn": func(id string) bool { return s.moduleOn(ctx, id) },
-		// moduleNav is the admin bar links of the modules that are on.
-		"moduleNav": func() []module.NavItem { return s.moduleNav(ctx) },
+		// adminNav is the admin bar's links, for the modules that are on.
+		"adminNav": func() adminNav { return s.adminNav(ctx) },
 		"when": func(unix int64) string {
 			loc := s.Locale
 			if s.Settings != nil {
