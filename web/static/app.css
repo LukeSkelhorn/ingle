@@ -638,6 +638,11 @@ input, select, textarea { -webkit-user-select: text; user-select: text; }
 .dialog__head p { margin: 2px 0 0; }
 .dialog__actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .dialog__actions .btn { text-align: center; }
+.dialog__foot { margin: 12px 0 0; text-align: center; }
+/* A code or PIN card: whether it's set, then buttons that open pop-ups. */
+.credential__status { margin: 0; font-weight: 600; }
+.credential__tick { color: var(--ok-fg); }
+.credential__actions { display: flex; flex-wrap: wrap; gap: 10px; }
 @media (max-width: 600px) {
   .dialog { width: 100vw; max-width: 100vw; margin: auto 0 0; border-radius: 20px 20px 0 0; padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
 }

@@ -121,6 +121,9 @@ type view struct {
 	// ExternalSignIn is set when another service signs adults in: Ingle
 	// shows no email or password for them.
 	ExternalSignIn bool
+	// Edit names the pop-up a page opens with, from ?edit= on a GET: the
+	// links that open admin pop-ups use it when JavaScript is off.
+	Edit string
 }
 
 // viewer describes who is looking at the page.

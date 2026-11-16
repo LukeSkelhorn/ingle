@@ -120,7 +120,7 @@ func TestOutsideSignInReplacesIngles(t *testing.T) {
 	// Adults' email and password aren't Ingle's to manage.
 	phone := x.signIn("a.test", x.a, x.mumID)
 	page := phone.get("/admin/people/" + itoa(x.mumID))
-	expect(t, page, http.StatusOK, "Remove PIN")
+	expect(t, page, http.StatusOK, "Remove Mum&#39;s PIN?")
 	expectNot(t, page, "Save sign-in", `name="password"`)
 	expect(t, phone.post("/admin/people/"+itoa(x.mumID)+"/login", url.Values{"email": {"m@example.com"}, "password": {"another long one"}, "password_confirm": {"another long one"}}), http.StatusNotFound)
 	expect(t, phone.post("/admin/people/"+itoa(x.mumID)+"/login/clear", url.Values{}), http.StatusNotFound)

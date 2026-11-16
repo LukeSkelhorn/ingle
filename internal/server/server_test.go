@@ -631,7 +631,7 @@ func TestAddAdultWithCredentials(t *testing.T) {
 	expect(t, phone.post("/admin/people/"+dad+"/pin", url.Values{"pin": {"1357"}, "pin_confirm": {"1358"}}),
 		http.StatusUnprocessableEntity, "The PINs don&#39;t match.")
 	expect(t, phone.post("/admin/people/"+dad+"/pin", url.Values{"pin": {"1357"}, "pin_confirm": {"1357"}}),
-		http.StatusOK, "PIN saved.", "A PIN is set.")
+		http.StatusOK, "PIN saved.", "PIN is set")
 	expect(t, phone.post("/admin/people/"+dad+"/login", url.Values{
 		"email": {"mum@example.com"}, "password": {"dads password 1"}, "password_confirm": {"dads password 1"},
 	}), http.StatusUnprocessableEntity, "already in use")

@@ -137,6 +137,17 @@
     });
     ask(1);
 
+    // In a pop-up, closing it starts again.
+    var dialog = box.closest("dialog");
+    if (dialog) {
+      dialog.addEventListener("close", function () {
+        ready = false;
+        fill("");
+        ask(1);
+        pad.reset("", 0);
+      });
+    }
+
     showBtn.addEventListener("click", function () {
       var on = showBtn.getAttribute("aria-pressed") !== "true";
       showBtn.setAttribute("aria-pressed", on ? "true" : "false");
