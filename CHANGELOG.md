@@ -6,6 +6,8 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ## [Unreleased]
 
+## [v0.4.3] - 2026-11-16
+
 ### Added
 
 - **Clear out old history.** Admin › Settings has **Keep history**: **Everything** (the default), **24 months** or **12 months**. Each night, straight after the backup, Ingle clears out anything older than that, so a backup from before the clear-out still has the full history. Choosing a shorter time asks first.
