@@ -6,6 +6,21 @@
 
 {{define "flash"}}{{with .Flash}}<p class="flash" role="status">{{.}}</p>{{end}}{{end}}
 
+{{/* Choose people by tapping their faces. Put it inside a fieldset with a
+     legend. dict "People" []dbq.Person "Name" string "Multi" bool
+     (checkboxes; otherwise one, radios) "Chosen" (an id or []int64) and,
+     optionally, "Show" (a data-show-when). Each input has data-kind. */}}
+{{define "people_pick"}}
+<div class="people-pick"{{with .Show}} data-show-when="{{.}}"{{end}}>
+  {{range .People}}
+  <label class="people-pick__item">
+    <input type="{{if $.Multi}}checkbox{{else}}radio{{end}}" name="{{$.Name}}" value="{{.ID}}" data-kind="{{.Kind}}"{{if chosen $.Chosen .ID}} checked{{end}}>
+    {{template "avatar" (avatar . "md")}}<span>{{.Name}}</span>
+  </label>
+  {{end}}
+</div>
+{{end}}
+
 {{define "admin_nav"}}
 <header class="admin__bar">
   <a class="admin__brand" href="/admin">{{if .Household}}{{.Household}}{{else}}Ingle{{end}}</a>

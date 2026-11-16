@@ -89,6 +89,23 @@ type Completion struct {
 	ForPersonID  *int64 `json:"for_person_id"`
 }
 
+type Countdown struct {
+	ID          int64  `json:"id"`
+	HouseholdID int64  `json:"household_id"`
+	Title       string `json:"title"`
+	Emoji       string `json:"emoji"`
+	OnDate      string `json:"on_date"`
+	Yearly      int64  `json:"yearly"`
+	AddedBy     *int64 `json:"added_by"`
+	CreatedAt   int64  `json:"created_at"`
+}
+
+type CountdownPerson struct {
+	HouseholdID int64 `json:"household_id"`
+	CountdownID int64 `json:"countdown_id"`
+	PersonID    int64 `json:"person_id"`
+}
+
 type Device struct {
 	ID          int64  `json:"id"`
 	HouseholdID int64  `json:"household_id"`
@@ -215,23 +232,26 @@ type MatchOffer struct {
 }
 
 type Person struct {
-	ID             int64   `json:"id"`
-	HouseholdID    int64   `json:"household_id"`
-	Name           string  `json:"name"`
-	Kind           string  `json:"kind"`
-	Colour         string  `json:"colour"`
-	Avatar         *string `json:"avatar"`
-	PinHash        *string `json:"pin_hash"`
-	SortOrder      int64   `json:"sort_order"`
-	ArchivedAt     *int64  `json:"archived_at"`
-	CreatedAt      int64   `json:"created_at"`
-	Email          *string `json:"email"`
-	PasswordHash   *string `json:"password_hash"`
-	PinLength      *int64  `json:"pin_length"`
-	GoalRewardID   *int64  `json:"goal_reward_id"`
-	GoalSetAt      *int64  `json:"goal_set_at"`
-	PictureCards   int64   `json:"picture_cards"`
-	InterestOptOut int64   `json:"interest_opt_out"`
+	ID               int64   `json:"id"`
+	HouseholdID      int64   `json:"household_id"`
+	Name             string  `json:"name"`
+	Kind             string  `json:"kind"`
+	Colour           string  `json:"colour"`
+	Avatar           *string `json:"avatar"`
+	PinHash          *string `json:"pin_hash"`
+	SortOrder        int64   `json:"sort_order"`
+	ArchivedAt       *int64  `json:"archived_at"`
+	CreatedAt        int64   `json:"created_at"`
+	Email            *string `json:"email"`
+	PasswordHash     *string `json:"password_hash"`
+	PinLength        *int64  `json:"pin_length"`
+	GoalRewardID     *int64  `json:"goal_reward_id"`
+	GoalSetAt        *int64  `json:"goal_set_at"`
+	PictureCards     int64   `json:"picture_cards"`
+	InterestOptOut   int64   `json:"interest_opt_out"`
+	Birthday         *string `json:"birthday"`
+	BirthYear        *int64  `json:"birth_year"`
+	CanAddCountdowns int64   `json:"can_add_countdowns"`
 }
 
 type PersonBank struct {

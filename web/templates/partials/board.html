@@ -12,6 +12,7 @@
   </div>
   {{else}}
   {{with .Holiday}}<p class="board__holiday">🏖️ On holiday {{.Until $.Day}}</p>{{end}}
+  {{template "countdown_strip" .Countdowns}}
   <div class="columns">
     {{range $col := .Columns}}
     <section class="column" style="--person: {{.Person.Colour}}" aria-label="{{.Person.Name}}" data-person="{{.Person.ID}}">

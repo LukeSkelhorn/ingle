@@ -75,6 +75,47 @@ h2 { margin: 0 0 8px; font-size: 1.15rem; }
   font-size: 1.1rem;
 }
 
+/* Countdowns: the board's strip of the next few, and its Countdowns view. */
+.countdown-strip {
+  display: flex; flex-wrap: wrap; gap: 8px; width: 100%; margin: 0 0 14px; padding: 0; border: 0; background: none;
+  font: inherit; color: inherit; text-align: left; cursor: pointer; touch-action: manipulation;
+}
+.countdown-strip:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 12px; }
+.countdown-chip {
+  display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; padding: 6px 12px;
+  border-radius: 999px; background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--person, var(--line));
+}
+.countdown-chip__title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.countdown-chip__when { flex: none; color: var(--muted); font-variant-numeric: tabular-nums; }
+.countdown-chip__when::before { content: "· "; }
+.countdown-chip--today { background: var(--ok-bg); }
+.countdown-chip--today .countdown-chip__when { color: var(--ok-fg); font-weight: 600; }
+.countdowns { padding-bottom: 16px; }
+.countdowns__list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 12px; }
+.countdown {
+  display: flex; align-items: center; gap: 14px; min-width: 0; padding: 16px; border-radius: var(--radius);
+  background: var(--surface); border: 1px solid var(--line); border-left: 6px solid var(--person, var(--accent));
+}
+.countdown--today { background: var(--ok-bg); }
+.countdown__emoji { flex: none; font-size: 2.4rem; line-height: 1; }
+.countdown__what { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.countdown__title { font-size: 1.2rem; overflow-wrap: anywhere; }
+.countdown__date, .countdown__who { color: var(--muted); }
+.countdown__who { display: flex; align-items: center; gap: 6px; font-size: 0.9rem; }
+.countdown__days { flex: none; display: flex; flex-direction: column; align-items: center; text-align: center; line-height: 1.1; }
+.countdown__days b { font-size: 2.2rem; font-variant-numeric: tabular-nums; }
+.countdown__days small { color: var(--muted); }
+.countdown__days--today { font-size: 1.2rem; font-weight: 700; color: var(--ok-fg); }
+.countdowns__empty { padding: 32px 16px; text-align: center; font-size: 1.1rem; }
+.countdowns__add { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 18px; }
+.countdown-mine h3 { margin: 18px 0 6px; }
+.countdown-mine .list__row { padding: 10px 0; flex-wrap: wrap; }
+.countdown-mine .list__main { flex: 1; min-width: 10rem; }
+.birthday { display: flex; flex-wrap: wrap; gap: 8px; }
+.birthday select, .birthday input { flex: 1 1 5rem; min-width: 0; }
+.birthday [name="birth_month"] { flex: 2 1 9rem; }
+.saver__countdown { grid-column: 1 / -1; margin: 8px 0 0; display: flex; align-items: center; gap: 8px; font-size: clamp(1.1rem, 2.2vw, 1.6rem); }
+
 /* Locked display: photos and the clock; a tap asks who's unlocking, then
    brings up the keypad. cursor: pointer also makes iOS Safari treat the
    photos as tappable. */
@@ -282,6 +323,7 @@ button.chore__main:active { background: var(--line); }
 .avatar-stack { display: inline-flex; flex: none; }
 .avatar-stack .avatar { box-shadow: 0 0 0 2px var(--surface); }
 .avatar-stack .avatar + .avatar { margin-left: -12px; }
+.avatar-stack--xs .avatar + .avatar { margin-left: -6px; }
 .chore__with { display: inline-flex; align-items: center; }
 .chore__with .avatar { box-shadow: 0 0 0 2px var(--surface); }
 .chore__with .avatar + .avatar { margin-left: -6px; }
@@ -871,7 +913,8 @@ button.cal-item--event:focus-visible { outline: 2px solid var(--accent); outline
     height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
     display: flex; flex-direction: column; padding-bottom: 72px;
   }
-  .is-board .board__locked, .is-board .board__header, .is-board .board__holiday { flex: none; }
+  .is-board .board__locked, .is-board .board__header, .is-board .board__holiday, .is-board .countdown-strip { flex: none; }
+  .is-board .views__panel[data-panel="countdowns"]:not([hidden]) { display: block; overflow-y: auto; overscroll-behavior: contain; }
   .is-board .views { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   .is-board .views__panel:not([hidden]) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   .is-board .views__panel.cal:not([hidden]) { display: block; overflow-y: auto; overscroll-behavior: contain; }

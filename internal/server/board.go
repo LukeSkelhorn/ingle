@@ -30,6 +30,9 @@ type boardView struct {
 	// Up for grabs button as an out-of-band swap, since it lives outside
 	// #board.
 	OOB bool
+	// Countdowns is the strip's next few countdowns (none while the module
+	// is off).
+	Countdowns []chores.Countdown
 }
 
 // PoolLate reports whether any chore up for grabs is overdue.
@@ -76,6 +79,11 @@ func (s *Server) loadBoard(r *http.Request) (boardView, error) {
 		return boardView{}, err
 	}
 	v := boardView{Board: b, Adult: identityFrom(r.Context()).Session != nil}
+	cs, err := s.countdowns(r)
+	if err != nil {
+		return boardView{}, err
+	}
+	v.Countdowns = cs[:min(len(cs), stripCountdowns)]
 	if !b.NextChange.IsZero() {
 		v.NextIn = max(int64(b.NextChange.Sub(s.now())/time.Second)+1, 1)
 	}

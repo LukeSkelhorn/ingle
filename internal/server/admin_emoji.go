@@ -20,8 +20,11 @@ type emojiField struct {
 
 func newEmojiField(kind emoji.Kind, value string) emojiField {
 	grid := emoji.Chores
-	if kind == emoji.Reward {
+	switch kind {
+	case emoji.Reward:
 		grid = emoji.Rewards
+	case emoji.Countdown:
+		grid = emoji.Countdowns
 	}
 	return emojiField{Value: value, Grid: grid, Suggest: emoji.SuggestionsJSON(kind), kind: kind}
 }

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/lukeskelhorn/ingle/internal/calendar"
+	"github.com/lukeskelhorn/ingle/internal/chores"
 	"github.com/lukeskelhorn/ingle/internal/photos"
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
@@ -27,6 +28,8 @@ type screensaverView struct {
 	People   []progressView
 	// HasCalendars hides the "nothing on" line when no feeds are set up.
 	HasCalendars bool
+	// Countdown is the soonest countdown, nil for none.
+	Countdown *chores.Countdown
 }
 
 type eventView struct {
@@ -59,6 +62,13 @@ func (s *Server) screensaver(r *http.Request) (screensaverView, error) {
 	b, err := s.Chores.Board(ctx, hhOf(r), s.boardDay(r))
 	if err != nil {
 		return v, err
+	}
+	cs, err := s.countdowns(r)
+	if err != nil {
+		return v, err
+	}
+	if len(cs) > 0 {
+		v.Countdown = &cs[0]
 	}
 	for _, c := range b.Columns {
 		if c.TotalToday == 0 {
