@@ -21,7 +21,8 @@ const historyMax = 200
 type HistoryItem struct {
 	ID int64
 	// Kind is the ledger kind (completion, adjustment, redemption, payout,
-	// manual), or "waiting" for a claim that hasn't been decided yet.
+	// manual, interest, match, brought_forward), or "waiting" for a claim
+	// that hasn't been decided yet.
 	Kind          string
 	Title, Emoji  string // the chore or reward, if any
 	DueTime       string // the chore's time (HH:MM), "" if untimed or not a chore

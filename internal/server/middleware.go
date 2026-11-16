@@ -254,6 +254,9 @@ func (s *Server) clearCookie(w http.ResponseWriter, r *http.Request, name string
 func (s *Server) view(r *http.Request, title string, data any) view {
 	id := identityFrom(r.Context())
 	v := view{Title: title, Data: data, Version: s.version(), ExternalSignIn: s.SignIn != nil}
+	if r.Method == http.MethodGet {
+		v.Edit = r.URL.Query().Get("edit")
+	}
 	screensaverSeconds, calendarSeconds := 0, 0
 	if s.Settings != nil {
 		if set, err := s.Settings.Get(r.Context(), hhOf(r)); err == nil {

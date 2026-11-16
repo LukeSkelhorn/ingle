@@ -22,16 +22,17 @@
           {{template "avatar" (avatar .Person "md")}}
           <span class="column__who">
             <span class="column__name">{{.Person.Name}}</span>
-            <span class="column__balance">{{pts .Points}}{{if .Pence}} · {{money .Pence}}{{end}}</span>
+            <span class="column__balance">{{pts .Points}}{{if .Pence}} · {{money .Pence}}{{end}}
+              {{- if moduleOn "rewards"}}{{with .Goal}}{{if .ShowToGo}} · <span class="column__togo">{{togo .NeedPoints .NeedPence}}</span>{{end}}{{end}}{{end}}</span>
             {{if and .Waiting (moduleOn "rewards")}}<span class="tag tag--wait column__waiting">🎁 {{.Waiting}} waiting</span>{{end}}
           </span>
         </button>
       </h2>
       {{if moduleOn "rewards"}}{{with .Goal}}{{template "goal" (dict "Goal" . "PersonID" $col.Person.ID)}}{{end}}{{end}}
       {{if .TotalToday}}
-      <div class="progress" role="img" aria-label="{{.DoneToday}} of {{.TotalToday}} done today">
+      <div class="progress" role="img" aria-label="{{if .LeftToday}}{{.LeftToday}} left today{{else}}All done today{{end}}">
         <div class="progress__bar"><span style="width: {{percent .DoneToday .TotalToday}}%"></span></div>
-        <span class="progress__text">{{if eq .DoneToday .TotalToday}}All done today 🎉{{else}}{{.DoneToday}} of {{.TotalToday}} done today{{end}}</span>
+        <span class="progress__text">{{if .LeftToday}}{{.LeftToday}} left today{{else}}All done today 🎉{{end}}</span>
       </div>
       {{end}}
       {{if .Cards}}
@@ -379,6 +380,7 @@
       {{- if and .CostPoints .CostPence}} · {{end}}
       {{- if .CostPence}}{{money .HavePence}} of {{money .CostPence}}{{end -}}
     </span>
+    {{- if .ShowToGo}}<span class="goal__togo">{{togo .NeedPoints .NeedPence}}</span>{{end}}
   </p>
   {{template "goal_bar" .}}
   {{if .Waiting}}<p class="goal__status"><span class="tag tag--wait">Waiting for a grown-up</span></p>

@@ -23,7 +23,7 @@
   {{range .People}}
   <li class="saver__person" style="--person: {{.Person.Colour}}">
     {{template "avatar" (avatar .Person "sm")}}
-    <span>{{if eq .Done .Total}}All done ✓{{else}}{{.Done}} of {{.Total}}{{end}}{{if .Overdue}} <span class="tag tag--late">{{.Overdue}} late</span>{{end}}</span>
+    <span>{{if .Left}}{{.Left}} left{{else}}All done ✓{{end}}{{if .Overdue}} <span class="tag tag--late">{{.Overdue}} late</span>{{end}}</span>
   </li>
   {{end}}
 </ul>

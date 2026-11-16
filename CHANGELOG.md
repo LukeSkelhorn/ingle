@@ -6,6 +6,22 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ## [Unreleased]
 
+## [v0.4.3] - 2026-11-16
+
+### Added
+
+- **Clear out old history.** Admin › Settings has **Keep history**: **Everything** (the default), **24 months** or **12 months**. Each night, straight after the backup, Ingle clears out anything older than that, so a backup from before the clear-out still has the full history. Choosing a shorter time asks first.
+  - **Points and money don't change.** Each person's older lines are added up into one **Brought forward** line at the bottom of My money's history.
+  - **Cleared out:** chores ticked off, past chore copies, reward claims and bank requests that have been decided, and activity-feed lines.
+  - **Always kept:** claims, bank requests and chores still waiting for a grown-up; interest and matching lines, so "Interest so far" and goal matching stay right; chores, rewards, people and settings.
+  - **Backups off:** on SQLite with `INGLE_BACKUP_KEEP=0` nothing is cleared, and the setting says so. On Postgres it runs at `INGLE_BACKUP_AT`, and the database's own backups keep the full history. ([DOM-64](https://linear.app/skeltech/issue/DOM-64))
+
+### Changed
+
+- **The board says what's left.** Each column now says "2 left today" instead of "1 of 3 done today", and still "All done today 🎉" at the end. A chore waiting for a grown-up to check counts as done. The screensaver says "2 left" in the same way. A goal now says how much is still needed, e.g. "40 pts to go", "£1.50 to go", or "40 pts and £1.50 to go" when it costs both. This shows on the goal, on the person's own page, and after their balance under their name. It doesn't show once they have enough, or while a claim is waiting. ([DOM-127](https://linear.app/skeltech/issue/DOM-127))
+- **The unlock code and PINs are set in a popup.** Admin › Settings › **Household unlock code** now says whether a code is set ("Code is set ✓"), with **Change code** and **Remove**, or **Set a code** when there isn't one. The keypad only shows in the popup. **Remove** asks first and says what removing it means. A person's **PIN** in Admin › People works the same way. Closing a popup changes nothing. ([DOM-128](https://linear.app/skeltech/issue/DOM-128))
+- **A shorter admin bar.** The bar now keeps the pages you use all the time: **People**, **Chores**, **Completions** and **Rewards**. The rest are in a new **⚙ Settings** menu: Settings, Bank, Photos, Calendars, Devices and Modules. As before, a page only shows when its module is on. When you're on one of those pages, ⚙ Settings shows as the current section. On phones the button is just ⚙, so the bar fits on one line and Board and Sign out stay on screen. ([DOM-129](https://linear.app/skeltech/issue/DOM-129))
+
 ## [v0.4.2] - 2026-11-15
 
 ### Added

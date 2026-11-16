@@ -9,16 +9,19 @@
 {{define "admin_nav"}}
 <header class="admin__bar">
   <a class="admin__brand" href="/admin">{{if .Household}}{{.Household}}{{else}}Ingle{{end}}</a>
+  {{- $nav := adminNav}}
   <nav class="admin__nav" aria-label="Admin">
-    <a href="/admin/people"{{if eq .Nav "people"}} aria-current="page"{{end}}>People</a>
-    <a href="/admin/chores"{{if eq .Nav "chores"}} aria-current="page"{{end}}>Chores</a>
-    <a href="/admin/completions"{{if eq .Nav "completions"}} aria-current="page"{{end}}>Completions</a>
-    {{- range moduleNav}}
+    {{- range $nav.Bar}}
     <a href="{{.Path}}"{{if eq $.Nav .Key}} aria-current="page"{{end}}>{{.Label}}</a>
     {{- end}}
-    <a href="/admin/devices"{{if eq .Nav "devices"}} aria-current="page"{{end}}>Devices</a>
-    <a href="/admin/modules"{{if eq .Nav "modules"}} aria-current="page"{{end}}>Modules</a>
-    <a href="/admin/settings"{{if eq .Nav "settings"}} aria-current="page"{{end}}>Settings</a>
+    <details class="menu menu--nav">
+      <summary class="admin__more" aria-label="Settings"{{if $nav.MenuHas .Nav}} aria-current="true"{{end}}><span aria-hidden="true">⚙</span><span class="admin__more-text"> Settings</span></summary>
+      <div class="menu__panel">
+        {{- range $nav.Menu}}
+        <a href="{{.Path}}"{{if eq $.Nav .Key}} aria-current="page"{{end}}>{{.Label}}</a>
+        {{- end}}
+      </div>
+    </details>
   </nav>
   <div class="admin__me">
     {{with .Viewer.Adult}}{{template "avatar" (avatar . "sm")}} <span class="admin__name">{{.Name}}</span>{{end}}
@@ -27,6 +30,7 @@
       <button class="btn btn--ghost" type="submit">{{if .Viewer.OnDisplayAdmin}}Lock{{else}}Sign out{{end}}</button>
     </form>
   </div>
+  <script src="{{asset "menus.js"}}" defer></script>
 </header>
 {{end}}
 

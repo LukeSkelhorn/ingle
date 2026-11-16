@@ -15,7 +15,6 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/auth"
 	"github.com/lukeskelhorn/ingle/internal/avatar"
 	"github.com/lukeskelhorn/ingle/internal/locale"
-	"github.com/lukeskelhorn/ingle/internal/module"
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 	"github.com/lukeskelhorn/ingle/internal/valid"
 	"github.com/lukeskelhorn/ingle/web"
@@ -121,6 +120,9 @@ type view struct {
 	// ExternalSignIn is set when another service signs adults in: Ingle
 	// shows no email or password for them.
 	ExternalSignIn bool
+	// Edit names the pop-up a page opens with, from ?edit= on a GET: the
+	// links that open admin pop-ups use it when JavaScript is off.
+	Edit string
 }
 
 // viewer describes who is looking at the page.
@@ -176,8 +178,8 @@ func (s *Server) householdFuncs(ctx context.Context) template.FuncMap {
 		// moduleOn "rewards" reports whether a module is switched on, so
 		// pages and partials can hide its pieces.
 		"moduleOn": func(id string) bool { return s.moduleOn(ctx, id) },
-		// moduleNav is the admin bar links of the modules that are on.
-		"moduleNav": func() []module.NavItem { return s.moduleNav(ctx) },
+		// adminNav is the admin bar's links, for the modules that are on.
+		"adminNav": func() adminNav { return s.adminNav(ctx) },
 		"when": func(unix int64) string {
 			loc := s.Locale
 			if s.Settings != nil {
@@ -245,6 +247,7 @@ func (s *Server) staticFuncs() template.FuncMap {
 		"orNames":   func(ps []dbq.Person) string { return joinNames(ps, "or") },
 		"shortDate": shortDate,
 		"worth":     s.worth,
+		"togo":      s.togo,
 		"pts":       pts,
 		"inc":       func(i int) int { return i + 1 },
 		"signedPts": signedPts,
@@ -290,6 +293,22 @@ func (s *Server) worth(points, pence int64) string {
 		parts = append(parts, s.Locale.FormatMoney(pence))
 	}
 	return strings.Join(parts, " · ")
+}
+
+// togo says how much is left to save for a goal: "40 pts to go",
+// "£1.50 to go", or "40 pts and £1.50 to go". It's "" when nothing is left.
+func (s *Server) togo(points, pence int64) string {
+	var parts []string
+	if points > 0 {
+		parts = append(parts, pts(points))
+	}
+	if pence > 0 {
+		parts = append(parts, s.Locale.FormatMoney(pence))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, " and ") + " to go"
 }
 
 // pts formats a points count: "1 pt", "12 pts", "−5 pts" (with a real

@@ -52,6 +52,10 @@ type Column struct {
 	Away       *Holiday // set while this person is on holiday on their own
 }
 
+// LeftToday is how many of the column's cards are still to do. A chore
+// waiting for a grown-up to approve it counts as done.
+func (c Column) LeftToday() int { return c.TotalToday - c.DoneToday }
+
 // Card is one occurrence on the board.
 type Card struct {
 	OccurrenceID int64

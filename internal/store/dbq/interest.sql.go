@@ -137,7 +137,7 @@ UPDATE household_settings
 SET interest_rate_bp = ?, interest_money = ?, interest_points = ?,
     interest_cap_pence = ?, interest_cap_points = ?, interest_since = ?, updated_at = ?
 WHERE household_id = ?
-RETURNING household_id, timezone, day_starts_at, admin_idle_minutes, updated_at, screensaver_idle_minutes, unlock_code_hash, lock_days, lock_from, lock_until, lock_idle_hours, unlock_code_length, calendar_idle_minutes, calendar_chores, interest_rate_bp, interest_money, interest_points, interest_cap_pence, interest_cap_points, interest_since
+RETURNING household_id, timezone, day_starts_at, admin_idle_minutes, updated_at, screensaver_idle_minutes, unlock_code_hash, lock_days, lock_from, lock_until, lock_idle_hours, unlock_code_length, calendar_idle_minutes, calendar_chores, interest_rate_bp, interest_money, interest_points, interest_cap_pence, interest_cap_points, interest_since, keep_history_months
 `
 
 type UpdateInterestSettingsParams struct {
@@ -184,6 +184,7 @@ func (q *Queries) UpdateInterestSettings(ctx context.Context, arg UpdateInterest
 		&i.InterestCapPence,
 		&i.InterestCapPoints,
 		&i.InterestSince,
+		&i.KeepHistoryMonths,
 	)
 	return i, err
 }

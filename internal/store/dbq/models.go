@@ -158,6 +158,7 @@ type HouseholdSetting struct {
 	InterestCapPence       int64   `json:"interest_cap_pence"`
 	InterestCapPoints      int64   `json:"interest_cap_points"`
 	InterestSince          *int64  `json:"interest_since"`
+	KeepHistoryMonths      int64   `json:"keep_history_months"`
 }
 
 type InterestPayment struct {
