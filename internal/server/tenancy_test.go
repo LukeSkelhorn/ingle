@@ -140,6 +140,15 @@ func TestTenancyOtherHouseholdsIDsAreNotFound(t *testing.T) {
 	expect(t, x.aW.post("/admin/people/"+itoa(x.beaID)+"/archive", url.Values{}), http.StatusNotFound)
 	expect(t, x.aW.post("/admin/people/"+itoa(x.beaID)+"/points", url.Values{"points": {"50"}, "note": {"Sneaky"}}), http.StatusNotFound)
 
+	// Countdowns too.
+	expectRedirect(t, x.bW.post("/admin/countdowns", url.Values{"title": {"Bea's party"}, "emoji": {"🎉"}, "on_date": {"2026-07-20"}}),
+		"/admin/countdowns?flash=Added+Bea%27s+party.")
+	party := must(x.h.st.Q.ListCountdowns(store.WithHousehold(t.Context(), x.b), x.b))[0]
+	expect(t, x.aW.get("/admin/countdowns/"+itoa(party.ID)), http.StatusNotFound)
+	expect(t, x.aW.post("/admin/countdowns/"+itoa(party.ID)+"/delete", nil), http.StatusNotFound)
+	expectNot(t, x.aW.get("/board/countdowns"), "Bea")
+	expect(t, x.bW.get("/board/countdowns"), http.StatusOK, "Bea&#39;s party")
+
 	// B's chore and child are untouched.
 	if c := x.choreIn(x.b, "Walk the dog"); c.ArchivedAt != nil {
 		t.Error("A archived B's chore")

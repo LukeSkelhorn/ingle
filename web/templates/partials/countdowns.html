@@ -1,0 +1,178 @@
+{{/* The countdown form's fields (dict "F" countdownForm "Errors"
+     valid.Errors), in admin and in a child's sheet on the board. */}}
+{{define "countdown_fields"}}{{$f := .F}}
+<label class="field">
+  <span>What's happening?</span>
+  <input name="title" value="{{$f.Title}}" required maxlength="60" autocomplete="off" placeholder="Holiday to Spain">
+  {{template "err" index .Errors "title"}}
+</label>
+{{template "emoji_field" (dict "F" $f.Emoji "Err" (index .Errors "emoji"))}}
+<label class="field">
+  <span>Day</span>
+  <input type="date" name="on_date" value="{{$f.OnDate}}" required>
+  {{template "err" index .Errors "on_date"}}
+</label>
+<label class="check">
+  <input type="checkbox" name="yearly" value="1"{{if $f.Yearly}} checked{{end}}>
+  <span>Every year
+    <small class="muted">Like Christmas or an anniversary. Otherwise it goes once the day has been.</small></span>
+</label>
+{{end}}
+
+{{/* The board's strip: the next few countdowns, above the columns. Tapping
+     it opens the Countdowns view. */}}
+{{define "countdown_strip"}}
+{{if .}}
+<button type="button" class="countdown-strip" data-view-to="countdowns" aria-label="Countdowns: {{range $i, $c := .}}{{if $i}}, {{end}}{{$c.Title}} {{$c.Label}}{{end}}">
+  {{range .}}
+  <span class="countdown-chip{{if .Today}} countdown-chip--today{{end}}"{{with .Person}} style="--person: {{.Colour}}"{{end}}>
+    {{if .Person}}{{template "avatar" (avatar .Person "xs")}}{{end}}{{with .Emoji}}<span aria-hidden="true">{{.}}</span>{{end}}
+    <span class="countdown-chip__title">{{.Title}}</span>
+    <span class="countdown-chip__when">{{.Label}}</span>
+  </span>
+  {{end}}
+</button>
+{{end}}
+{{end}}
+
+{{/* The board's Countdowns view (countdownsBoardView), loaded when it's
+     shown. */}}
+{{define "countdowns_view"}}
+<div class="countdowns" data-src="/board/countdowns">
+  {{if .Countdowns}}
+  <ul class="countdowns__list">
+    {{range .Countdowns}}
+    <li class="countdown{{if .Today}} countdown--today{{end}}"{{with .Person}} style="--person: {{.Colour}}"{{end}}>
+      <span class="countdown__emoji" aria-hidden="true">{{if .Emoji}}{{.Emoji}}{{else if .Person}}{{template "avatar" (avatar .Person "md")}}{{else}}⏳{{end}}</span>
+      <span class="countdown__what">
+        <strong class="countdown__title">{{.Title}}</strong>
+        <span class="countdown__date">{{.When}}{{with .Turns}} · turns {{.}}{{end}}</span>
+        {{if and .Person .Emoji}}<span class="countdown__who">{{template "avatar" (avatar .Person "xs")}} {{.Person.Name}}</span>{{end}}
+      </span>
+      {{if .Today}}<span class="countdown__days countdown__days--today">Today! 🎉</span>
+      {{else}}<span class="countdown__days"><b>{{.Days}}</b> <small>{{.DaysWord}}</small></span>{{end}}
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <div class="countdowns__empty">
+    <p>No countdowns yet.</p>
+    <p class="muted">A grown-up can add birthdays in Admin › People and countdowns in Admin › Countdowns.</p>
+  </div>
+  {{end}}
+  {{if or .CanAdd .Adult}}
+  <div class="countdowns__add">
+    {{if .CanAdd}}<button class="btn btn--primary" type="button" hx-get="/board/countdowns/add" hx-target="#sheet-body" hx-swap="innerHTML">+ Add a countdown</button>{{end}}
+    {{if .Adult}}<a class="btn" href="/admin/countdowns">Countdowns in Admin</a>{{end}}
+  </div>
+  {{end}}
+</div>
+{{end}}
+
+{{/* "Who's adding one?": the children allowed to add countdowns. */}}
+{{define "countdown_who"}}
+<div class="picker">
+  <h2 class="picker__title" tabindex="-1" autofocus>Add a countdown</h2>
+  <p class="picker__ask">Who's adding it?</p>
+  <div class="picker__people">
+    {{range .People}}
+    <button type="button" class="picker__person" style="--person: {{.Colour}}"
+            hx-get="/board/countdowns/by/{{.ID}}" hx-target="#sheet-body" hx-swap="innerHTML">
+      {{template "avatar" (avatar . "lg")}}
+      <span>{{.Name}}</span>
+    </button>
+    {{end}}
+  </div>
+  {{if .Adult}}<p class="muted">Grown-ups add countdowns in <a href="/admin/countdowns">Admin › Countdowns</a>.</p>{{end}}
+  <div class="picker__actions">
+    <button class="btn btn--ghost btn--block" type="button" data-close>Close</button>
+  </div>
+</div>
+{{end}}
+
+{{/* A child's PIN before adding a countdown (moneyPinView), as for My
+     money. */}}
+{{define "countdown_pin"}}{{$p := .Person}}
+<div class="picker money-pin" style="--person: {{$p.Colour}}" data-countdown-pin data-person="{{$p.ID}}">
+  <div class="person__head">
+    {{template "avatar" (avatar $p "lg")}}
+    <h2 class="picker__title" tabindex="-1" autofocus>{{$p.Name}}'s countdowns</h2>
+  </div>
+  {{if .NotDisplay}}
+  <p class="muted">Adding countdowns opens on a household display.</p>
+  {{else if not $p.PinHash}}
+  <p>Ask a grown-up to set your PIN in Admin › People.</p>
+  {{else}}
+  <p class="muted">{{if .Expired}}Enter your PIN again.{{else}}Enter your PIN.{{end}}</p>
+  {{template "pinpad" $p.PinLength}}
+  <script>
+    (function () {
+      var root = document.querySelector("#sheet-body [data-countdown-pin]"),
+          sheet = document.getElementById("sheet"),
+          body = document.getElementById("sheet-body"),
+          padEl = root.querySelector("[data-pinpad]"),
+          busy = false, pad;
+      pad = InglePinpad(padEl, {
+        active: function () { return sheet.open && document.body.contains(padEl); },
+        onSubmit: function (pin) {
+          if (busy) return;
+          busy = true;
+          fetch("/board/countdowns/by/" + root.dataset.person + "/pin", {
+            method: "POST", credentials: "same-origin", body: new URLSearchParams({ pin: pin }),
+          })
+            .then(function (r) {
+              if (r.ok) return r.text().then(function (html) {
+                body.innerHTML = html;
+                if (window.htmx) htmx.process(body);
+                var t = body.querySelector("[autofocus]");
+                if (t) t.focus();
+              });
+              return r.json().catch(function () { return {}; }).then(function (d) {
+                pad.error(d.error || "That didn't work. Try again.");
+              });
+            })
+            .catch(function () { pad.error("Can't reach Ingle. Try again."); })
+            .finally(function () { busy = false; });
+        },
+      });
+    })();
+  </script>
+  {{end}}
+  <div class="picker__actions">
+    <button class="btn btn--ghost btn--block" type="button" data-close>Close</button>
+  </div>
+</div>
+{{end}}
+
+{{/* A child's countdowns sheet after their PIN (countdownMineView): add one
+     (or change one of theirs) and the ones they've added. */}}
+{{define "countdown_mine"}}{{$v := .}}
+<div class="picker countdown-mine" style="--person: {{.Person.Colour}}" data-keep-open data-countdown-mine>
+  <div class="person__head">
+    {{template "avatar" (avatar .Person "md")}}
+    <h2 class="picker__title" tabindex="-1" autofocus>{{if .Form.ID}}Change {{.Form.Title}}{{else}}Add a countdown{{end}}</h2>
+  </div>
+  {{with .Done}}<p class="flash" role="status">{{.}}</p>{{end}}
+  <form class="stack" hx-post="{{.Base}}{{if .Form.ID}}/edit/{{.Form.ID}}{{end}}{{.Q}}" hx-target="#sheet-body" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
+    {{template "countdown_fields" (dict "F" .Form "Errors" .Errors)}}
+    <button class="btn btn--primary btn--block" type="submit">{{if .Form.ID}}Save{{else}}Add countdown{{end}}</button>
+  </form>
+  {{if .Mine}}
+  <h3>Yours</h3>
+  <ul class="list">
+    {{range .Mine}}
+    <li class="list__row">
+      <span class="list__main">{{with .Emoji}}{{.}} {{end}}{{.Title}}<small class="muted">{{.When}} · {{.Label}}</small></span>
+      <button class="btn" type="button" hx-get="{{$v.Base}}/edit/{{.ID}}{{$v.Q}}" hx-target="#sheet-body" hx-swap="innerHTML">Change</button>
+      <button class="btn btn--danger" type="button" hx-post="{{$v.Base}}/delete/{{.ID}}{{$v.Q}}" hx-target="#sheet-body" hx-swap="innerHTML"
+              hx-confirm="Delete {{.Title}}?">Delete</button>
+    </li>
+    {{end}}
+  </ul>
+  {{end}}
+  <div class="picker__actions">
+    {{if .Form.ID}}<button class="btn btn--block" type="button" hx-get="{{.Base}}/mine{{.Q}}" hx-target="#sheet-body" hx-swap="innerHTML">Back</button>{{end}}
+    <button class="btn btn--ghost btn--block" type="button" data-close>Done</button>
+  </div>
+</div>
+{{end}}

@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/lukeskelhorn/ingle/internal/avatar"
 	"github.com/lukeskelhorn/ingle/internal/chores"
@@ -131,6 +132,9 @@ type personForm struct {
 	Colours []string
 	Emojis  []string
 
+	Birthday         chores.Birthday // as typed, or saved
+	CanAddCountdowns bool            // a child may add countdowns on the board
+
 	Goal    int64        // the reward they're saving for, 0 for none
 	Rewards []dbq.Reward // the rewards they may have, to pick a goal from (editing only)
 
@@ -174,6 +178,8 @@ func (s *Server) personFormFor(r *http.Request, p dbq.Person) personForm {
 	f.ID, f.Name, f.Kind, f.Colour, f.SortOrder = p.ID, p.Name, p.Kind, p.Colour, p.SortOrder
 	f.Pictures = p.PictureCards == 1
 	f.EarnsInterest = p.InterestOptOut == 0
+	f.Birthday = chores.BirthdayOf(p)
+	f.CanAddCountdowns = p.CanAddCountdowns == 1
 	f.Archived = p.ArchivedAt != nil
 	f.IsAdult = p.Kind == household.KindAdult
 	f.HasPIN = p.PinHash != nil
@@ -285,6 +291,13 @@ func (s *Server) readPersonForm(w http.ResponseWriter, r *http.Request, f *perso
 	if r.Form.Has("interest_shown") {
 		f.EarnsInterest = fm.checked("earns_interest")
 	}
+	if r.Form.Has("countdowns_shown") {
+		f.Birthday = chores.Birthday{Day: fm.str("birth_day"), Month: fm.str("birth_month"), Year: fm.str("birth_year")}
+		if _, _, msg := f.Birthday.Parse(s.boardDay(r)); msg != "" {
+			fm.errs.Add("birthday", msg)
+		}
+		f.CanAddCountdowns = fm.checked("can_add_countdowns")
+	}
 
 	in = household.PersonInput{Name: f.Name, Kind: f.Kind, Colour: f.Colour, SortOrder: f.SortOrder, PictureCards: f.Pictures}
 	switch f.AvatarMode {
@@ -341,6 +354,10 @@ func (s *Server) handlePersonCreate(w http.ResponseWriter, r *http.Request) {
 			s.renderPerson(w, r, http.StatusUnprocessableEntity, f, errs, "")
 			return
 		}
+		s.serverError(w, r, err)
+		return
+	}
+	if err := s.savePersonCountdowns(r, p, f); err != nil {
 		s.serverError(w, r, err)
 		return
 	}
@@ -402,6 +419,14 @@ func (s *Server) handlePersonUpdate(w http.ResponseWriter, r *http.Request) {
 			}
 			p.InterestOptOut = boolInt64(optOut)
 		}
+	}
+	if err := s.savePersonCountdowns(r, p, f); err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	if p, err = s.Household.Person(r.Context(), hhOf(r), p.ID); err != nil {
+		s.serverError(w, r, err)
+		return
 	}
 	if r.Form.Has("goal") && s.moduleOn(r.Context(), modRewards) {
 		if p, err = s.savePersonGoal(r, p, newForm(r).optID("goal")); errors.Is(err, chores.ErrNotFound) {
@@ -578,4 +603,35 @@ func boolInt64(b bool) int64 {
 		return 1
 	}
 	return 0
+}
+
+// savePersonCountdowns saves the birthday and "Can add countdowns" from the
+// form, when it showed them (Countdowns is on).
+func (s *Server) savePersonCountdowns(r *http.Request, p dbq.Person, f personForm) error {
+	if !r.Form.Has("countdowns_shown") {
+		return nil
+	}
+	md, year, _ := f.Birthday.Parse(s.boardDay(r))
+	if err := s.Chores.SetBirthday(r.Context(), hhOf(r), p.ID, md, year); err != nil {
+		return err
+	}
+	return s.Chores.SetCanAddCountdowns(r.Context(), hhOf(r), p.ID, f.CanAddCountdowns && p.Kind == household.KindChild)
+}
+
+// BirthDays is the day choices for the birthday.
+func (personForm) BirthDays() []string {
+	out := make([]string, 31)
+	for i := range out {
+		out[i] = strconv.Itoa(i + 1)
+	}
+	return out
+}
+
+// BirthMonths is the month choices for the birthday: value and name.
+func (personForm) BirthMonths() [][2]string {
+	out := make([][2]string, 12)
+	for i := range out {
+		out[i] = [2]string{strconv.Itoa(i + 1), time.Month(i + 1).String()}
+	}
+	return out
 }

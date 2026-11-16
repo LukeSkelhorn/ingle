@@ -6,6 +6,14 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ## [Unreleased]
 
+### Added
+
+- **Countdowns.** Count down the days to birthdays, holidays and big days. It's a new module, on by default.
+  - **On the board:** a strip above the columns shows the next three, e.g. "🏖️ Holiday to Spain · 3 days". Tap it, or swipe past the calendar, for the **Countdowns** view with all of them. The screensaver shows the soonest.
+  - **Admin › Countdowns:** add a countdown with a name, an emoji, a day and, optionally, who it's for (it shows their picture). Tick **Every year** for days like Christmas or an anniversary. Otherwise it goes once the day has been.
+  - **Birthdays:** Admin › People has an optional **Birthday**. It counts down every year without adding a countdown. With the year, it says how old they're turning.
+  - **Kids can add their own:** tick **Can add countdowns** for a child in Admin › People. They tap **+ Add a countdown** on a household display, choose themselves and type their PIN. They can change or delete only the ones they added. ([DOM-112](https://linear.app/skeltech/issue/DOM-112))
+
 ### Changed
 
 - **Saving goals say what's left.** The goal under a child's name, and the Saving for box in My money, now say how much is left to save ("40 pts to go") instead of "60 of 100 pts". The bar still shows how far along they are.

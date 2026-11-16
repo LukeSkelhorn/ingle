@@ -29,7 +29,7 @@ func TestValid(t *testing.T) {
 			t.Errorf("Valid(%q) = true", s)
 		}
 	}
-	for _, grid := range [][]string{Chores, Rewards} {
+	for _, grid := range [][]string{Chores, Rewards, Countdowns} {
 		for _, e := range grid {
 			if !Valid(e) {
 				t.Errorf("grid emoji %q isn't Valid", e)
@@ -57,6 +57,9 @@ func TestSuggest(t *testing.T) {
 		{"Extra 30 min screen time", Reward, "📱"},
 		{"Ice cream trip", Reward, "🍦"},
 		{"Feed the dog", Reward, ""},
+		{"Sam's birthday party", Countdown, "🎂"},
+		{"Holiday to Spain", Countdown, "🏖️"},
+		{"Christmas", Countdown, "🎄"},
 	} {
 		if got := Suggest(c.title, c.kind); got != c.want {
 			t.Errorf("Suggest(%q, %d) = %q, want %q", c.title, c.kind, got, c.want)

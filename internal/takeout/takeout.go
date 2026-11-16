@@ -48,6 +48,7 @@ var Tables = []Table{
 	{Name: "reward_people", Key: "household_id"},
 	{Name: "chore_occurrences", Key: "household_id"},
 	{Name: "holidays", Key: "household_id"},
+	{Name: "countdowns", Key: "household_id"},
 	{Name: "chores", Key: "household_id"},
 	{Name: "person_bank", Key: "household_id"},
 	{Name: "match_offers", Key: "household_id"},

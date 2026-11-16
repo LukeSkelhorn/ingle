@@ -18,6 +18,7 @@
       <nav class="views__dots" aria-label="View">
         <button type="button" data-view-to="chores" aria-pressed="true"><i aria-hidden="true"></i><span>Chores</span></button>
         <button type="button" data-view-to="calendar" aria-pressed="false"><i aria-hidden="true"></i><span>Calendar</span></button>
+        {{if moduleOn "countdowns"}}<button type="button" data-view-to="countdowns" aria-pressed="false"><i aria-hidden="true"></i><span>Countdowns</span></button>{{end}}
       </nav>
       {{end}}
     </div>
@@ -26,11 +27,13 @@
     </div>
   </header>
 
-  {{/* Chores and, unless locked, the calendar: swipe or tap the dots to
-       switch. The calendar loads the first time it's shown. */}}
+  {{/* Chores and, unless locked, the calendar and countdowns: swipe or tap
+       the dots to switch. The calendar loads the first time it's shown,
+       the countdowns each time. */}}
   <div class="views" data-view="chores">
     <div class="views__panel" data-panel="chores">{{template "board" .Data.Board}}</div>
     {{if not .Data.Lock.Locked}}<section id="calendar" class="views__panel cal" data-panel="calendar" aria-label="Calendar" hidden></section>{{end}}
+    {{if and (not .Data.Lock.Locked) (moduleOn "countdowns")}}<section id="countdowns" class="views__panel" data-panel="countdowns" aria-label="Countdowns" hidden></section>{{end}}
   </div>
 
   <dialog id="sheet" class="sheet" aria-label="Chore"><div id="sheet-body"></div></dialog>
@@ -240,12 +243,14 @@
   })();
 </script>
 <script>
-  // Chores and Calendar views. Swipe across the board or tap the dots; on a
-  // display the calendar goes back to the chores after
-  // {{.Viewer.CalendarSeconds}}s untouched (0 = never).
+  // Chores, Calendar and Countdowns views. Swipe across the board or tap
+  // the dots; on a display the calendar and countdowns go back to the
+  // chores after {{.Viewer.CalendarSeconds}}s untouched (0 = never).
   (function () {
     var views = document.querySelector(".views"),
         cal = document.getElementById("calendar"),
+        cds = document.getElementById("countdowns"),
+        order = Array.prototype.map.call(document.querySelectorAll(".views__panel"), function (p) { return p.dataset.panel; }),
         sheet = document.getElementById("sheet"),
         saverEl = document.getElementById("screensaver"),
         calIdleMs = {{.Viewer.CalendarSeconds}} * 1000,
@@ -262,8 +267,8 @@
     }
 
     function show(view) {
-      if (!cal || view === current()) return;
-      var from = current();
+      if (!cal || view === current() || order.indexOf(view) < 0) return;
+      var from = current(), forward = order.indexOf(view) > order.indexOf(from);
       views.dataset.view = view;
       document.querySelectorAll(".views__panel").forEach(function (p) {
         var on = p.dataset.panel === view;
@@ -271,10 +276,10 @@
         p.classList.remove("views__panel--in-left", "views__panel--in-right");
         if (on && !still.matches) {
           void p.offsetWidth; // restart the animation
-          p.classList.add(view === "calendar" ? "views__panel--in-right" : "views__panel--in-left");
+          p.classList.add(forward ? "views__panel--in-right" : "views__panel--in-left");
         }
       });
-      document.querySelectorAll("[data-view-to]").forEach(function (b) {
+      document.querySelectorAll(".views__dots [data-view-to]").forEach(function (b) {
         b.setAttribute("aria-pressed", b.dataset.viewTo === view ? "true" : "false");
       });
       if (view === "calendar") {
@@ -282,21 +287,29 @@
         // the way in: a chore just ticked here shows on the calendar.
         if (!loaded) { loaded = true; load("/board/calendar"); } else reload();
         resetIdle();
+      } else if (view === "countdowns") {
+        loadCountdowns();
+        resetIdle();
       } else {
         clearTimeout(idleTimer);
-        if (from === "calendar") window.scrollTo(0, 0);
       }
+      if (from !== "chores") window.scrollTo(0, 0);
+    }
+    function loadCountdowns() {
+      if (cds && window.htmx) htmx.ajax("GET", "/board/countdowns", { target: cds, swap: "innerHTML" });
     }
     window.IngleViews = { show: show };
     if (!cal) return;
 
-    document.querySelectorAll("[data-view-to]").forEach(function (b) {
-      b.addEventListener("click", function () { show(b.dataset.viewTo); });
+    // Delegated: the board's countdown strip is re-rendered with the board.
+    document.addEventListener("click", function (e) {
+      var b = e.target.closest && e.target.closest("[data-view-to]");
+      if (b) show(b.dataset.viewTo);
     });
 
     function resetIdle() {
       clearTimeout(idleTimer);
-      if (calIdleMs > 0 && current() === "calendar") idleTimer = setTimeout(goneIdle, calIdleMs);
+      if (calIdleMs > 0 && current() !== "chores") idleTimer = setTimeout(goneIdle, calIdleMs);
     }
     // Back to the chores, with the Chores button back to the household's
     // setting and no filters: the next look at the calendar leaves them out.
@@ -316,6 +329,11 @@
     // Live: the calendar re-fetches what it's showing when the board
     // changes, and every 15 minutes for new events.
     document.addEventListener("ingle:board", reload);
+    // Countdowns re-fetch when they change here (a child's sheet) or on
+    // another board.
+    function countdownsChanged() { if (current() === "countdowns") loadCountdowns(); }
+    document.addEventListener("ingle:board", countdownsChanged);
+    document.body.addEventListener("ingle:countdowns", countdownsChanged);
     setInterval(function () { if (current() === "calendar") reload(); }, 15 * 60 * 1000);
     document.addEventListener("visibilitychange", function () { if (!document.hidden && current() === "calendar") reload(); });
 
@@ -348,8 +366,8 @@
       down = null;
       if (Math.abs(dx) < 60 || Math.abs(dx) < 2 * Math.abs(dy)) return;
       if (scrollsSideways(start, dx)) return;
-      var to = dx < 0 ? "calendar" : "chores";
-      if (to === current()) return;
+      var to = order[order.indexOf(current()) + (dx < 0 ? 1 : -1)];
+      if (!to || to === current()) return;
       swallowUntil = Date.now() + 400;
       show(to);
     }

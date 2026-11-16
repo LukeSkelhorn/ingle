@@ -28,6 +28,13 @@ var Rewards = []string{
 	"🌙", "🛌", "📺", "🎁", "💷", "⭐", "👑", "🦄", "🦖", "🚀",
 }
 
+// Countdowns is the countdown picker: birthdays, holidays and big days.
+var Countdowns = []string{
+	"🎂", "🎉", "🎁", "🎈", "🎄", "🎅", "🎃", "👻", "🐣", "🐰",
+	"💝", "💍", "👶", "🍼", "🏖️", "✈️", "🏕️", "🚗", "🎢", "🎡",
+	"🏰", "⛄", "🎆", "🎓", "🏫", "⚽", "🎭", "🎤", "🐶", "⭐",
+}
+
 // Kind is what an emoji is for, which picks the suggestions.
 type Kind int
 
@@ -35,6 +42,7 @@ type Kind int
 const (
 	Chore Kind = iota
 	Reward
+	Countdown
 )
 
 // Words that suggest an emoji, by kind. Keys are lowercase words or
@@ -81,6 +89,21 @@ var suggestions = map[Kind]map[string]string{
 		"tv": "📺", "telly": "📺",
 		"present": "🎁", "surprise": "🎁", "gift": "🎁",
 		"money": "💷", "pocket money": "💷", "cash": "💷",
+	},
+	Countdown: {
+		"birthday": "🎂", "birthdays": "🎂", "bday": "🎂",
+		"party": "🎉", "new year": "🎆", "new years": "🎆", "fireworks": "🎆", "bonfire": "🎆",
+		"christmas": "🎄", "xmas": "🎄", "santa": "🎅",
+		"halloween": "🎃", "easter": "🐣",
+		"valentine": "💝", "valentines": "💝", "anniversary": "💝", "wedding": "💍",
+		"baby": "👶", "due": "👶", "due date": "👶",
+		"holiday": "🏖️", "holidays": "🏖️", "beach": "🏖️", "seaside": "🏖️",
+		"flight": "✈️", "fly": "✈️", "abroad": "✈️", "camping": "🏕️", "trip": "🚗", "road trip": "🚗",
+		"theme park": "🎢", "rollercoaster": "🎢", "fair": "🎡", "disney": "🏰", "disneyland": "🏰",
+		"snow": "⛄", "winter": "⛄",
+		"school": "🏫", "term": "🏫", "first day": "🏫", "graduation": "🎓",
+		"match": "⚽", "football": "⚽", "show": "🎭", "panto": "🎭", "play": "🎭", "concert": "🎤",
+		"puppy": "🐶",
 	},
 }
 
