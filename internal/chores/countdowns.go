@@ -175,6 +175,26 @@ func (s *Service) Countdowns(ctx context.Context, householdID int64, boardDay ti
 	return countdownViews(rows, people, links, boardDay, withPassed), nil
 }
 
+// CountdownsOn lists the countdowns and birthdays that fall from first to
+// last (local midnights, under a year apart), by day (YYYY-MM-DD), for the
+// board calendar. Yearly ones and birthdays fall every year; a birthday
+// knows the age turned that year. Their Days and Label count from first,
+// not from today.
+func (s *Service) CountdownsOn(ctx context.Context, householdID int64, first, last time.Time) (map[string][]Countdown, error) {
+	all, err := s.Countdowns(ctx, householdID, first, true)
+	if err != nil {
+		return nil, err
+	}
+	from, to := first.Format(DateLayout), last.Format(DateLayout)
+	out := map[string][]Countdown{}
+	for _, c := range all {
+		if from <= c.Next && c.Next <= to {
+			out[c.Next] = append(out[c.Next], c)
+		}
+	}
+	return out, nil
+}
+
 func countdownViews(rows []dbq.Countdown, people []dbq.Person, links []dbq.ListCountdownPeopleRow, boardDay time.Time, withPassed bool) []Countdown {
 	today := time.Date(boardDay.Year(), boardDay.Month(), boardDay.Day(), 0, 0, 0, 0, time.UTC)
 	todayS := today.Format(DateLayout)
