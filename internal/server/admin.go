@@ -29,6 +29,10 @@ type adminHome struct {
 	ModuleNames string
 	Lock        lockView
 	Activity    []dbq.ListRecentActivityWithActorRow
+	// NeedPeople and NeedDisplay suggest getting started: adding the
+	// family while there's just one person, and setting up a display
+	// while there's none.
+	NeedPeople, NeedDisplay bool
 }
 
 func (s *Server) handleAdminHome(w http.ResponseWriter, r *http.Request) {
@@ -96,9 +100,19 @@ func (s *Server) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	needDisplay := false
+	if identityFrom(ctx).Device == nil {
+		displays, err := s.Store.Q.ListDevices(ctx, hhOf(r))
+		if err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+		needDisplay = len(displays) == 0
+	}
 	v := s.view(r, "Admin", adminHome{
 		People: len(people), Chores: len(chs), Rewards: len(rewards), Pending: len(pending) + len(claims), Bank: bank, StaleBanks: stale,
 		ModulesChosen: mods.Chosen, ModuleNames: names, Lock: lv, Activity: act,
+		NeedPeople: len(people) == 1, NeedDisplay: needDisplay,
 	})
 	v.Nav = "home"
 	s.render(w, r, http.StatusOK, "admin_home", v)

@@ -6,6 +6,10 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ## [Unreleased]
 
+### Added
+
+- **Getting started.** Admin's home now suggests what to do next. While you're the only person in the household, it says **Add your family**. Until there's a household display, it says **Set up the wall display**, which takes you to Admin › Devices. Each suggestion goes once it's done.
+
 ## [v0.4.5] - 2026-11-16
 
 ### Added
