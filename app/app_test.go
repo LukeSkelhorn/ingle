@@ -227,13 +227,12 @@ func TestCreateHousehold(t *testing.T) {
 				http.Redirect(w, r, "/admin", http.StatusSeeOther)
 			})
 			mux.Handle("POST /pin", h.RequireAdmin(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				person, ok := app.AdultOf(r)
-				if !ok {
+				if _, ok := app.AdultOf(r); !ok {
 					http.Error(w, "no adult", http.StatusInternalServerError)
 					return
 				}
 				var fe app.FieldErrors
-				if err := h.SetPIN(r.Context(), app.HouseholdOf(r), person, r.FormValue("pin")); errors.As(err, &fe) {
+				if err := h.SetPIN(r, r.FormValue("pin")); errors.As(err, &fe) {
 					http.Error(w, "fields: "+strings.Join(slices.Sorted(maps.Keys(fe)), ","), http.StatusUnprocessableEntity)
 					return
 				} else if err != nil {
@@ -286,6 +285,10 @@ func TestCreateHousehold(t *testing.T) {
 	}
 	if code, _ := do(mum, http.MethodPost, "/pin", url.Values{"pin": {"2468"}}); code != http.StatusNoContent {
 		t.Errorf("pin = %d", code)
+	}
+	// Setting it kept this session.
+	if code, _ := do(mum, http.MethodGet, "/admin/people", nil); code != http.StatusOK {
+		t.Errorf("after setting the PIN, people = %d", code)
 	}
 
 	// Another household can't see the Smiths.

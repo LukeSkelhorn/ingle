@@ -242,9 +242,16 @@ func (s *Server) CreateHousehold(ctx context.Context, in household.NewHouseholdI
 	return h.ID, p.ID, nil
 }
 
-// SetPIN sets adult personID's own PIN, for unlocking admin on a display.
-func (s *Server) SetPIN(ctx context.Context, hh, personID int64, pin string) error {
-	return s.Household.SetPIN(withHousehold(ctx, hh), hh, personID, personID, pin, nil)
+// SetPIN sets the PIN of the adult signed in on r, for unlocking admin
+// on a display. Like changing it in Admin › People, it signs them out
+// everywhere else, but not here.
+func (s *Server) SetPIN(r *http.Request, pin string) error {
+	sess := identityFrom(r.Context()).Session
+	if sess == nil {
+		return errors.New("server: SetPIN: nobody is signed in")
+	}
+	hh := sess.Person.HouseholdID
+	return s.Household.SetPIN(withHousehold(r.Context(), hh), hh, sess.Person.ID, sess.Person.ID, pin, sess.TokenHash)
 }
 
 // AdultOf returns the adult signed in on r, if any.

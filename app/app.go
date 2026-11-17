@@ -179,10 +179,12 @@ func (h Helpers) CreateHousehold(ctx context.Context, in CreateHouseholdInput) (
 	return hh, p, fieldErrors(err)
 }
 
-// SetPIN sets adult personID's PIN (4 to 6 digits), which unlocks admin
-// on a household display. An invalid PIN is a [FieldErrors].
-func (h Helpers) SetPIN(ctx context.Context, householdID, personID int64, pin string) error {
-	return fieldErrors(h.srv.SetPIN(ctx, householdID, personID, pin))
+// SetPIN sets the PIN (4 to 6 digits) of the adult signed in on r, which
+// unlocks admin on a household display. As when it's changed in Admin,
+// their other sessions end, but not r's. An invalid PIN is a
+// [FieldErrors].
+func (h Helpers) SetPIN(r *http.Request, pin string) error {
+	return fieldErrors(h.srv.SetPIN(r, pin))
 }
 
 // AdultOf returns the adult signed in on a request, if any.
