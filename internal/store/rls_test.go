@@ -206,15 +206,16 @@ func seed(t *testing.T, st *store.Store, name string, now time.Time) int64 {
 // has to, then add it here.
 func TestAsSystemCallers(t *testing.T) {
 	want := map[string]int{
-		"app/app.go:build":                        1, // list households for the jobs
-		"app/app.go:eachHousehold":                1, // list households for the jobs
-		"internal/auth/auth.go:Display":           1, // display by token
-		"internal/auth/auth.go:SignIn":            1, // adult by email
-		"internal/auth/auth.go:Session":           1, // session by token
-		"internal/auth/auth.go:EndSession":        1, // session by token
-		"internal/server/modules.go:households":   1, // list households for the module loops
-		"internal/store/store.go:EnsureHousehold": 1, // self-hosted's one household
-		"internal/store/store.go:CanBypassRLS":    1, // reads pg_roles
+		"app/app.go:build":                                1, // list households for the jobs
+		"app/app.go:eachHousehold":                        1, // list households for the jobs
+		"internal/auth/auth.go:Display":                   1, // display by token
+		"internal/auth/auth.go:SignIn":                    1, // adult by email
+		"internal/auth/auth.go:Session":                   1, // session by token
+		"internal/auth/auth.go:EndSession":                1, // session by token
+		"internal/household/household.go:CreateHousehold": 1, // a new household, before it has an id
+		"internal/server/modules.go:households":           1, // list households for the module loops
+		"internal/store/store.go:EnsureHousehold":         1, // self-hosted's one household
+		"internal/store/store.go:CanBypassRLS":            1, // reads pg_roles
 	}
 	root := filepath.Join("..", "..")
 	got := map[string]int{}

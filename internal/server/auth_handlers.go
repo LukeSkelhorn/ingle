@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net"
@@ -222,6 +223,36 @@ func (s *Server) StartSession(w http.ResponseWriter, r *http.Request, hh, person
 	}
 	s.setCookie(w, r, sessionCookie, token, s.Auth.PersonalIdle())
 	return nil
+}
+
+// CreateHousehold makes a new household and its first adult, for a
+// program whose outside sign-in signs them in (Deps.SignIn). It turns on
+// each module's default, as first-run setup does.
+func (s *Server) CreateHousehold(ctx context.Context, in household.NewHouseholdInput) (hh, personID int64, err error) {
+	h, p, err := s.Household.CreateHousehold(ctx, in)
+	if err != nil {
+		return 0, 0, err
+	}
+	ctx = withHousehold(ctx, h.ID)
+	s.Settings.Invalidate(h.ID)
+	// If this fails it is asked in Admin instead, as after first-run setup.
+	if err := s.Modules.SetDefaults(ctx, h.ID, &p.ID); err != nil {
+		s.Log.ErrorContext(ctx, "set default modules", slog.Any("err", err))
+	}
+	return h.ID, p.ID, nil
+}
+
+// SetPIN sets adult personID's own PIN, for unlocking admin on a display.
+func (s *Server) SetPIN(ctx context.Context, hh, personID int64, pin string) error {
+	return s.Household.SetPIN(withHousehold(ctx, hh), hh, personID, personID, pin, nil)
+}
+
+// AdultOf returns the adult signed in on r, if any.
+func AdultOf(r *http.Request) (personID int64, ok bool) {
+	if sess := identityFrom(r.Context()).Session; sess != nil {
+		return sess.Person.ID, true
+	}
+	return 0, false
 }
 
 // handleSignOut signs out a personal device, or locks admin on a display.
