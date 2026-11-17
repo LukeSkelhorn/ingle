@@ -67,7 +67,7 @@ func (s *Service) CheckUnlockCode(ctx context.Context, device *dbq.Device, code,
 	return who, nil
 }
 
-// CheckUnlockPIN checks the PIN of one adult, picked on a locked household display.
+// CheckUnlockPIN checks the PIN of one adult, picked on a household display.
 func (s *Service) CheckUnlockPIN(ctx context.Context, device *dbq.Device, personID int64, pin, clientAddr string) error {
 	if device == nil {
 		return ErrNotDisplay
