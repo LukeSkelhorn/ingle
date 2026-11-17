@@ -20,7 +20,6 @@ func TestPassword(t *testing.T) {
 			t.Errorf("HashPassword(%q) = %v, want ErrInvalidPassword", pw, err)
 		}
 	}
-	// Length is in characters, not bytes.
 	if err := ValidatePassword("ééééééééé"); err == nil {
 		t.Error("9 characters accepted")
 	}
@@ -60,11 +59,9 @@ func TestLimiter(t *testing.T) {
 	if blocked, _ := l.Blocked("k"); blocked {
 		t.Fatal("still blocked after window")
 	}
-	// The count starts again after a block expires.
 	if l.Fail("k") {
 		t.Fatal("blocked on first failure after expiry")
 	}
-	// Reset clears failures.
 	l.Fail("k")
 	l.Reset("k")
 	for range 2 {
@@ -72,7 +69,6 @@ func TestLimiter(t *testing.T) {
 			t.Fatal("Reset didn't clear failures")
 		}
 	}
-	// Failures spread wider than the window don't accumulate.
 	l.Reset("k")
 	l.Fail("k")
 	now = now.Add(6 * time.Minute)

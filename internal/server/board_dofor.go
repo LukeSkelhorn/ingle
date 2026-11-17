@@ -1,26 +1,23 @@
 package server
 
 import (
+	"errors"
 	"net/http"
 
+	"github.com/lukeskelhorn/ingle/internal/auth"
 	"github.com/lukeskelhorn/ingle/internal/chores"
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
-// doForView is the sheet a long press on a child's chore opens: an adult
-// can say they did it, and get the points themselves. Adults lists every
-// adult, as the one who unlocked the board may not be the one who did it;
-// Adult (that one) is picked to start with.
 type doForView struct {
 	OccurrenceID int64
 	Title, Emoji string
 	Child, Adult dbq.Person
 	Adults       []dbq.Person
-	Points       int64 // what an adult earns
+	Points       int64
+	NeedPIN      bool
 }
 
-// handleDoForSheet is the "I did it" sheet. It needs an adult, signed in or
-// unlocked, like approving a chore.
 func (s *Server) handleDoForSheet(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(r)
 	if !ok {
@@ -28,7 +25,8 @@ func (s *Server) handleDoForSheet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	adult := boardAdult(r)
-	if adult == nil {
+	needPIN := adult == nil
+	if needPIN && identityFrom(r.Context()).Device == nil {
 		s.sheetFailed(w, r, chores.ErrNotAdult)
 		return
 	}
@@ -68,54 +66,71 @@ func (s *Server) handleDoForSheet(w http.ResponseWriter, r *http.Request) {
 	}
 	var adults []dbq.Person
 	for _, p := range people {
-		if p.Kind == "adult" {
+		if p.Kind == "adult" && (!needPIN || p.PinHash != nil) {
 			adults = append(adults, p)
 		}
 	}
-	points, _ := chores.Earns(adult.Kind, ch.Points, ch.Pence, ch.AdultPoints)
-	s.renderPartial(w, r, "do_for", doForView{
+	v := doForView{
 		OccurrenceID: id, Title: ch.Title, Emoji: ch.Emoji,
-		Child: child, Adult: *adult, Adults: adults, Points: points,
-	})
+		Child: child, Adults: adults, NeedPIN: needPIN,
+	}
+	if adult != nil {
+		v.Adult = *adult
+	}
+	v.Points, _ = chores.Earns("adult", ch.Points, ch.Pence, ch.AdultPoints)
+	s.renderPartial(w, r, "do_for", v)
 }
 
-// handleDoFor records an adult doing the child's chore: the one chosen as
-// "by", or else the one who unlocked the board. Someone must be unlocked or
-// signed in, checked here, not just by hiding the sheet; DoFor checks the
-// chosen one is an adult.
 func (s *Server) handleDoFor(w http.ResponseWriter, r *http.Request) {
 	id, child, ok := s.boardAction(w, r)
 	if !ok {
 		return
 	}
+	chosen := newForm(r).optID("by")
 	adult := boardAdult(r)
 	if adult == nil {
-		setToast(w, toast{Message: needAdult, Error: true})
-		s.renderBoard(w, r, http.StatusForbidden)
-		return
+		device := identityFrom(r.Context()).Device
+		if device == nil {
+			setToast(w, toast{Message: needAdult, Error: true})
+			s.renderBoard(w, r, http.StatusForbidden)
+			return
+		}
+		if chosen == nil {
+			keypadError(w, http.StatusBadRequest, "Choose who did it.")
+			return
+		}
+		err := s.Auth.CheckUnlockPIN(r.Context(), device, *chosen, r.PostFormValue("pin"), s.clientAddr(r))
+		switch {
+		case errors.Is(err, auth.ErrLockedOut):
+			keypadError(w, http.StatusTooManyRequests, "Too many tries. Try again in 5 minutes.")
+			return
+		case errors.Is(err, auth.ErrBadCredentials):
+			keypadError(w, http.StatusUnauthorized, "Wrong PIN. Try again.")
+			return
+		case err != nil:
+			s.serverError(w, r, err)
+			return
+		}
 	}
 	if child == nil {
 		s.boardFailed(w, r, "Choose whose chore it is.")
 		return
 	}
-	by := adult.ID
-	if chosen := newForm(r).optID("by"); chosen != nil {
-		by = *chosen
+	by := chosen
+	if by == nil {
+		by = &adult.ID
 	}
-	c, err := s.Chores.DoFor(r.Context(), hhOf(r), id, *child, by)
+	c, err := s.Chores.DoFor(r.Context(), hhOf(r), id, *child, *by)
 	if err != nil {
 		s.boardError(w, r, err)
 		return
 	}
 	s.boardDone(w, r, toast{
-		Message: "Thanks, " + s.personName(r, by) + "! Done for " + s.personName(r, *child) + ".",
+		Message: "Thanks, " + s.personName(r, *by) + "! Done for " + s.personName(r, *child) + ".",
 		Undo:    "/board/completions/" + itoa(c.ID) + "/undo",
 	})
 }
 
-// sheetFailed answers a request for a sheet that can't open: an error toast
-// and the fresh board, swapped in place of the board rather than into the
-// sheet, so no sheet opens.
 func (s *Server) sheetFailed(w http.ResponseWriter, r *http.Request, err error) {
 	msg, ok := boardErrorText(err)
 	if !ok {

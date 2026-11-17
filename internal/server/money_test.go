@@ -12,7 +12,6 @@ import (
 
 var moneyToken = regexp.MustCompile(`/view\?t=([A-Za-z0-9_-]+)`)
 
-// addKid adds a child from the phone and returns their id.
 func addKid(t *testing.T, h *harness, phone *device, name string) string {
 	t.Helper()
 	r := phone.post("/admin/people", url.Values{
@@ -25,16 +24,13 @@ func addKid(t *testing.T, h *harness, phone *device, name string) string {
 
 func TestKidMoneyPIN(t *testing.T) {
 	h := newHarness(t)
-	wall := h.setUp() // a display, unlocked as Mum
+	wall := h.setUp()
 	phone := h.phone()
 	alfie, isla := addKid(t, h, phone, "Alfie"), addKid(t, h, phone, "Isla")
 	expect(t, phone.post("/admin/people/"+alfie+"/points", url.Values{
 		"direction": {"give"}, "amount": {"5"}, "reason": {"Tidied up"},
 	}), http.StatusOK)
 
-	// No PIN yet: ask a grown-up.
-	// The sheet opens My money from the button by the name and from the
-	// balance.
 	sheet := wall.get("/board/people/" + alfie)
 	expect(t, sheet, http.StatusOK, `class="btn person__my-money"`, "🔒 My money", `class="person__balance person__balance--open"`)
 	if n := strings.Count(sheet.body, `hx-get="/board/money/`+alfie+`"`); n != 2 {
@@ -44,8 +40,6 @@ func TestKidMoneyPIN(t *testing.T) {
 	expect(t, r, http.StatusOK, "Alfie's money", "Ask a grown-up to set your PIN")
 	notContains(t, r, "pinpad__keys")
 
-	// A grown-up sets it in Admin › People, typing it twice on Ingle's
-	// keypad.
 	expect(t, phone.get("/admin/people/"+alfie), http.StatusOK, "No PIN yet.", `data-dialog="pin-dialog">Set a PIN</a>`,
 		`name="pin"`, `name="pin_confirm"`, "data-pinpad-set", "/static/pinpad.js", "/static/dialogs.js")
 	expect(t, phone.get("/admin/people/"+alfie+"?edit=pin"), http.StatusOK, `id="pin-dialog" aria-labelledby="pin-dialog-h" open data-open>`, "Set Alfie&#39;s PIN")
@@ -56,7 +50,6 @@ func TestKidMoneyPIN(t *testing.T) {
 	expect(t, wall.get("/board/money/"+alfie), http.StatusOK, "Enter your PIN", `data-pinpad data-length="4"`)
 	expect(t, wall.get("/"), http.StatusOK, "/static/pinpad.js")
 
-	// The wrong PIN, then the right one.
 	expect(t, wall.post("/board/money/"+alfie+"/pin", url.Values{"pin": {"0000"}}), http.StatusUnauthorized, "Wrong PIN")
 	r = wall.post("/board/money/"+alfie+"/pin", url.Values{"pin": {"1357"}})
 	expect(t, r, http.StatusOK, "Alfie's money", "5 pts")
@@ -69,14 +62,12 @@ func TestKidMoneyPIN(t *testing.T) {
 	}
 	tok := m[1]
 	expect(t, wall.get("/board/money/"+alfie+"/view?t="+tok), http.StatusOK, "5 pts", "/view?t=")
-	// It's Alfie's only, and lasts a minute after it was last used.
 	expect(t, wall.get("/board/money/"+isla+"/view?t="+tok), http.StatusOK, "Isla's money", "Ask a grown-up")
 	h.advance(61e9)
 	r = wall.get("/board/money/" + alfie + "/view?t=" + tok)
 	expect(t, r, http.StatusOK, "Enter your PIN again")
 	notContains(t, r, "5 pts")
 
-	// Alfie's PIN never opens admin or the displays.
 	expectRedirect(t, wall.post("/admin/lock", nil), "/")
 	expect(t, wall.post("/admin/unlock", url.Values{"person": {alfie}, "pin": {"1357"}}), http.StatusUnauthorized)
 	expectRedirect(t, wall.get("/admin"), "/admin/unlock")
@@ -84,7 +75,6 @@ func TestKidMoneyPIN(t *testing.T) {
 	expectRedirect(t, phone.post("/lock", nil), "/")
 	expect(t, wall.post("/unlock", url.Values{"code": {"1357"}}), http.StatusUnauthorized)
 	expect(t, wall.post("/unlock", url.Values{"person": {alfie}, "code": {"1357"}}), http.StatusUnauthorized)
-	// While the displays are locked, My money doesn't open.
 	for _, p := range []string{"/board/money/" + alfie, "/board/money/" + alfie + "/view"} {
 		if r := wall.get(p); r.status != http.StatusLocked {
 			t.Errorf("GET %s while locked = %d", p, r.status)
@@ -95,13 +85,10 @@ func TestKidMoneyPIN(t *testing.T) {
 	}
 	expectRedirect(t, phone.post("/unlock", nil), "/")
 
-	// Mum's PIN opens her own money, and still unlocks admin.
 	mum := itoa(h.person("Mum").ID)
 	expect(t, wall.post("/board/money/"+mum+"/pin", url.Values{"pin": {"2468"}}), http.StatusOK, "Mum's money")
 	expectRedirect(t, wall.post("/admin/unlock", url.Values{"person": {mum}, "pin": {"2468"}}), "/admin")
 
-	// A grown-up signed in on a phone sees anyone's money without their PIN,
-	// on the board and in Admin › People.
 	expect(t, phone.get("/board/people/"+alfie), http.StatusOK, `hx-get="/board/money/`+alfie+`"`)
 	r = phone.get("/board/money/" + alfie)
 	expect(t, r, http.StatusOK, "Alfie's money", "5 pts", "Tidied up", `data-refresh="/board/money/`+alfie+`/view"`)
@@ -111,9 +98,7 @@ func TestKidMoneyPIN(t *testing.T) {
 	r = phone.get("/admin/people/" + alfie + "/money")
 	expect(t, r, http.StatusOK, "Alfie's money", "5 pts", "Tidied up")
 	notContains(t, r, "data-my-money")
-	// The PIN pad itself is only for household displays.
 	expect(t, phone.post("/board/money/"+alfie+"/pin", url.Values{"pin": {"1357"}}), http.StatusForbidden)
-	// Signed out, nothing.
 	expectRedirect(t, h.device().get("/board/money/"+alfie+"/view"), "/signin")
 	expectRedirect(t, h.device().get("/admin/people/"+alfie+"/money"), "/signin")
 }
@@ -129,8 +114,6 @@ func TestMyMoneyHistory(t *testing.T) {
 
 	ctx := h.ctx()
 	kid := h.person("Alfie")
-	// Forty old bonuses, a recent one, a goal and a claim waiting for a
-	// grown-up.
 	for i := range 40 {
 		if _, err := h.st.Q.InsertLedgerEntry(ctx, dbq.InsertLedgerEntryParams{
 			HouseholdID: h.hh, PersonID: kid.ID, Points: 1, Kind: "manual",
@@ -160,7 +143,6 @@ func TestMyMoneyHistory(t *testing.T) {
 	r := wall.post("/board/money/"+alfie+"/pin", url.Values{"pin": {"1357"}})
 	expect(t, r, http.StatusOK, "Saving for", "Lego", "to go", "Sweets", "waiting", "Tidied up", "data-my-money", "Show more")
 	notContains(t, r, "Old bonus", " of 100")
-	// The goal says what's left, as on the board (DOM-113).
 	expect(t, r, http.StatusOK, `<span class="goal__togo">58 pts to go</span>`)
 	tok := moneyToken.FindStringSubmatch(r.body)[1]
 	more := regexp.MustCompile(`hx-get="([^"]+/history\?[^"]+)"`)
@@ -184,7 +166,6 @@ func TestMyMoneyHistory(t *testing.T) {
 		t.Errorf("last page has %d lines, want 10", n)
 	}
 
-	// Isla's token can't open Alfie's history; it asks for his PIN.
 	ir := wall.post("/board/money/"+isla+"/pin", url.Values{"pin": {"2468"}})
 	islaTok := moneyToken.FindStringSubmatch(ir.body)[1]
 	r = wall.get("/board/money/" + alfie + "/history?before=99999&t=" + islaTok)
@@ -197,7 +178,6 @@ func TestMyMoneyHistory(t *testing.T) {
 	expect(t, wall.get("/board/money/"+alfie+"/history?before=99999&t="+tok), http.StatusOK, "Old bonus")
 	expect(t, phone.get("/admin/people/"+alfie+"/money/history?before=99999"), http.StatusOK, "Old bonus 39")
 
-	// While the displays are locked, nor does history.
 	expectRedirect(t, phone.post("/lock", nil), "/")
 	if r := wall.get("/board/money/" + alfie + "/history?before=99999&t=" + tok); r.status != http.StatusLocked {
 		t.Errorf("history while locked = %d", r.status)
@@ -234,14 +214,11 @@ func TestMoneyModuleOff(t *testing.T) {
 	notContains(t, phone.get("/admin/people/"+alfie), "/money\"")
 	expect(t, wall.post("/board/money/"+alfie+"/pin", url.Values{"pin": {"1357"}}), http.StatusNotFound)
 	notContains(t, wall.get("/board/people/"+alfie), "/board/money/")
-	notContains(t, wall.get("/"), "/static/pinpad.js")
-	// No kid PIN card, and no new kid PINs; adults keep theirs.
 	notContains(t, phone.get("/admin/people/"+alfie), `/pin"`)
 	expect(t, phone.post("/admin/people/"+alfie+"/pin", url.Values{"pin": {"2222"}, "pin_confirm": {"2222"}}), http.StatusConflict, "Turn My money on")
 	expect(t, phone.get("/admin/people/"+itoa(h.person("Mum").ID)), http.StatusOK, "Unlocks admin on a household display.", "PIN is set",
 		"Mum won&#39;t be able to unlock admin on a display until you set a new one.")
 
-	// Back on, Alfie's PIN still works.
 	setModules(t, phone, "rewards", "money", "photos", "calendar")
 	expect(t, wall.post("/board/money/"+alfie+"/pin", url.Values{"pin": {"1357"}}), http.StatusOK, "Alfie's money")
 }

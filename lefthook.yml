@@ -1,4 +1,3 @@
-# Git hooks: install with `task setup` (runs `lefthook install`).
 pre-commit:
   parallel: false
   commands:

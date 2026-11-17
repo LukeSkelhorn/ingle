@@ -8,7 +8,6 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
-// The harness's clock starts at 00:30 on Wed 1 Jul 2026.
 func TestBankOfMumAndDad(t *testing.T) {
 	h, _, phone := boardHousehold(t)
 	alfie := h.person("Alfie")
@@ -27,7 +26,6 @@ func TestBankOfMumAndDad(t *testing.T) {
 	expect(t, phone.post("/admin/settings/interest", on(url.Values{"interest_rate": {"11"}, "interest_points": {"1"}})),
 		http.StatusUnprocessableEntity, "Enter a rate between 0.01% and 10% a month.")
 
-	// Alfie has £10 and 100 pts before it's turned on.
 	if _, err := h.st.Q.InsertLedgerEntry(h.ctx(), dbq.InsertLedgerEntryParams{
 		HouseholdID: h.hh, PersonID: alfie.ID, Points: 100, Pence: 1000, Kind: "completion",
 		CreatedAt: h.clock().AddDate(0, 0, -30).Unix(),
@@ -38,11 +36,9 @@ func TestBankOfMumAndDad(t *testing.T) {
 		"interest_rate": {"10"}, "interest_money": {"1"}, "interest_points": {"1"}, "interest_cap_money": {"0.80"},
 	})), http.StatusOK, "Interest saved.", `value="10"`, "That's about 213.8% a year.", `value="0.80"`)
 
-	// July hasn't finished, so nothing yet.
 	if n, err := h.srv.Chores.PayInterest(h.ctx(), h.hh); err != nil || n != 0 {
 		t.Fatalf("PayInterest in July = %d, %v", n, err)
 	}
-	// Had it been on since 10 June, June is paid, with the money capped.
 	since := h.clock().AddDate(0, 0, -20).Unix()
 	if _, err := h.st.Q.UpdateInterestSettings(h.ctx(), dbq.UpdateInterestSettingsParams{
 		InterestRateBp: 1000, InterestMoney: 1, InterestPoints: 1, InterestCapPence: 80,
@@ -58,7 +54,6 @@ func TestBankOfMumAndDad(t *testing.T) {
 		"If you keep saving £10.80 and 110 pts, you&#39;ll have about £20.40 and 344 pts this time next year.")
 	expect(t, phone.get("/admin"), http.StatusOK, "paid Alfie their monthly interest")
 
-	// Switched off for Alfie: no interest on My money.
 	expect(t, phone.get(page), http.StatusOK, `name="earns_interest" value="1" checked`)
 	expect(t, phone.post(page, url.Values{
 		"name": {"Alfie"}, "kind": {"child"}, "colour": {alfie.Colour}, "avatar_mode": {"none"}, "interest_shown": {"1"},
@@ -68,7 +63,6 @@ func TestBankOfMumAndDad(t *testing.T) {
 	}
 	expectNot(t, phone.get(page+"/money"), "Interest so far")
 
-	// Off for everyone.
 	expect(t, phone.post("/admin/settings/interest", url.Values{"interest_rate": {"10"}}), http.StatusOK, "Interest is off.")
 	expectNot(t, phone.get(page), "Earns interest")
 }

@@ -13,15 +13,11 @@ import (
 
 // State is which modules a household has on.
 type State struct {
-	On map[string]bool
-	// Chosen is false until an adult has saved Admin › Modules (or set the
-	// household up). Until then every module is on, so an upgrade changes
-	// nothing.
+	On     map[string]bool
 	Chosen bool
 }
 
-// Service reads and changes each household's modules. Every request checks
-// them, so the state is cached, the same way as the lock state.
+// Service reads and changes each household's modules.
 type Service struct {
 	st       *store.Store
 	reg      *Registry
@@ -43,8 +39,7 @@ func (s *Service) Registry() *Registry { return s.reg }
 // SetClock replaces the clock (tests).
 func (s *Service) SetClock(now func() time.Time) { s.now = now }
 
-// OnChange registers fn to be called after the modules change (the server
-// uses it to tell open pages).
+// OnChange registers fn to be called after the modules change.
 func (s *Service) OnChange(fn func(householdID int64)) { s.onChange = fn }
 
 // State returns the household's modules.
@@ -52,9 +47,7 @@ func (s *Service) State(ctx context.Context, householdID int64) (State, error) {
 	return s.StateWith(ctx, s.st.Q, householdID)
 }
 
-// StateWith is State, reading through q when it isn't cached: inside a
-// transaction, pass its queries (SQLite has one connection, so reading
-// outside the transaction would wait for it forever).
+// StateWith is State, reading through q; inside a transaction, pass its queries.
 func (s *Service) StateWith(ctx context.Context, q *dbq.Queries, householdID int64) (State, error) {
 	s.mu.Lock()
 	st, ok := s.cache[householdID]
@@ -77,12 +70,10 @@ func (s *Service) StateWith(ctx context.Context, q *dbq.Queries, householdID int
 		case !st.Chosen:
 			v = true
 		case !ok:
-			// A module added in a later version: its default.
 			v = m.DefaultOn()
 		}
 		st.On[m.ID()] = v
 	}
-	// Keep requirements consistent even if the rows aren't.
 	st.On = s.reg.Plan(st.On, st.On).Final
 	s.mu.Lock()
 	s.cache[householdID] = st
@@ -90,8 +81,7 @@ func (s *Service) StateWith(ctx context.Context, q *dbq.Queries, householdID int
 	return st, nil
 }
 
-// Enabled reports whether the module id is on. If the state can't be read
-// it says on, which is how Ingle behaved before modules.
+// Enabled reports whether the module id is on.
 func (s *Service) Enabled(ctx context.Context, householdID int64, id string) bool {
 	return s.EnabledWith(ctx, s.st.Q, householdID, id)
 }
@@ -108,9 +98,7 @@ func (s *Service) EnabledWith(ctx context.Context, q *dbq.Queries, householdID i
 	return st.On[id]
 }
 
-// Set saves every module's state from final (usually a Plan's Final) and
-// marks the household as having chosen. actor is the adult making the
-// change.
+// Set saves every module's state from final and marks the household as having chosen.
 func (s *Service) Set(ctx context.Context, householdID int64, actor *int64, final map[string]bool) error {
 	before, err := s.State(ctx, householdID)
 	if err != nil {
@@ -145,8 +133,7 @@ func (s *Service) Set(ctx context.Context, householdID int64, actor *int64, fina
 	return nil
 }
 
-// Invalidate drops the cached state, e.g. after the rows were changed
-// directly.
+// Invalidate drops the cached state, e.g. after the rows were changed directly.
 func (s *Service) Invalidate(householdID int64) {
 	s.mu.Lock()
 	delete(s.cache, householdID)

@@ -8,24 +8,18 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
-// Summary is one person's money at a glance: what they can spend, what
-// their waiting reward claims hold, and what they've earned since the start
-// of the week.
+// Summary is one person's money at a glance.
 type Summary struct {
 	Person                dbq.Person
-	Points, Pence         int64 // available: every ledger entry, less what's held
-	HeldPoints, HeldPence int64 // held by waiting reward claims
-	Waiting               int   // how many claims are waiting
-	Goal                  *Goal // what they're saving for, if anything
-	WeekPoints            int64 // earned since weekStart, net of reversals
+	Points, Pence         int64
+	HeldPoints, HeldPence int64
+	Waiting               int
+	Goal                  *Goal
+	WeekPoints            int64
 	WeekPence             int64
 }
 
-// PersonSummary returns the available balance, holds and this week's earnings for an active
-// person in the household. weekStart is the local midnight the week began
-// (locale.StartOfWeek). Spending on rewards and payouts lowers the balance
-// but not what they've earned this week. It returns ErrNotFound for an
-// archived person or one from another household.
+// PersonSummary returns an active person's balance, holds and this week's earnings.
 func (s *Service) PersonSummary(ctx context.Context, householdID, personID int64, weekStart time.Time) (Summary, error) {
 	q := s.st.Q
 	p, err := getPerson(ctx, q, householdID, personID)
@@ -67,8 +61,6 @@ func (s *Service) PersonSummary(ctx context.Context, householdID, personID int64
 		}
 	}
 	if p.Kind == "adult" {
-		// Adults have points only; any money from before stays in the
-		// history but isn't a balance.
 		sum.Pence, sum.HeldPence, sum.WeekPence = 0, 0, 0
 	}
 	return sum, nil

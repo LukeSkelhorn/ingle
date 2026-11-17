@@ -12,11 +12,8 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/valid"
 )
 
-// adjustmentHistory is how far back the history lists go.
 const adjustmentHistory = 30 * 24 * time.Hour
 
-// loadPointsPanel fills in the person page's balance, suggested reasons and
-// recent adjustments.
 func (s *Server) loadPointsPanel(r *http.Request, f *personForm) error {
 	ctx := r.Context()
 	loc := s.Locale
@@ -34,8 +31,6 @@ func (s *Server) loadPointsPanel(r *http.Request, f *personForm) error {
 	return err
 }
 
-// handleAdjustPoints gives someone a bonus or takes points away, from the
-// Points section of their admin page.
 func (s *Server) handleAdjustPoints(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.loadPerson(w, r)
 	if !ok {
@@ -68,7 +63,6 @@ func (s *Server) handleAdjustPoints(w http.ResponseWriter, r *http.Request) {
 		pf.Points = in
 		s.renderPerson(w, r, status, pf, errs, flash)
 	}
-	// done shows a flash without the form: on the list, or on their page.
 	done := func(status int, flash string, undo int64) {
 		if fromList {
 			v := peopleView{}
@@ -79,7 +73,7 @@ func (s *Server) handleAdjustPoints(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		pf := s.personFormFor(r, p)
-		pf.Points.Direction = in.Direction // keep their choice for the next one
+		pf.Points.Direction = in.Direction
 		pf.Points.Undo = undo
 		s.renderPerson(w, r, status, pf, nil, flash)
 	}
@@ -92,7 +86,7 @@ func (s *Server) handleAdjustPoints(w http.ResponseWriter, r *http.Request) {
 	}
 	n, err := strconv.ParseInt(amount, 10, 64)
 	if err != nil || n < 1 {
-		n = 0 // AdjustPoints says what's wrong
+		n = 0
 	}
 	signed := n
 	if in.Direction == "take" {
@@ -107,7 +101,7 @@ func (s *Server) handleAdjustPoints(w http.ResponseWriter, r *http.Request) {
 		again(http.StatusForbidden, nil, "Only adults can change points.")
 		return
 	}
-	if errors.Is(err, chores.ErrNotFound) { // archived
+	if errors.Is(err, chores.ErrNotFound) {
 		done(http.StatusConflict, "Restore them before changing their points.", 0)
 		return
 	}
@@ -122,7 +116,6 @@ func (s *Server) handleAdjustPoints(w http.ResponseWriter, r *http.Request) {
 	done(http.StatusOK, flash, entry.ID)
 }
 
-// handleUndoAdjustment removes an adjustment made in the last few minutes.
 func (s *Server) handleUndoAdjustment(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.loadPerson(w, r)
 	if !ok {
@@ -164,7 +157,6 @@ func (s *Server) handleUndoAdjustment(w http.ResponseWriter, r *http.Request) {
 	reply(http.StatusOK, "Undone.")
 }
 
-// pointsWord is "1 point" or "5 points".
 func pointsWord(n int64) string {
 	if n == 1 {
 		return "1 point"

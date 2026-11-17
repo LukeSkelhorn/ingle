@@ -1,8 +1,4 @@
-// Ingle service worker: makes the board installable and caches static
-// assets. Pages and data always come from the server (network-first) so
-// the wall display never shows stale chores.
-// The server fills in the cache name from a hash of the static files, so
-// every build that changes them starts a fresh cache and drops the old one.
+// The server fills in {{VERSION}} with a hash of the static files.
 const CACHE = "ingle-static-{{VERSION}}";
 
 self.addEventListener("install", () => self.skipWaiting());
@@ -15,7 +11,6 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-// Static assets: from the cache if there, otherwise fetched and kept.
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   if (event.request.method !== "GET" || url.origin !== self.location.origin) return;

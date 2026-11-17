@@ -11,7 +11,6 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/valid"
 )
 
-// On Postgres this runs as a role row-level security applies to.
 func TestCreateHousehold(t *testing.T) {
 	ctx := t.Context()
 	st := store.New(storetest.OpenScoped(t, filepath.Join(t.TempDir(), "ingle.db")))
@@ -45,7 +44,6 @@ func TestCreateHousehold(t *testing.T) {
 	if joneses.ID == smiths.ID {
 		t.Fatal("same household twice")
 	}
-	// Each sees only its own people.
 	for _, c := range []struct {
 		hh   int64
 		want dbq.Person
@@ -56,7 +54,6 @@ func TestCreateHousehold(t *testing.T) {
 		}
 	}
 
-	// An email someone has is a field error, and leaves no household.
 	before, _ := st.Q.ListHouseholdIDs(store.AsSystem(ctx))
 	_, _, err = svc.CreateHousehold(ctx, NewHouseholdInput{
 		HouseholdName: "Again", Timezone: "Europe/London",

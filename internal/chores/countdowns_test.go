@@ -11,7 +11,6 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/valid"
 )
 
-// countdown adds a countdown on Mon 2 Nov 2026.
 func (f *fixture) countdown(in CountdownInput) int64 {
 	f.t.Helper()
 	id, err := f.svc.AddCountdown(f.t.Context(), f.hh, f.adult.ID, in, f.day("2026-11-02"))
@@ -69,8 +68,6 @@ func TestCountdowns(t *testing.T) {
 		t.Errorf("Christmas next = %s (%s)", cs[3].Next, cs[3].When())
 	}
 
-	// After the day: the one-off has gone (unless asked for), the yearly
-	// ones count to next year.
 	got = countdownLabels(f.countdowns("2026-11-06", false))
 	want = []string{"Christmas · 7 weeks", "Alfie's birthday · 11 months"}
 	if !slices.Equal(got, want) {
@@ -83,7 +80,6 @@ func TestCountdowns(t *testing.T) {
 	if b := f.countdowns("2026-11-06", false)[1]; b.Turns != 10 || b.Next != "2027-11-03" || b.When() != "Wed 3 Nov 2027" {
 		t.Errorf("next birthday = %+v", b)
 	}
-	// On the day.
 	if c := f.countdowns("2026-12-25", false)[0]; c.Label() != "Today!" || c.Sentence() != "Christmas is today!" {
 		t.Errorf("on the day = %q / %q", c.Label(), c.Sentence())
 	}
@@ -115,12 +111,10 @@ func TestCountdownsOn(t *testing.T) {
 		}
 		return out
 	}
-	// Across the new year: this year's Christmas, next year's birthday.
 	got := on("2026-12-21", "2027-01-31")
 	if len(got) != 2 || !slices.Equal(got["2026-12-25"], []string{"Christmas"}) || !slices.Equal(got["2027-01-02"], []string{"Alfie's birthday 10"}) {
 		t.Errorf("Dec–Jan = %v", got)
 	}
-	// A one-off shows on its day only, even once it's gone.
 	if got := on("2026-11-02", "2026-11-08"); !slices.Equal(got["2026-11-05"], []string{"Bonfire night"}) || len(got) != 1 {
 		t.Errorf("Bonfire week = %v", got)
 	}
@@ -176,7 +170,7 @@ func TestCountdownChecks(t *testing.T) {
 		{CountdownInput{Title: " ", OnDate: "2026-12-01"}, "title"},
 		{CountdownInput{Title: "This title is far too long to fit on the board's countdown strip, really", OnDate: "2026-12-01"}, "title"},
 		{CountdownInput{Title: "Trip", OnDate: "2026-02-30"}, "on_date"},
-		{CountdownInput{Title: "Trip", OnDate: "2026-11-01"}, "on_date"}, // yesterday
+		{CountdownInput{Title: "Trip", OnDate: "2026-11-01"}, "on_date"},
 		{CountdownInput{Title: "Trip", OnDate: "2060-01-01"}, "on_date"},
 		{CountdownInput{Title: "Trip", OnDate: "2026-12-01", Emoji: "ab"}, "emoji"},
 		{CountdownInput{Title: "Trip", OnDate: "2026-12-01", PeopleIDs: []int64{f.kid.ID, other}}, "people_ids"},
@@ -187,12 +181,10 @@ func TestCountdownChecks(t *testing.T) {
 			t.Errorf("%+v: err = %v, want a %s error", c.in, err, c.field)
 		}
 	}
-	// A yearly one can have a date in the past: it's the first one.
 	if _, err := f.svc.AddCountdown(ctx, f.hh, f.adult.ID, CountdownInput{Title: "Wedding anniversary", OnDate: "2012-06-09", Yearly: true}, day); err != nil {
 		t.Errorf("past yearly: %v", err)
 	}
 
-	// Edit and remove.
 	id := f.countdown(CountdownInput{Title: "Trip", OnDate: "2026-12-01"})
 	if err := f.svc.UpdateCountdown(ctx, f.hh, f.adult.ID, id, CountdownInput{Title: "Big trip", Emoji: "✈️", OnDate: "2026-12-02"}, day); err != nil {
 		t.Fatal(err)
@@ -229,7 +221,7 @@ func TestBirthdayParse(t *testing.T) {
 		{Birthday{Day: "3"}, "", 0, true},
 		{Birthday{Year: "2017"}, "", 0, true},
 		{Birthday{Day: "3", Month: "11", Year: "17"}, "", 0, true},
-		{Birthday{Day: "3", Month: "12", Year: "2026"}, "", 0, true}, // not yet
+		{Birthday{Day: "3", Month: "12", Year: "2026"}, "", 0, true},
 	} {
 		md, year, msg := c.b.Parse(today)
 		if (msg != "") != c.wantError {

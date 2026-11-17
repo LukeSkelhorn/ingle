@@ -1,11 +1,3 @@
-// InglePinpad drives the shared PIN pad (the "pinpad" template): digits
-// from the keys or a keyboard, drawn as dots. When the PIN's length is known
-// (data-length, or reset's second argument) it shows that many dots and
-// submits as soon as the last digit goes in. Otherwise it takes up to six,
-// and → or Enter submits once there are at least four.
-// opts.onSubmit(code) does the unlock; opts.active() (optional) says whether
-// keyboard input is for this pad; opts.onInput() (optional) runs when a
-// digit goes in. Typing into another box on the page never reaches a pad.
 (function () {
   function typingElsewhere(e) {
     var t = e.target;
@@ -70,10 +62,6 @@
     };
   };
 
-  // InglePinpad.set drives a "pinpad_set" block: it hides the PIN boxes and
-  // asks for the PIN on the pad twice instead, so a tablet shows numbers and
-  // not its keyboard. When both match it fills the boxes and, if
-  // data-submit is set, sends the form.
   Pinpad.set = function (box) {
     var form = box.closest("form"),
         fields = box.querySelector(".pinset__fields"),
@@ -85,15 +73,12 @@
         sends = box.dataset.submit === "1",
         entered = "", step = 1, ready = false, mine = false;
 
-    // Hidden boxes can't be "required": the browser would block the form
-    // without saying why. The submit check below says it on the pad.
+    // Hidden boxes can't be required: the browser would block the form silently.
     fields.hidden = true;
     padEl.hidden = false;
     first.required = false;
     if (again) again.required = false;
 
-    // Keys typed on a keyboard go to this pad once it has been used, until
-    // something else on the page is.
     document.addEventListener("pointerdown", function (e) { mine = padEl.contains(e.target); });
     document.addEventListener("focusin", function (e) { mine = padEl.contains(e.target); });
 
@@ -137,7 +122,6 @@
     });
     ask(1);
 
-    // In a pop-up, closing it starts again.
     var dialog = box.closest("dialog");
     if (dialog) {
       dialog.addEventListener("close", function () {
@@ -155,8 +139,6 @@
       pad.show(on);
     });
 
-    // The boxes are hidden, so the browser can't point at them if they're
-    // empty: say so on the pad instead.
     form.addEventListener("submit", function (e) {
       if (first.value) return;
       e.preventDefault();

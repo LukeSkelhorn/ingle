@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-// adminBar splits a page's admin bar into the links in the bar and the
-// ⚙ Settings menu's links.
 func adminBar(t *testing.T, r resp) (bar, menu string) {
 	t.Helper()
 	_, nav, ok := strings.Cut(r.body, `<nav class="admin__nav"`)
@@ -54,7 +52,6 @@ func TestAdminBarSettingsMenu(t *testing.T) {
 		t.Error("Bank shows while My money is off")
 	}
 
-	// My money on: Bank is in the menu. Rewards off: it leaves the bar.
 	setModules(t, phone, modMoney)
 	bar, menu = adminBar(t, phone.get("/admin"))
 	if !strings.Contains(menu, `href="/admin/bank"`) || strings.Contains(bar, "/admin/bank") {

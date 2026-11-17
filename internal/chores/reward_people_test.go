@@ -7,7 +7,6 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
-// chosenReward is a reward for just the given people.
 func (f *fixture) chosenReward(title string, points, pence int64, people ...dbq.Person) dbq.Reward {
 	f.t.Helper()
 	ctx := f.t.Context()
@@ -29,9 +28,6 @@ func (f *fixture) chosenReward(title string, points, pence int64, people ...dbq.
 	return r
 }
 
-// A reward someone may not have can't be claimed or saved for, even by
-// posting its id: it's for other people, or it costs money and they're an
-// adult.
 func TestRewardForChosenPeople(t *testing.T) {
 	f := newFixture(t)
 	ctx := t.Context()
@@ -61,8 +57,6 @@ func TestRewardForChosenPeople(t *testing.T) {
 		})
 	}
 
-	// Alfie may: he saves for it and claims it. Then he's taken off it:
-	// the waiting claim can still be approved.
 	if _, err := f.svc.SetGoal(ctx, f.hh, f.kid.ID, late.ID); err != nil {
 		t.Fatalf("SetGoal: %v", err)
 	}
@@ -78,8 +72,6 @@ func TestRewardForChosenPeople(t *testing.T) {
 	}
 }
 
-// A goal for a reward someone may no longer have doesn't show, even before
-// it's cleared.
 func TestGoalHiddenWhenNotAllowed(t *testing.T) {
 	f := newFixture(t)
 	ctx := t.Context()

@@ -12,30 +12,21 @@ import (
 // HistoryPage is how many older entries Show more adds to My money's history.
 const HistoryPage = 30
 
-// historyMax bounds the first page of history, however busy the last 30
-// days were.
 const historyMax = 200
 
-// HistoryItem is one line of someone's money history: a ledger entry, or a
-// reward claim still waiting for a grown-up.
+// HistoryItem is one line of someone's money history.
 type HistoryItem struct {
-	ID int64
-	// Kind is the ledger kind (completion, adjustment, redemption, payout,
-	// manual, interest, match, brought_forward), or "waiting" for a claim
-	// that hasn't been decided yet.
+	ID            int64
 	Kind          string
-	Title, Emoji  string // the chore or reward, if any
-	DueTime       string // the chore's time (HH:MM), "" if untimed or not a chore
-	Note          string // an adult's reason, or what a reversal undid
-	For           string // whose chore it was, when this person did it for them
-	Points, Pence int64  // signed: what it added or took away
-	At            int64  // unix seconds
+	Title, Emoji  string
+	DueTime       string
+	Note          string
+	For           string
+	Points, Pence int64
+	At            int64
 }
 
-// History is a person's money history, newest first: every entry since
-// since, then, with Show more, HistoryPage entries at a time older than
-// before (0 for the first page). next is what to pass as before for the
-// next page, or 0 when there's nothing older.
+// History is a person's money history, newest first, a page at a time.
 func (s *Service) History(ctx context.Context, householdID, personID int64, since time.Time, before int64) (items []HistoryItem, next int64, err error) {
 	q := s.st.Q
 	if _, err := getPerson(ctx, q, householdID, personID); err != nil {
@@ -61,7 +52,6 @@ func (s *Service) History(ctx context.Context, householdID, personID int64, sinc
 		})
 	}
 	if next == 0 && arg.SinceUnix > 0 {
-		// The first page stops at since; is there anything before it?
 		from := int64(math.MaxInt64)
 		if len(items) > 0 {
 			from = items[len(items)-1].ID
@@ -79,8 +69,7 @@ func (s *Service) History(ctx context.Context, householdID, personID int64, sinc
 	return items, next, nil
 }
 
-// WaitingClaims are a person's reward claims still waiting for a grown-up,
-// newest first, as history lines that take away what they hold.
+// WaitingClaims are a person's waiting reward claims, newest first, as history lines.
 func (s *Service) WaitingClaims(ctx context.Context, householdID, personID int64) ([]HistoryItem, error) {
 	rows, err := s.st.Q.ListPendingRedemptionsForPerson(ctx, dbq.ListPendingRedemptionsForPersonParams{
 		HouseholdID: householdID, PersonID: personID,

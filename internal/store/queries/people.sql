@@ -20,7 +20,6 @@ RETURNING *;
 UPDATE people SET pin_hash = ?, pin_length = ? WHERE household_id = ? AND id = ?;
 
 -- name: LearnPINLength :exec
--- Records an older PIN's length the first time it unlocks.
 UPDATE people SET pin_length = ? WHERE household_id = ? AND id = ? AND pin_length IS NULL;
 
 -- name: ArchivePerson :exec
@@ -63,7 +62,6 @@ SELECT COUNT(*) FROM chores
 WHERE household_id = ? AND assignee_id = ? AND archived_at IS NULL;
 
 -- name: SetGoal :execrows
--- Save for a reward. Only an active person can have a goal.
 UPDATE people SET goal_reward_id = sqlc.arg(reward_id), goal_set_at = sqlc.arg(set_at)
 WHERE household_id = sqlc.arg(household_id) AND id = sqlc.arg(id) AND archived_at IS NULL;
 
@@ -72,11 +70,9 @@ UPDATE people SET goal_reward_id = NULL, goal_set_at = NULL
 WHERE household_id = ? AND id = ?;
 
 -- name: ClearGoalIf :exec
--- Clear a person's goal only if it's still this reward (it was just claimed).
 UPDATE people SET goal_reward_id = NULL, goal_set_at = NULL
 WHERE household_id = sqlc.arg(household_id) AND id = sqlc.arg(id) AND goal_reward_id = sqlc.arg(reward_id);
 
 -- name: ClearGoalsForReward :exec
--- An archived reward stops being anyone's goal.
 UPDATE people SET goal_reward_id = NULL, goal_set_at = NULL
 WHERE household_id = ? AND goal_reward_id = ?;

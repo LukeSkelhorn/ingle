@@ -10,33 +10,21 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/valid"
 )
 
-// Holiday mode pauses chores for a run of dates, for the whole household or
-// one person. While it's on nothing comes due, and anything overdue or
-// missed when it starts is cleared, so chores start again fresh the day
-// after it ends.
-//
-// Who a chore's copy belongs to decides which holidays pause it (owners):
-// its assignee (an assigned or "each" chore), whoever claimed it (a pool
-// chore), or all of a shared chore's people. A shared chore carries on
-// while any of them is home. An unclaimed pool chore has no owners, so only
-// a holiday for everyone pauses it.
-
 // MaxHolidayDays is the longest holiday that can be added.
 const MaxHolidayDays = 366
 
 // Holiday is one holiday, for Admin › Settings and the board.
 type Holiday struct {
 	ID       int64
-	Person   *dbq.Person // nil: everyone
-	StartsOn string      // YYYY-MM-DD
-	EndsOn   string      // YYYY-MM-DD, the last day off
+	Person   *dbq.Person
+	StartsOn string
+	EndsOn   string
 }
 
 // Current reports whether today is one of h's days.
 func (h Holiday) Current(today string) bool { return h.StartsOn <= today && today <= h.EndsOn }
 
-// Dates is h's dates for a list, e.g. "Sat 2 Aug – Sun 10 Aug", or one
-// date for a single day. The year is added when it isn't today's.
+// Dates is h's dates for a list, e.g. "Sat 2 Aug – Sun 10 Aug", or one date for a single day.
 func (h Holiday) Dates(today string) string {
 	from := dayLabel(h.StartsOn, today)
 	if h.EndsOn == h.StartsOn {
@@ -45,8 +33,7 @@ func (h Holiday) Dates(today string) string {
 	return from + " – " + dayLabel(h.EndsOn, today)
 }
 
-// Until says when h ends, for the board: "today" on its last day, "until
-// Sunday" within the week, otherwise "until Sun 10 Aug".
+// Until says when h ends, for the board.
 func (h Holiday) Until(today string) string {
 	end, err1 := time.Parse(DateLayout, h.EndsOn)
 	now, err2 := time.Parse(DateLayout, today)
@@ -72,8 +59,6 @@ func dayLabel(date, today string) string {
 	return t.Format("Mon 2 Jan")
 }
 
-// holidays is the household's holidays, as stored, for working out what's
-// paused.
 type holidays []dbq.Holiday
 
 func loadHolidays(ctx context.Context, q *dbq.Queries, householdID int64, from string) (holidays, error) {
@@ -84,15 +69,10 @@ func loadHolidays(ctx context.Context, q *dbq.Queries, householdID int64, from s
 	return rows, nil
 }
 
-// awayOn reports whether a chore copy belonging to owners is paused on
-// date: everyone's on holiday, or every owner is.
 func (hs holidays) awayOn(date string, owners []int64) bool {
 	return hs.any(owners, func(h dbq.Holiday) bool { return h.StartsOn <= date && date <= h.EndsOn })
 }
 
-// awayAll reports whether a copy belonging to owners is paused on every one
-// of dates (a flexible-day chore's days: it's only paused when none of them
-// is left).
 func (hs holidays) awayAll(dates []string, owners []int64) bool {
 	for _, d := range dates {
 		if !hs.awayOn(d, owners) {
@@ -102,16 +82,10 @@ func (hs holidays) awayAll(dates []string, owners []int64) bool {
 	return len(dates) > 0
 }
 
-// cleared reports whether a not-done copy due on dueOn, belonging to
-// owners, is off the board on today: a holiday that applies has started by
-// today and runs to dueOn or later. That's a chore due during a holiday,
-// and one already overdue (or missed) when a holiday started.
 func (hs holidays) cleared(dueOn, today string, owners []int64) bool {
 	return hs.any(owners, func(h dbq.Holiday) bool { return h.StartsOn <= today && h.EndsOn >= dueOn })
 }
 
-// any reports whether match holds for a holiday for everyone, or (with
-// owners) for a holiday of each owner's.
 func (hs holidays) any(owners []int64, match func(dbq.Holiday) bool) bool {
 	for _, h := range hs {
 		if h.PersonID == nil && match(h) {
@@ -136,7 +110,6 @@ func (hs holidays) any(owners []int64, match func(dbq.Holiday) bool) bool {
 	return true
 }
 
-// slotOwners is who a new copy of c belongs to (see the top of this file).
 func slotOwners(c dbq.Chore, sl slot, who doers) []int64 {
 	switch {
 	case sl.assignee != nil:
@@ -147,7 +120,6 @@ func slotOwners(c dbq.Chore, sl slot, who doers) []int64 {
 	return nil
 }
 
-// rowOwners is who an occurrence on the board belongs to.
 func rowOwners(r dbq.ListBoardRow, shared map[int64][]int64) []int64 {
 	switch {
 	case r.AssigneeID != nil:
@@ -163,11 +135,10 @@ func rowOwners(r dbq.ListBoardRow, shared map[int64][]int64) []int64 {
 // HolidayInput is a holiday being added: PersonID nil for everyone.
 type HolidayInput struct {
 	PersonID *int64
-	From, To string // YYYY-MM-DD
+	From, To string
 }
 
-// Holidays lists the household's holidays that haven't ended by boardDay,
-// soonest first.
+// Holidays lists the household's holidays that haven't ended by boardDay, soonest first.
 func (s *Service) Holidays(ctx context.Context, householdID int64, boardDay time.Time) ([]Holiday, error) {
 	q := s.st.Q
 	rows, err := loadHolidays(ctx, q, householdID, boardDay.Format(DateLayout))
@@ -192,7 +163,7 @@ func holidayViews(rows holidays, people []dbq.Person) []Holiday {
 		if r.PersonID != nil {
 			p, ok := byID[*r.PersonID]
 			if !ok {
-				continue // archived
+				continue
 			}
 			h.Person = &p
 		}
@@ -201,9 +172,7 @@ func holidayViews(rows holidays, people []dbq.Person) []Holiday {
 	return out
 }
 
-// AddHoliday adds a holiday and takes the chores it pauses off the board
-// from boardDay: open ones are removed, and a pool chore claimed by someone
-// now away goes back to Up for grabs. Errors are valid.Errors for the form.
+// AddHoliday adds a holiday and takes the chores it pauses off the board from boardDay.
 func (s *Service) AddHoliday(ctx context.Context, householdID, actorID int64, in HolidayInput, boardDay time.Time) (int64, error) {
 	today := boardDay.Format(DateLayout)
 	errs := valid.Errors{}
@@ -247,8 +216,7 @@ func (s *Service) AddHoliday(ctx context.Context, householdID, actorID int64, in
 	return id, err
 }
 
-// EndHoliday ends a holiday now: its last day becomes yesterday, or it's
-// removed if it hadn't started before today. Chores from today come back.
+// EndHoliday ends a holiday now.
 func (s *Service) EndHoliday(ctx context.Context, householdID, actorID, id int64, boardDay time.Time) error {
 	today := boardDay.Format(DateLayout)
 	err := s.st.WithTx(ctx, func(q *dbq.Queries) error {
@@ -291,9 +259,6 @@ func (s *Service) RemoveHoliday(ctx context.Context, householdID, actorID, id in
 	return s.resume(ctx, householdID, boardDay)
 }
 
-// resume re-materialises the window from boardDay, bringing back chores a
-// shortened or removed holiday no longer pauses (and still leaving out any
-// another holiday does).
 func (s *Service) resume(ctx context.Context, householdID int64, boardDay time.Time) error {
 	if _, err := s.Materialise(ctx, householdID, boardDay, Window); err != nil {
 		return fmt.Errorf("materialise: %w", err)
@@ -301,10 +266,6 @@ func (s *Service) resume(ctx context.Context, householdID int64, boardDay time.T
 	return nil
 }
 
-// pause removes not-yet-started occurrences from today onwards that the
-// household's holidays now pause, and gives a pool chore claimed by
-// someone who's away back to the pool (or removes it, when everyone's away).
-// Done ones are kept.
 func (s *Service) pause(ctx context.Context, q *dbq.Queries, householdID int64, today string) error {
 	hols, err := loadHolidays(ctx, q, householdID, today)
 	if err != nil {
@@ -349,7 +310,6 @@ func (s *Service) pause(ctx context.Context, q *dbq.Queries, householdID int64, 
 	return nil
 }
 
-// maxDate is later than any occurrence.
 const maxDate = "9999-12-31"
 
 func (s *Service) logHoliday(ctx context.Context, q *dbq.Queries, householdID, actorID int64, verb string, id int64) error {

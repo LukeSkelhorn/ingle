@@ -88,7 +88,6 @@ SUMMARY:Next week
 END:VEVENT
 `)
 	got := expand(t, cal, day(24), day(26))
-	// 09:00Z on 25 Oct is 09:00 GMT (clocks went back at 02:00).
 	want := "Grandma visiting@24 00:00, Swimming@24 09:00, Outlook meeting@24 15:00, After the clocks change@25 09:00"
 	if titles(got) != want {
 		t.Errorf("got  %s\nwant %s", titles(got), want)
@@ -135,7 +134,6 @@ SUMMARY:Bin day
 END:VEVENT
 `)
 	got := expand(t, cal, day(22), day(28))
-	// 16:00 local stays 16:00 across the clocks going back on the 25th.
 	want := "Football club@22 16:00, Football club (late)@24 18:00, Bin day@27 00:00, Football club@27 16:00"
 	if titles(got) != want {
 		t.Errorf("got  %s\nwant %s", titles(got), want)
@@ -246,7 +244,6 @@ END:VEVENT
 		t.Errorf("other household sees %+v", got)
 	}
 
-	// A failing refresh keeps the last good events and records the error.
 	status.Store(http.StatusInternalServerError)
 	if err := f.svc.RefreshHousehold(ctx, f.hh); err != nil {
 		t.Fatal(err)
@@ -260,7 +257,6 @@ END:VEVENT
 		t.Errorf("events lost on a failed refresh: %+v", got)
 	}
 
-	// A good refresh picks up changes and clears the error.
 	status.Store(http.StatusOK)
 	body.Store(ics())
 	if err := f.svc.RefreshHousehold(ctx, f.hh); err != nil {
@@ -279,7 +275,6 @@ END:VEVENT
 	}
 }
 
-// The cache covers the board calendar's range: weeks back, months ahead.
 func TestFeedKeepsMonths(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprint(w, ics(`BEGIN:VEVENT
@@ -296,7 +291,6 @@ END:VEVENT
 	if _, err := f.svc.AddFeed(t.Context(), f.hh, f.mum.ID, "Family", srv.URL+"/family.ics", nil); err != nil {
 		t.Fatal(err)
 	}
-	// Now is 24 Oct; 5 weeks back and 13 weeks ahead are both cached.
 	for _, d := range []time.Time{time.Date(2026, 9, 19, 0, 0, 0, 0, london), time.Date(2027, 1, 23, 0, 0, 0, 0, london)} {
 		got := f.svc.Upcoming(f.hh, d, d.AddDate(0, 0, 1))
 		if len(got) != 1 || got[0].Feed != "Family" {
@@ -305,8 +299,6 @@ END:VEVENT
 	}
 }
 
-// With a master key, a feed's address is stored encrypted, and one saved
-// before the key was set is encrypted on the next refresh.
 func TestFeedAddressEncrypted(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/calendar")
@@ -317,7 +309,6 @@ func TestFeedAddressEncrypted(t *testing.T) {
 	ctx := t.Context()
 	secret := srv.URL + "/private-abc123/basic.ics"
 
-	// Saved before there was a key: stored as it is.
 	if _, err := f.svc.AddFeed(ctx, f.hh, f.mum.ID, "Old", secret, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -356,8 +347,6 @@ func TestFeedAddressEncrypted(t *testing.T) {
 	}
 }
 
-// A calendar can be one person's or the family's; the owner is checked, and
-// editing or archiving changes the cached events straight away.
 func TestFeedOwner(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprint(w, ics(`BEGIN:VEVENT
@@ -410,7 +399,6 @@ END:VEVENT
 		t.Errorf("event feed id = %d, want %d", got, feed.ID)
 	}
 
-	// Edit: the name and owner change, and the events follow.
 	if err := f.svc.UpdateFeed(ctx, f.hh, f.mum.ID, feed.ID, "", &stranger.ID); !hasErr(err, "name") || !hasErr(err, "person") {
 		t.Errorf("UpdateFeed bad = %v", err)
 	}
@@ -431,8 +419,6 @@ END:VEVENT
 		t.Errorf("Feeds = %+v", feeds)
 	}
 
-	// Archived people can't be given a calendar, and forgetting someone
-	// makes their calendars the family's.
 	at := int64(2)
 	if err := f.st.Q.ArchivePerson(ctx, dbq.ArchivePersonParams{ArchivedAt: &at, HouseholdID: f.hh, ID: dad.ID}); err != nil {
 		t.Fatal(err)
@@ -449,7 +435,6 @@ END:VEVENT
 		t.Errorf("event owner after ForgetPerson = %v, want the family", *p)
 	}
 
-	// Back to the family.
 	if err := f.svc.UpdateFeed(ctx, f.hh, f.mum.ID, feed.ID, "Work", nil); err != nil {
 		t.Fatal(err)
 	}

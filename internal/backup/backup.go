@@ -1,17 +1,4 @@
-// Package backup writes Ingle backups: a gzipped tar of a consistent
-// snapshot of the database plus the uploaded photos and avatars.
-//
-// An archive unpacks straight into the data directory:
-//
-//	ingle.db
-//	photos/...
-//	avatars/...
-//
-// photo-cache/ is left out because Ingle rebuilds it, and the read-only
-// photos folder (INGLE_PHOTOS_DIR) isn't Ingle's to back up.
-//
-// Backups from before the rename to Ingle are domus-*.tar.gz holding a
-// domus.db. They're still listed and pruned with the new ones.
+// Package backup writes Ingle backups as gzipped tars of the database and uploads.
 package backup
 
 import (
@@ -36,17 +23,12 @@ var Dirs = []string{"photos", "avatars"}
 const (
 	prefix = "ingle-"
 	suffix = ".tar.gz"
-	// dbName is the database's name inside an archive.
 	dbName = "ingle.db"
 )
 
-// prefixes are the archive name prefixes List recognises: the current one
-// and the one from before the rename.
 var prefixes = []string{prefix, "domus-"}
 
-// Run writes a backup of db and dataDir's Dirs into destDir, named after
-// now, and then deletes all but the newest keep backups there. It returns
-// the new archive's path. Nothing is left behind if it fails.
+// Run writes a backup into destDir, prunes to keep, and returns the archive's path.
 func Run(ctx context.Context, db *sql.DB, dataDir, destDir string, keep int, now time.Time) (string, error) {
 	if err := os.MkdirAll(destDir, 0o750); err != nil {
 		return "", fmt.Errorf("backup dir: %w", err)
@@ -105,7 +87,7 @@ func writeArchive(ctx context.Context, path, snap, dataDir string) (err error) {
 				return err
 			}
 			if !e.Type().IsRegular() {
-				return nil // directories are implied; skip links and the like
+				return nil
 			}
 			rel, err := filepath.Rel(dataDir, p)
 			if err != nil {
@@ -152,8 +134,7 @@ func addFile(tw *tar.Writer, path, name string) error {
 	return err
 }
 
-// Check reports whether backups can be written to dir, so a bad mount
-// shows up in the logs at startup rather than at 3am.
+// Check reports whether backups can be written to dir.
 func Check(dir string) error {
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return err
@@ -179,15 +160,12 @@ func List(dir string) ([]string, error) {
 			out = append(out, filepath.Join(dir, n))
 		}
 	}
-	// The timestamps sort by age, whichever prefix the name has.
 	sort.SliceStable(out, func(i, j int) bool {
 		return stamp(filepath.Base(out[i])) < stamp(filepath.Base(out[j]))
 	})
 	return out, nil
 }
 
-// stamp returns the timestamp part of a backup's file name, or "" if name
-// isn't a backup.
 func stamp(name string) string {
 	if !strings.HasSuffix(name, suffix) {
 		return ""
@@ -200,8 +178,7 @@ func stamp(name string) string {
 	return ""
 }
 
-// Prune deletes all but the newest keep backups in dir. keep <= 0 keeps
-// everything.
+// Prune deletes all but the newest keep backups in dir; keep <= 0 keeps all.
 func Prune(dir string, keep int) error {
 	if keep <= 0 {
 		return nil
@@ -219,9 +196,7 @@ func Prune(dir string, keep int) error {
 	return nil
 }
 
-// Next returns the first moment after now at clock time hh:mm in loc. On a
-// day where hh:mm doesn't exist (a spring-forward gap) it's the moment the
-// clocks jump to.
+// Next returns the first moment after now at clock time hh:mm in loc.
 func Next(now time.Time, loc *time.Location, hhmm string) time.Time {
 	t, err := time.Parse("15:04", hhmm)
 	if err != nil {

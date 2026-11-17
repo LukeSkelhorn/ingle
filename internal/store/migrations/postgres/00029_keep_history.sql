@@ -1,5 +1,4 @@
 -- +goose Up
--- See migrations/sqlite/00029_keep_history.sql.
 ALTER TABLE household_settings
     ADD COLUMN keep_history_months bigint NOT NULL DEFAULT 0 CHECK (keep_history_months IN (0, 12, 24));
 ALTER TABLE ledger_entries DROP CONSTRAINT ledger_entries_kind_check;

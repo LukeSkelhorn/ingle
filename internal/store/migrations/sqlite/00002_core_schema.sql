@@ -1,10 +1,4 @@
 -- +goose Up
--- Core Domus data model. Conventions:
---   * every household-scoped table carries household_id (multi-household ready)
---   * timestamps are INTEGER unix seconds (UTC)
---   * local calendar dates are TEXT 'YYYY-MM-DD' in the household timezone
---   * money is INTEGER pence; points are INTEGER
-
 CREATE TABLE households (
     id         INTEGER PRIMARY KEY,
     name       TEXT    NOT NULL,
@@ -75,8 +69,6 @@ CREATE TABLE completions (
 ) STRICT;
 
 CREATE INDEX completions_household_status_idx ON completions (household_id, status);
--- At most one live (pending or approved) completion per occurrence; rejected
--- completions stay as history and the occurrence reopens.
 CREATE UNIQUE INDEX completions_live_occurrence_idx ON completions (occurrence_id) WHERE status <> 'rejected';
 
 CREATE TABLE rewards (

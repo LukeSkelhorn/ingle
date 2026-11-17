@@ -15,68 +15,48 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
-// The board calendar's reach: weeks back from this week, and weeks (or
-// months) ahead. The calendar feeds cache enough to cover it.
 const (
 	calWeeksBack   = 4
 	calWeeksAhead  = 13
 	calMonthsAhead = 2
-	// calMonthItems is how many items a month cell lists before "+N more".
-	calMonthItems = 3
+	calMonthItems  = 3
 )
 
-// Calendar views.
 const (
 	calWeek  = "week"
 	calMonth = "month"
 )
 
-// calView is the board calendar: a week or a month grid.
 type calView struct {
-	View  string // calWeek or calMonth
-	Title string // "3–9 Nov" or "November 2026"
-	// Prev, Next and Today are the toolbar's URLs; Prev and Next are ""
-	// at the edges of the range.
+	View              string
+	Title             string
 	Prev, Next, Today string
-	Self              string // this view, for refreshing in place
-	Week, Month       string // the same range in the other view
-	// Chores is whether chores show as well as events; ChoresURL is this
-	// view with them the other way.
-	Chores    bool
-	ChoresURL string
-	// People is the person filter: everyone with a calendar of their own.
-	People []calPerson
-	// CalendarsURL opens the sheet for hiding calendars, when there's more
-	// than one; Hidden is how many are hidden.
-	CalendarsURL string
-	Hidden       int
-	// DayQuery is the filter for a month cell's day sheet.
-	DayQuery     string
-	ShowsToday   bool
-	Weekdays     []string // column headings, from the week start
-	Weeks        [][]calDay
-	HasCalendars bool
+	Self              string
+	Week, Month       string
+	Chores            bool
+	ChoresURL         string
+	People            []calPerson
+	CalendarsURL      string
+	Hidden            int
+	DayQuery          string
+	ShowsToday        bool
+	Weekdays          []string
+	Weeks             [][]calDay
+	HasCalendars      bool
 }
 
-// calPerson is one person in the calendar's person filter. URL shows just
-// them, or everyone again when they're already chosen.
 type calPerson struct {
 	Person  dbq.Person
 	Pressed bool
 	URL     string
 }
 
-// calFilter is what the board calendar shows, carried in its URLs so
-// browsing keeps it: chores or not, one person's calendars (0 for
-// everyone's), and calendars hidden by id. The board drops it when the
-// calendar goes idle.
 type calFilter struct {
 	Chores bool
 	Person int64
 	Hide   []int64
 }
 
-// values is f as query parameters.
 func (f calFilter) values() url.Values {
 	v := url.Values{"chores": {choresParam(f.Chores)}}
 	if f.Person != 0 {
@@ -88,8 +68,6 @@ func (f calFilter) values() url.Values {
 	return v
 }
 
-// keepsEvent reports whether e shows: its calendar isn't hidden, and it's
-// the family's or the chosen person's.
 func (f calFilter) keepsEvent(e calendar.Event) bool {
 	if slices.Contains(f.Hide, e.FeedID) {
 		return false
@@ -97,21 +75,15 @@ func (f calFilter) keepsEvent(e calendar.Event) bool {
 	return f.Person == 0 || e.PersonID == nil || *e.PersonID == f.Person
 }
 
-// keepsHoliday reports whether h shows: everyone's, or the chosen
-// person's.
 func (f calFilter) keepsHoliday(h chores.Holiday) bool {
 	return f.Person == 0 || h.Person == nil || h.Person.ID == f.Person
 }
 
-// keepsCountdown reports whether c shows: it's for nobody in particular,
-// or for the chosen person (a birthday is for its person).
 func (f calFilter) keepsCountdown(c chores.Countdown) bool {
 	return f.Person == 0 || len(c.People) == 0 ||
 		slices.ContainsFunc(c.People, func(p dbq.Person) bool { return p.ID == f.Person })
 }
 
-// keepsChore reports whether c shows for the chosen person: theirs, shared
-// with them, or up for grabs.
 func (f calFilter) keepsChore(c *chores.CalChore) bool {
 	if f.Person == 0 {
 		return true
@@ -122,45 +94,33 @@ func (f calFilter) keepsChore(c *chores.CalChore) bool {
 	return len(c.People) == 0 || slices.Contains(c.People, f.Person)
 }
 
-// calDay is one day of the grid.
 type calDay struct {
-	Date    string // YYYY-MM-DD
+	Date    string
 	Num     int
-	Label   string // "Mon 3 Nov"
+	Label   string
 	Today   bool
 	Past    bool
-	Outside bool // in a month grid, a day of the month before or after
+	Outside bool
 	AllDay  []calItem
-	Items   []calItem // timed events and chores, in time order
-	// Shown and More are the month cell: the first few items and how many
-	// didn't fit.
-	Shown []calItem
-	More  int
+	Items   []calItem
+	Shown   []calItem
+	More    int
 }
 
-// calItem is an event or a chore on a day.
 type calItem struct {
-	Title  string
-	When   string // "09:00", "until 10:00", "All day" or "" for an untimed chore
-	Colour string // the person's colour, or the feed's for a family event
-	Feed   string // an event's calendar
-	// EventURL opens an event's sheet.
-	EventURL string
-	// Countdown is set for a countdown or birthday: it opens the
-	// Countdowns view.
+	Title     string
+	When      string
+	Colour    string
+	Feed      string
+	EventURL  string
 	Countdown bool
 	Chore     *chores.CalChore
-	// Person is whose chore or calendar it is; nil for a chore up for grabs
-	// or a family event.
-	Person *dbq.Person
-	DoneBy *dbq.Person
-	People []dbq.Person // a shared chore, not done yet: who it's for
-	sort   string
+	Person    *dbq.Person
+	DoneBy    *dbq.Person
+	People    []dbq.Person
+	sort      string
 }
 
-// eventOwner is whose calendar e is from, among the household's people who
-// aren't archived; nil for a family calendar. Events cache only the id, so
-// a person's new colour shows straight away.
 func eventOwner(people map[int64]*dbq.Person, e calendar.Event) *dbq.Person {
 	if e.PersonID == nil {
 		return nil
@@ -168,27 +128,22 @@ func eventOwner(people map[int64]*dbq.Person, e calendar.Event) *dbq.Person {
 	return people[*e.PersonID]
 }
 
-// IsChore reports whether the item is a chore (else it's an event).
 func (i calItem) IsChore() bool { return i.Chore != nil }
 
-// Count is the day's number of items, for the month view's dots.
 func (d calDay) Count() int { return len(d.AllDay) + len(d.Items) }
 
-// calendarLocale is the household locale in its own timezone.
 func (s *Server) calendarLocale(r *http.Request) locale.Locale {
 	loc := s.Locale
 	loc.Location = s.Settings.Location(r.Context(), hhOf(r))
 	return loc
 }
 
-// calRange works out the anchor (week start or 1st of the month) for the
-// requested view and date, clamped to the calendar's reach.
 type calRange struct {
 	view        string
 	anchor      time.Time
-	first, last time.Time // anchor limits
-	gridFrom    time.Time // first day shown
-	gridTo      time.Time // last day shown
+	first, last time.Time
+	gridFrom    time.Time
+	gridTo      time.Time
 	today       time.Time
 }
 
@@ -231,9 +186,6 @@ func (s *Server) calRange(r *http.Request, loc locale.Locale) calRange {
 	return cr
 }
 
-// calURL is the board calendar's view from t with filter f. It always
-// says whether chores show, so browsing keeps the board's Chores button as
-// it is.
 func calURL(view string, t time.Time, f calFilter) string {
 	v := f.values()
 	v.Set("view", view)
@@ -248,9 +200,6 @@ func choresParam(on bool) string {
 	return "0"
 }
 
-// calChores is whether the calendar shows chores: the board's Chores
-// button (the chores param) if it's been pressed, else the household's
-// setting.
 func (s *Server) calChores(r *http.Request) (bool, error) {
 	switch r.URL.Query().Get("chores") {
 	case "1":
@@ -265,7 +214,6 @@ func (s *Server) calChores(r *http.Request) (bool, error) {
 	return set.CalendarChores, nil
 }
 
-// calFeeds is the household's calendars, or none with the module off.
 func (s *Server) calFeeds(r *http.Request) ([]calendar.Feed, error) {
 	if s.Calendars == nil || !s.moduleOn(r.Context(), modCalendar) {
 		return nil, nil
@@ -273,9 +221,6 @@ func (s *Server) calFeeds(r *http.Request) ([]calendar.Feed, error) {
 	return s.Calendars.Feeds(r.Context(), hhOf(r))
 }
 
-// calFilter reads the board calendar's filter from r. The Calendars sheet
-// sends pick=1 with the calendars to show; otherwise hide lists the ones
-// hidden. Only feeds that exist are kept.
 func (s *Server) calFilter(r *http.Request, feeds []calendar.Feed) (calFilter, error) {
 	ch, err := s.calChores(r)
 	if err != nil {
@@ -295,7 +240,6 @@ func (s *Server) calFilter(r *http.Request, feeds []calendar.Feed) (calFilter, e
 	return f, nil
 }
 
-// peopleByID indexes the household's people (archived ones aren't listed).
 func (s *Server) peopleByID(r *http.Request) ([]dbq.Person, map[int64]*dbq.Person, error) {
 	people, err := s.Store.Q.ListPeople(r.Context(), hhOf(r))
 	if err != nil {
@@ -406,7 +350,6 @@ func (s *Server) handleCalendarView(w http.ResponseWriter, r *http.Request) {
 	s.renderPartial(w, r, "calendar", v)
 }
 
-// weekTitle is "3–9 Nov", "30 Nov – 6 Dec" or "29 Dec 2026 – 4 Jan 2027".
 func weekTitle(from, to time.Time) string {
 	switch {
 	case from.Year() != to.Year():
@@ -417,9 +360,6 @@ func weekTitle(from, to time.Time) string {
 	return strconv.Itoa(from.Day()) + "–" + to.Format("2 Jan")
 }
 
-// calendarDays builds each day from first to last (local midnights) with
-// its holidays, events and, if f.Chores, chores, as filtered by f. byID is
-// the household's people.
 func (s *Server) calendarDays(r *http.Request, loc locale.Locale, first, last, today time.Time, f calFilter, byID map[int64]*dbq.Person) ([]calDay, error) {
 	ctx := r.Context()
 	z := loc.Location
@@ -501,7 +441,7 @@ func (s *Server) calendarDays(r *http.Request, loc locale.Locale, first, last, t
 			if !f.keepsChore(c) {
 				continue
 			}
-			it := calItem{Title: c.Title, Chore: c, sort: "~"} // untimed chores last
+			it := calItem{Title: c.Title, Chore: c, sort: "~"}
 			if c.DueTime != nil {
 				it.When, it.sort = *c.DueTime, *c.DueTime
 			}
@@ -527,8 +467,6 @@ func (s *Server) calendarDays(r *http.Request, loc locale.Locale, first, last, t
 	return days, nil
 }
 
-// countdownTitle is a countdown on the calendar: "🏖️ Holiday to Spain",
-// "🎂 Sam's birthday (turns 9)".
 func countdownTitle(c chores.Countdown) string {
 	t := c.Title
 	if c.Emoji != "" {
@@ -540,7 +478,6 @@ func countdownTitle(c chores.Countdown) string {
 	return t
 }
 
-// calDaySheet is the sheet listing one day.
 type calDaySheet struct {
 	Day          calDay
 	HasCalendars bool
@@ -576,19 +513,16 @@ func (s *Server) handleCalendarDay(w http.ResponseWriter, r *http.Request) {
 	s.renderPartial(w, r, "cal_day", calDaySheet{Day: days[0]})
 }
 
-// eventURL opens e's sheet. Events aren't stored, so it names the event by
-// its calendar, start and title.
 func eventURL(e calendar.Event) string {
 	return "/board/calendar/event?" + url.Values{
 		"feed": {itoa(e.FeedID)}, "start": {itoa(e.Start.Unix())}, "title": {e.Title},
 	}.Encode()
 }
 
-// calEventSheet is the read-only sheet for an event.
 type calEventSheet struct {
 	Title, When, Location, Calendar string
 	Colour                          string
-	Person                          *dbq.Person // nil: the family's calendar
+	Person                          *dbq.Person
 }
 
 func (s *Server) handleCalendarEvent(w http.ResponseWriter, r *http.Request) {
@@ -627,9 +561,6 @@ func (s *Server) handleCalendarEvent(w http.ResponseWriter, r *http.Request) {
 	s.renderPartial(w, r, "cal_event", v)
 }
 
-// eventWhen is an event's day and times: "Tuesday 3 November, 09:00–10:00",
-// "Tuesday 3 November, all day", "Tue 3 Nov – Thu 5 Nov" or
-// "Tue 3 Nov 22:00 – Wed 4 Nov 01:00".
 func eventWhen(loc locale.Locale, e calendar.Event) string {
 	start, end := e.Start.In(loc.Location), e.End.In(loc.Location)
 	if e.AllDay {
@@ -648,8 +579,6 @@ func eventWhen(loc locale.Locale, e calendar.Event) string {
 	return start.Format("Mon 2 Jan") + " " + loc.FormatTime(start) + " – " + end.Format("Mon 2 Jan") + " " + loc.FormatTime(end)
 }
 
-// calCalendarsSheet is the sheet for showing and hiding calendars. Query is
-// the rest of the board calendar's state, for the form to carry.
 type calCalendarsSheet struct {
 	Feeds []calFeedChoice
 	Query map[string]string
@@ -696,10 +625,9 @@ func (s *Server) handleCalendarCalendars(w http.ResponseWriter, r *http.Request)
 	s.renderPartial(w, r, "cal_calendars", v)
 }
 
-// calChoreSheet is the read-only sheet for a chore on the calendar.
 type calChoreSheet struct {
 	Item   calItem
-	Day    string // "Tuesday 3 November"
+	Day    string
 	Repeat string
 	DoneAt string
 	Chore  dbq.Chore
@@ -757,8 +685,6 @@ func (s *Server) handleCalendarChore(w http.ResponseWriter, r *http.Request) {
 	s.renderPartial(w, r, "cal_chore", v)
 }
 
-// calDate reads the {date} path value as a local midnight within the
-// calendar's reach (with room for a month grid's edges).
 func (s *Server) calDate(r *http.Request, loc locale.Locale) (time.Time, bool) {
 	d, err := time.ParseInLocation(chores.DateLayout, r.PathValue("date"), loc.Location)
 	if err != nil {

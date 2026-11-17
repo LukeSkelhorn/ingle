@@ -99,7 +99,7 @@ func TestLoadInvalid(t *testing.T) {
 		{"INGLE_BACKUP_AT": "3am"},
 		{"INGLE_DATABASE_URL": "mysql://x"},
 		{"INGLE_DATABASE_URL": "postgres://db/ingle", "INGLE_BACKUP_KEEP": "7", "INGLE_MASTER_KEY": "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="},
-		{"INGLE_DATABASE_URL": "postgres://db/ingle"}, // no master key
+		{"INGLE_DATABASE_URL": "postgres://db/ingle"},
 		{"INGLE_MASTER_KEY": "too-short"},
 	} {
 		if _, err := load(func(k string) string { return tc[k] }); err == nil {
@@ -108,8 +108,6 @@ func TestLoadInvalid(t *testing.T) {
 	}
 }
 
-// Ingle used to be called Domus: its DOMUS_* settings still work, and an
-// INGLE_* one wins when both are set.
 func TestLoadLegacyNames(t *testing.T) {
 	env := map[string]string{
 		"DOMUS_TZ":       "Europe/Dublin",
@@ -131,7 +129,6 @@ func TestLoadLegacyNames(t *testing.T) {
 	}
 }
 
-// A data folder from before the rename keeps using its domus.db.
 func TestLoadLegacyDatabase(t *testing.T) {
 	for _, tc := range []struct {
 		name   string

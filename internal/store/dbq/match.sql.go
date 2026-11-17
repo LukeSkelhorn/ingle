@@ -22,8 +22,6 @@ type DeleteMatchForCompletionParams struct {
 	CompletionID *int64 `json:"completion_id"`
 }
 
-// Undoing a chore removes its match. match_entries rows go with their
-// ledger entries.
 func (q *Queries) DeleteMatchForCompletion(ctx context.Context, arg DeleteMatchForCompletionParams) error {
 	_, err := q.db.ExecContext(ctx, deleteMatchForCompletion, arg.HouseholdID, arg.CompletionID)
 	return err
@@ -124,8 +122,6 @@ type ListGoalMatchesRow struct {
 	Pence    int64 `json:"pence"`
 }
 
-// What each active person holds from matching towards the goal they have
-// now.
 func (q *Queries) ListGoalMatches(ctx context.Context, householdID int64) ([]ListGoalMatchesRow, error) {
 	rows, err := q.db.QueryContext(ctx, listGoalMatches, householdID)
 	if err != nil {
@@ -170,8 +166,6 @@ type ListMatchOffersRow struct {
 	SetByName   string `json:"set_by_name"`
 }
 
-// Every match offer in a household, with the name of the adult who set
-// each one up.
 func (q *Queries) ListMatchOffers(ctx context.Context, householdID int64) ([]ListMatchOffersRow, error) {
 	rows, err := q.db.QueryContext(ctx, listMatchOffers, householdID)
 	if err != nil {
@@ -229,8 +223,6 @@ type MatchForCompletionRow struct {
 	GoalSetAt int64 `json:"goal_set_at"`
 }
 
-// The match a chore earned, less any taken back with it, and the goal it
-// was towards.
 func (q *Queries) MatchForCompletion(ctx context.Context, arg MatchForCompletionParams) (MatchForCompletionRow, error) {
 	row := q.db.QueryRowContext(ctx, matchForCompletion, arg.HouseholdID, arg.CompletionID)
 	var i MatchForCompletionRow
@@ -264,7 +256,6 @@ type MatchForGoalRow struct {
 	Pence  int64 `json:"pence"`
 }
 
-// What a person holds from matching towards one goal.
 func (q *Queries) MatchForGoal(ctx context.Context, arg MatchForGoalParams) (MatchForGoalRow, error) {
 	row := q.db.QueryRowContext(ctx, matchForGoal,
 		arg.HouseholdID,
@@ -295,8 +286,6 @@ type MatchHeldForPersonRow struct {
 	Pence  int64 `json:"pence"`
 }
 
-// What a person still holds from matching, all told: matches less what was
-// taken back. The cap counts this.
 func (q *Queries) MatchHeldForPerson(ctx context.Context, arg MatchHeldForPersonParams) (MatchHeldForPersonRow, error) {
 	row := q.db.QueryRowContext(ctx, matchHeldForPerson, arg.HouseholdID, arg.PersonID)
 	var i MatchHeldForPersonRow
@@ -318,8 +307,6 @@ type MoveGoalMatchParams struct {
 	OldSetAt    int64 `json:"old_set_at"`
 }
 
-// Picking the same goal again starts it afresh (goal_set_at changes); what
-// was matched towards it moves with it.
 func (q *Queries) MoveGoalMatch(ctx context.Context, arg MoveGoalMatchParams) error {
 	_, err := q.db.ExecContext(ctx, moveGoalMatch,
 		arg.NewSetAt,

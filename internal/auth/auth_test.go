@@ -90,7 +90,6 @@ func TestPINUnlockNeedsDisplay(t *testing.T) {
 	if _, err := f.svc.UnlockWithPIN(ctx, f.disp, f.mum.ID, "0000"); !errors.Is(err, auth.ErrBadCredentials) {
 		t.Errorf("wrong PIN: %v", err)
 	}
-	// Kids can't unlock admin even with a PIN in the database.
 	if _, err := f.svc.UnlockWithPIN(ctx, f.disp, f.kid.ID, "1111"); !errors.Is(err, auth.ErrBadCredentials) {
 		t.Errorf("kid: %v", err)
 	}
@@ -102,7 +101,6 @@ func TestPINUnlockNeedsDisplay(t *testing.T) {
 	if err != nil || s == nil || s.Person.ID != f.mum.ID || s.Kind != auth.KindDisplay {
 		t.Fatalf("Session = %+v, %v", s, err)
 	}
-	// Not valid without the display, or on another display.
 	if s, _ := f.svc.Session(ctx, tok, nil); s != nil {
 		t.Error("display session valid without the display")
 	}
@@ -120,7 +118,7 @@ func TestDisplaySessionIdleExpiry(t *testing.T) {
 		t.Fatal(err)
 	}
 	for range 3 {
-		f.now = f.now.Add(100 * time.Second) // under the 2-minute default
+		f.now = f.now.Add(100 * time.Second)
 		if s, _ := f.svc.Session(ctx, tok, f.disp); s == nil {
 			t.Fatal("expired while active")
 		}

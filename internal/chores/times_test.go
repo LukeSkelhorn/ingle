@@ -23,7 +23,6 @@ func (f *fixture) teeth(times []string, showBefore *int64) dbq.Chore {
 	return c
 }
 
-// cardTimes lists a column's undone cards' times ("" for none).
 func cardTimes(c Column) []string {
 	var out []string
 	for _, k := range c.Cards {
@@ -68,7 +67,7 @@ func TestChoreTimesMaterialise(t *testing.T) {
 	f := newFixture(t)
 	f.teeth([]string{"07:30", "19:30"}, nil)
 	f.chore("Hoover", choreOpts{assignee: &f.kid.ID})
-	for range 2 { // running again adds nothing, timed or not
+	for range 2 {
 		if _, err := f.svc.Materialise(t.Context(), f.hh, f.svc.now(), 1); err != nil {
 			t.Fatal(err)
 		}
@@ -88,8 +87,6 @@ func TestChoreTimesOnTheBoard(t *testing.T) {
 	teeth := f.teeth([]string{"07:30", "19:30"}, &hour)
 	f.chore("Hoover", choreOpts{assignee: &f.kid.ID})
 
-	// 06:00: neither time is near, so only the untimed chore shows, and the
-	// board wakes at 06:30 for the morning one.
 	f.at("2026-11-02", "06:00")
 	b := f.boardAt("2026-11-02")
 	if got := cardTimes(b.column("Alfie")); !slices.Equal(got, []string{""}) {
@@ -102,7 +99,6 @@ func TestChoreTimesOnTheBoard(t *testing.T) {
 		t.Errorf("NextChange = %v, want %v", b.NextChange, want)
 	}
 
-	// 06:30: the morning one is on; the evening one wakes the board at 18:30.
 	f.at("2026-11-02", "06:30")
 	b = f.boardAt("2026-11-02")
 	if got := cardTimes(b.column("Alfie")); !slices.Equal(got, []string{"07:30", ""}) {
@@ -112,7 +108,6 @@ func TestChoreTimesOnTheBoard(t *testing.T) {
 		t.Errorf("NextChange = %v, want %v", b.NextChange, want)
 	}
 
-	// Done in the morning: the evening one is still to come, separately.
 	morning := b.column("Alfie").Cards[0].OccurrenceID
 	if _, err := f.svc.Complete(t.Context(), f.hh, morning, f.kid.ID); err != nil {
 		t.Fatal(err)
@@ -128,8 +123,6 @@ func TestChoreTimesOnTheBoard(t *testing.T) {
 		t.Errorf("18:30 cards = %q (undone first, done last)", got)
 	}
 
-	// Tomorrow, yesterday's undone evening one is replaced by today's
-	// (which wait for their time again), as a daily chore always is.
 	next := func(hhmm string) Board {
 		t.Helper()
 		f.at("2026-11-03", hhmm)
@@ -143,11 +136,9 @@ func TestChoreTimesOnTheBoard(t *testing.T) {
 		}
 	}
 	if overdue != 0 {
-		// Yesterday's are superseded by today's occurrences of the same chore.
 		t.Errorf("overdue = %d, want 0 (superseded)", overdue)
 	}
 
-	// All day: both times show from the start of the day.
 	if _, err := f.svc.UpdateChore(t.Context(), f.hh, f.adult.ID, teeth.ID, Input{
 		Title: "Brush teeth", Mode: ModeAssigned, AssigneeID: &f.kid.ID, Repeat: Recurrence{Kind: RepeatDaily},
 		StartsOn: "2026-11-02", DueTimes: []string{"07:30", "19:30"}, Points: 1,
@@ -188,7 +179,6 @@ func TestChoreTimesCalendar(t *testing.T) {
 	f := newFixture(t)
 	hour := DefaultShowBefore
 	f.teeth([]string{"07:30", "19:30"}, &hour)
-	// A day past the materialised window is projected from the rule.
 	cal, err := f.svc.Calendar(t.Context(), f.hh, time.Date(2026, 11, 2, 0, 0, 0, 0, london), "2026-12-20", "2026-12-20")
 	if err != nil {
 		t.Fatal(err)

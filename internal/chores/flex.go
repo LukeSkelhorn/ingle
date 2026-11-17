@@ -7,12 +7,10 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
-// Day modes: how a chore's scheduled days work.
 const (
 	// DayEach is due on every day of the schedule (the default).
 	DayEach = "each"
-	// DayAny is due once a week (Mon–Sun), on whichever of the scheduled
-	// days suits: a flexible-day chore.
+	// DayAny is due once a week, on whichever of the scheduled days suits.
 	DayAny = "any"
 )
 
@@ -25,43 +23,35 @@ func AnyDayAllowed(kind string) bool {
 	return false
 }
 
-// flexWindow is one week of a flexible-day chore: the allowed dates, first
-// to last. It becomes one occurrence, available from Days[0] and due on the
-// last.
 type flexWindow struct {
-	Days []string // YYYY-MM-DD, ascending
+	Days []string
 }
 
 func (w flexWindow) From() string { return w.Days[0] }
 func (w flexWindow) Due() string  { return w.Days[len(w.Days)-1] }
 
-// weekOf returns the Monday of date's Mon–Sun week. Flexible-day windows
-// always run Monday to Sunday, whatever the household's week start, so a
-// Sat+Sun chore stays one weekend.
+// weekOf is always Mon–Sun, whatever the household's week start, so a Sat+Sun chore stays one weekend.
 func weekOf(date string) string {
 	t, err := time.Parse(DateLayout, date)
 	if err != nil {
 		return date
 	}
-	back := (int(t.Weekday()) + 6) % 7 // days since Monday
+	back := (int(t.Weekday()) + 6) % 7
 	return t.AddDate(0, 0, -back).Format(DateLayout)
 }
 
-// mondayOf returns the start of t's Mon–Sun week, at local midnight.
 func mondayOf(t time.Time) time.Time {
 	back := (int(t.Weekday()) + 6) % 7
 	y, m, d := t.Date()
 	return time.Date(y, m, d-back, 0, 0, 0, 0, t.Location())
 }
 
-// sundayAfter returns the end of t's Mon–Sun week, at local midnight.
 func sundayAfter(t time.Time) time.Time {
 	ahead := (7 - int(t.Weekday())) % 7
 	y, m, d := t.Date()
 	return time.Date(y, m, d+ahead, 0, 0, 0, 0, t.Location())
 }
 
-// groupWeeks splits ascending dates into Mon–Sun windows.
 func groupWeeks(dates []string) []flexWindow {
 	var out []flexWindow
 	for _, d := range dates {
@@ -74,10 +64,6 @@ func groupWeeks(dates []string) []flexWindow {
 	return out
 }
 
-// flexWindows returns the windows of flexible-day chore c that start in
-// [start, end]. A window that runs past end is followed to its Sunday, so it
-// always gets its real last day; days before start are left out, so a chore
-// created or edited mid-week starts this week from start.
 func flexWindows(c dbq.Chore, start, end time.Time, loc *time.Location) ([]flexWindow, error) {
 	dates, err := occurrenceDates(c, start, sundayAfter(end), loc)
 	if err != nil {
@@ -91,8 +77,6 @@ func flexWindows(c dbq.Chore, start, end time.Time, loc *time.Location) ([]flexW
 	return ws, nil
 }
 
-// windowDays returns the allowed days of a flexible-day occurrence in
-// [from, due] (YYYY-MM-DD), from its chore's schedule.
 func windowDays(rrule *string, startsOn, from, due string, loc *time.Location) []string {
 	first, err1 := time.ParseInLocation(DateLayout, from, loc)
 	last, err2 := time.ParseInLocation(DateLayout, due, loc)
@@ -106,7 +90,6 @@ func windowDays(rrule *string, startsOn, from, due string, loc *time.Location) [
 	return dates
 }
 
-// shortDay is "Mon", "Tue", … for a YYYY-MM-DD date.
 func shortDay(date string) string {
 	t, err := time.Parse(DateLayout, date)
 	if err != nil {
@@ -115,7 +98,6 @@ func shortDay(date string) string {
 	return t.Format("Mon")
 }
 
-// orList joins words as "a, b or c".
 func orList(words []string) string {
 	switch len(words) {
 	case 0:
@@ -126,10 +108,7 @@ func orList(words []string) string {
 	return strings.Join(words[:len(words)-1], ", ") + " or " + words[len(words)-1]
 }
 
-// FlexLabel is the board label for a flexible-day chore on today, given the
-// days it can still be done (today first): "Today or Thu", "Today, Wed or
-// Thu", or "Any day until Fri" for four or more. It is "" when today is the
-// only day left.
+// FlexLabel is the board label for a flexible-day chore, e.g. "Today or Thu".
 func FlexLabel(today string, days []string) string {
 	if len(days) < 2 || days[0] != today {
 		return ""
@@ -144,8 +123,7 @@ func FlexLabel(today string, days []string) string {
 	return orList(words)
 }
 
-// DaysHint names a window's days, "Tue or Thu"; five weekdays in a row are
-// "Mon–Fri".
+// DaysHint names a window's days, "Tue or Thu"; five weekdays in a row are "Mon–Fri".
 func DaysHint(days []string) string {
 	words := make([]string, len(days))
 	for i, d := range days {

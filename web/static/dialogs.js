@@ -1,8 +1,3 @@
-// Admin pop-ups. A link with data-dialog="id" opens that <dialog> as a
-// modal; without JavaScript the link loads the page with it open (?edit=).
-// A dialog the page comes with open (data-open) opens as a modal too.
-// Escape, a tap outside it, or a [data-dialog-close] link closes it, and
-// closing takes ?edit= off the address.
 (function () {
   function clean() {
     if (!/[?&]edit=/.test(location.search)) return;
@@ -31,7 +26,7 @@
     });
   });
   document.querySelectorAll("dialog[data-open]").forEach(function (d) {
-    if (!d.showModal) return; // no support: it shows inline, open
+    if (!d.showModal) return;
     wire(d);
     d.close();
     d.showModal();

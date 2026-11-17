@@ -3,7 +3,6 @@ SELECT CAST(COUNT(*) AS INTEGER) FROM interest_payments
 WHERE household_id = ? AND person_id = ? AND period = ?;
 
 -- name: LastInterestPayment :one
--- A person's latest month, for the fraction carried into the next.
 SELECT * FROM interest_payments
 WHERE household_id = ? AND person_id = ?
 ORDER BY period DESC
@@ -15,7 +14,6 @@ INSERT INTO interest_payments (
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: InterestTotalsForPerson :one
--- What a person has earned in interest, all told.
 SELECT
     CAST(COALESCE(SUM(points), 0) AS INTEGER) AS points,
     CAST(COALESCE(SUM(pence), 0) AS INTEGER) AS pence

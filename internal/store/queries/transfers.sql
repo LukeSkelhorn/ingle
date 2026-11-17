@@ -8,8 +8,6 @@ RETURNING *;
 SELECT * FROM transfer_requests WHERE household_id = ? AND id = ?;
 
 -- name: SettleTransferRequest :execrows
--- Settle a waiting request. Only a pending one changes, so two adults
--- tapping at once can't both act on it.
 UPDATE transfer_requests
 SET status = sqlc.arg(status), reason = sqlc.arg(reason),
     reviewed_by = sqlc.arg(reviewed_by), reviewed_at = sqlc.arg(reviewed_at)
@@ -25,8 +23,6 @@ WHERE household_id = ? AND person_id = ? AND status = 'pending'
 ORDER BY requested_at DESC, id DESC;
 
 -- name: ListTransferDetails :many
--- Requests with who they're for and who decided: every waiting one, and the
--- rest requested since since_unix.
 SELECT
     t.id, t.person_id, t.pence, t.status, t.reason, t.requested_at, t.reviewed_at,
     p.name AS person_name, p.colour AS person_colour, p.avatar AS person_avatar,
@@ -46,8 +42,6 @@ JOIN people p ON p.id = t.person_id
 WHERE t.household_id = ? AND t.status = 'pending' AND p.archived_at IS NULL;
 
 -- name: LastSettledTransferForPerson :many
--- A person's latest request decided since since_unix: if it was declined,
--- My money says why.
 SELECT * FROM transfer_requests
 WHERE household_id = sqlc.arg(household_id) AND person_id = sqlc.arg(person_id)
   AND status <> 'pending' AND reviewed_at >= CAST(sqlc.arg(since_unix) AS INTEGER)

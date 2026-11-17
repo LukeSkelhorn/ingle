@@ -1,5 +1,3 @@
-{{/* The countdown form's fields (dict "F" countdownForm "Errors"
-     valid.Errors), in admin and in a child's sheet on the board. */}}
 {{define "countdown_fields"}}{{$f := .F}}
 <label class="field">
   <span>What's happening?</span>
@@ -19,8 +17,6 @@
 </label>
 {{end}}
 
-{{/* The board's strip: the next few countdowns, above the columns. Tapping
-     it opens the Countdowns view. */}}
 {{define "countdown_strip"}}
 {{if .}}
 <button type="button" class="countdown-strip" data-view-to="countdowns" aria-label="Countdowns: {{range $i, $c := .}}{{if $i}}, {{end}}{{$c.Title}} {{$c.Label}}{{end}}">
@@ -35,11 +31,8 @@
 {{end}}
 {{end}}
 
-{{/* Who a countdown is for, as small overlapping faces. */}}
 {{define "countdown_faces"}}{{if .}}<span class="avatar-stack avatar-stack--xs" aria-hidden="true">{{range .}}{{template "avatar" (avatar . "xs")}}{{end}}</span>{{end}}{{end}}
 
-{{/* The board's Countdowns view (countdownsBoardView), loaded when it's
-     shown. */}}
 {{define "countdowns_view"}}
 <div class="countdowns" data-src="/board/countdowns">
   {{if .Countdowns}}
@@ -72,7 +65,6 @@
 </div>
 {{end}}
 
-{{/* "Who's adding one?": the children allowed to add countdowns. */}}
 {{define "countdown_who"}}
 <div class="picker">
   <h2 class="picker__title" tabindex="-1" autofocus>Add a countdown</h2>
@@ -93,8 +85,6 @@
 </div>
 {{end}}
 
-{{/* A child's PIN before adding a countdown (moneyPinView), as for My
-     money. */}}
 {{define "countdown_pin"}}{{$p := .Person}}
 <div class="picker money-pin" style="--person: {{$p.Colour}}" data-countdown-pin data-person="{{$p.ID}}">
   <div class="person__head">
@@ -147,8 +137,6 @@
 </div>
 {{end}}
 
-{{/* A child's countdowns sheet after their PIN (countdownMineView): add one
-     (or change one of theirs) and the ones they've added. */}}
 {{define "countdown_mine"}}{{$v := .}}
 <div class="picker countdown-mine" style="--person: {{.Person.Colour}}" data-keep-open data-countdown-mine>
   <div class="person__head">

@@ -7,7 +7,6 @@ import (
 	"testing"
 )
 
-// It's 00:30 BST on Wednesday 1 July 2026; the week is Mon 29 Jun – Sun 5 Jul.
 func TestBoardCalendar(t *testing.T) {
 	h, wall, phone := boardHousehold(t)
 	expectRedirect(t, phone.post("/admin/chores", url.Values{
@@ -15,7 +14,6 @@ func TestBoardCalendar(t *testing.T) {
 		"starts_on": {"2026-06-29"}, "points": {"3"},
 	}), "/admin/chores")
 
-	// The board has the view dots and a calendar panel.
 	expect(t, wall.get("/"), http.StatusOK, `data-view-to="calendar"`, `id="calendar"`, "Chores", "Calendar")
 
 	h.setICS("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\n" +
@@ -25,7 +23,6 @@ func TestBoardCalendar(t *testing.T) {
 	expect(t, phone.post("/admin/calendars", url.Values{"name": {"Family"}, "url": {h.ics.URL + "/secret-token/basic.ics"}}),
 		http.StatusOK, "Family added.")
 
-	// Week view, this week.
 	r := wall.get("/board/calendar?chores=1")
 	expect(t, r, http.StatusOK, "29 Jun – 5 Jul", `aria-current="date"`, "Wed 1 Jul",
 		"Feed the cat", "08:00", "Alfie", "Hoover the lounge", "Up for grabs",
@@ -45,20 +42,17 @@ func TestBoardCalendar(t *testing.T) {
 		t.Error("shows the no-feeds hint with a feed")
 	}
 
-	// Projected chores: three weeks ahead is past the materialised window.
 	r = wall.get("/board/calendar?chores=1&view=week&from=2026-07-22")
 	expect(t, r, http.StatusOK, "20–26 Jul", "Feed the cat", "🗑️", "Bins out", "Swimming")
 	if strings.Contains(r.body, "Hoover the lounge") {
 		t.Error("a one-off chore repeats")
 	}
-	// Snapped to the week start, and clamped at both ends.
 	expect(t, wall.get("/board/calendar?from=2026-07-08"), http.StatusOK, "6–12 Jul")
 	r = wall.get("/board/calendar?from=2020-01-01")
 	expect(t, r, http.StatusOK, "1–7 Jun", `aria-label="Previous week"`+"\n              disabled")
 	r = wall.get("/board/calendar?from=2030-01-01")
 	expect(t, r, http.StatusOK, "28 Sep – 4 Oct", `aria-label="Next week"`+"\n              disabled")
 
-	// Past days: done chores ticked, missed ones marked.
 	expect(t, wall.post("/board/occurrences/"+itoa(h.occurrence("Feed the cat").ID)+"/complete", nil), http.StatusOK)
 	h.advance(48 * 60 * 60 * 1e9)
 	r = wall.get("/board/calendar?chores=1")
@@ -76,13 +70,11 @@ func TestBoardCalendar(t *testing.T) {
 	expect(t, resp{status: 200, body: day(r.body, "Wed 1 Jul")}, http.StatusOK, "cal-item--done", "Done by Alfie")
 	expect(t, resp{status: 200, body: day(r.body, "Thu 2 Jul")}, http.StatusOK, "cal-item--missed", "Missed")
 
-	// Month view.
 	r = wall.get("/board/calendar?chores=1&view=month")
 	expect(t, r, http.StatusOK, "July 2026", `class="cal__month"`, "cal__cell--outside", `hx-get="/board/calendar/day/2026-07-09?chores=1"`, "Swimming")
 	expect(t, wall.get("/board/calendar?view=month&from=2027-05-01"), http.StatusOK, "September 2026")
 	expect(t, wall.get("/board/calendar?view=month&from=2020-05-01"), http.StatusOK, "June 2026")
 
-	// Day sheet and chore sheet: read-only.
 	r = wall.get("/board/calendar/day/2026-07-09?chores=1")
 	expect(t, r, http.StatusOK, "Thu 9 Jul", "Swimming", "Feed the cat", "data-close")
 	r = wall.get("/board/calendar/chores/" + itoa(h.chore("Bins out").ID) + "/2026-07-20")
@@ -92,7 +84,6 @@ func TestBoardCalendar(t *testing.T) {
 	}
 	r = wall.get("/board/calendar/chores/" + itoa(h.chore("Feed the cat").ID) + "/2026-07-01")
 	expect(t, r, http.StatusOK, "Done by Alfie at")
-	// Not due that day.
 	r = wall.get("/board/calendar/chores/" + itoa(h.chore("Bins out").ID) + "/2026-07-21")
 	if r.status != http.StatusConflict || !strings.Contains(toastOf(t, r).Message, "isn't on the calendar") {
 		t.Errorf("chore not due that day = %d %q", r.status, r.header.Get("HX-Trigger"))
@@ -102,8 +93,6 @@ func TestBoardCalendar(t *testing.T) {
 	}
 }
 
-// The calendar shows events (and holidays) by default; the household's
-// setting or the board's Chores button adds the chores.
 func TestCalendarChores(t *testing.T) {
 	h, wall, phone := boardHousehold(t)
 	h.setICS("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\n" +
@@ -114,7 +103,6 @@ func TestCalendarChores(t *testing.T) {
 	expect(t, phone.post("/admin/settings/holidays", url.Values{"holiday_from": {"2026-07-03"}, "holiday_to": {"2026-07-03"}, "holiday_person": {""}}),
 		http.StatusOK, "Holiday added.")
 
-	// Off by default: events and holidays, no chores. The URLs keep it off.
 	r := wall.get("/board/calendar")
 	expect(t, r, http.StatusOK, "Swimming", "🏖️ Holiday",
 		`data-src="/board/calendar?chores=0&amp;from=2026-06-29&amp;view=week"`,
@@ -128,14 +116,12 @@ func TestCalendarChores(t *testing.T) {
 	expect(t, r, http.StatusOK, "Swimming")
 	notContains(t, r, "Feed the cat")
 
-	// The Chores button turns them on, and browsing keeps them.
 	r = wall.get("/board/calendar?chores=1&from=2026-06-29&view=week")
 	expect(t, r, http.StatusOK, "Swimming", "Feed the cat",
 		`aria-pressed="true">Chores`, `hx-get="/board/calendar?chores=0&amp;from=2026-06-29&amp;view=week"`,
 		`hx-get="/board/calendar?chores=1&amp;from=2026-06-29&amp;view=month"`)
 	expect(t, wall.get("/board/calendar/day/2026-07-02?chores=1"), http.StatusOK, "Swimming", "Feed the cat")
 
-	// The setting makes chores the default; the button still hides them.
 	form := url.Values{
 		"household_name": {"The Smiths"}, "timezone": {"Europe/London"}, "day_starts_at": {"00:00"},
 		"admin_idle_minutes": {"2"}, "screensaver_idle_minutes": {"5"}, "calendar_idle_minutes": {"2"},
@@ -153,7 +139,7 @@ func TestCalendarChores(t *testing.T) {
 
 func TestBoardCalendarLocked(t *testing.T) {
 	h := newHarness(t)
-	wall := h.setUp() // a display unlocked as Mum
+	wall := h.setUp()
 	expectRedirect(t, wall.post("/lock", nil), "/")
 	for _, p := range []string{"/board/calendar", "/board/calendar/day/2026-07-01", "/board/calendar/chores/1/2026-07-01", "/board/calendar/event?feed=1&start=1&title=x", "/board/calendar/calendars"} {
 		if r := wall.get(p); r.status != http.StatusLocked {

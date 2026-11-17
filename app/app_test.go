@@ -20,7 +20,6 @@ import (
 	"github.com/lukeskelhorn/ingle/app"
 )
 
-// freeAddr returns a loopback address with a port nothing is listening on.
 func freeAddr(t *testing.T) string {
 	t.Helper()
 	l, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
@@ -88,8 +87,7 @@ func TestRunManyHouseholds(t *testing.T) {
 	t.Setenv("INGLE_BACKUP_KEEP", "0")
 
 	opts := app.Options{
-		Version: "test",
-		// No address names a household here, so only a cookie could.
+		Version:          "test",
 		ResolveHousehold: func(*http.Request) (int64, bool, error) { return 0, false, nil },
 		Routes: func(mux *http.ServeMux, h app.Helpers) {
 			mux.HandleFunc("GET /hello", func(w http.ResponseWriter, r *http.Request) {
@@ -126,7 +124,6 @@ func TestRunManyHouseholds(t *testing.T) {
 	if code, loc, _ := get("/admin/billing"); code != http.StatusSeeOther || loc != "/signin" {
 		t.Errorf("/admin/billing = %d → %q, want sign in", code, loc)
 	}
-	// No household was made at startup, so there's none to set up.
 	if code, loc, _ := get("/"); code != http.StatusSeeOther || loc != "/signin" {
 		t.Errorf("/ = %d → %q, want sign in", code, loc)
 	}
@@ -134,7 +131,6 @@ func TestRunManyHouseholds(t *testing.T) {
 		t.Errorf("/setup = %d, want 404", code)
 	}
 
-	// A worker runs the jobs beside it and stops with its context.
 	jobsCtx, stopJobs := context.WithCancel(context.Background())
 	jobsDone := make(chan error, 1)
 	go func() { jobsDone <- app.RunJobs(jobsCtx, opts) }()
@@ -160,7 +156,6 @@ func TestRunManyHouseholds(t *testing.T) {
 	}
 }
 
-// waitHealthy waits for the server Run started to answer /healthz.
 func waitHealthy(t *testing.T, done <-chan error) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
@@ -194,8 +189,6 @@ func TestRunRefusesSignInWithoutURL(t *testing.T) {
 	}
 }
 
-// CreateHousehold makes a household whose adult StartSession signs in,
-// and SetPIN sets their PIN.
 func TestCreateHousehold(t *testing.T) {
 	addr := freeAddr(t)
 	t.Setenv("INGLE_ADDR", addr)
@@ -286,12 +279,10 @@ func TestCreateHousehold(t *testing.T) {
 	if code, _ := do(mum, http.MethodPost, "/pin", url.Values{"pin": {"2468"}}); code != http.StatusNoContent {
 		t.Errorf("pin = %d", code)
 	}
-	// Setting it kept this session.
 	if code, _ := do(mum, http.MethodGet, "/admin/people", nil); code != http.StatusOK {
 		t.Errorf("after setting the PIN, people = %d", code)
 	}
 
-	// Another household can't see the Smiths.
 	dad := newBrowser()
 	if code, body := do(dad, http.MethodPost, "/make", url.Values{"name": {"The Joneses"}, "colour": {app.PersonColours()[0]}, "email": {"dad@example.com"}}); code != http.StatusOK || !strings.Contains(body, "The Joneses") {
 		t.Fatalf("second make = %d\n%s", code, body)

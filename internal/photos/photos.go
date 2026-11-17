@@ -1,7 +1,4 @@
-// Package photos is the screensaver's slideshow library: photos adults
-// upload in admin (stored next to the database) plus, optionally, a
-// read-only folder such as a NAS share (INGLE_PHOTOS_DIR) that Ingle indexes
-// but never writes to.
+// Package photos is the screensaver's slideshow library.
 package photos
 
 import (
@@ -32,17 +29,13 @@ import (
 
 // Sizes of stored and served photos, in pixels.
 const (
-	// FullSize is the longest side of a slideshow photo: sharp on a tablet,
-	// small enough to load quickly over Wi-Fi.
-	FullSize = 2048
-	// ThumbSize is the side of the square thumbnails in admin.
+	FullSize  = 2048
 	ThumbSize = 400
 )
 
 // MaxUpload is the largest accepted upload, in bytes.
 const MaxUpload = 20 << 20
 
-// maxFolderFile is the largest folder photo Ingle will decode.
 const maxFolderFile = 64 << 20
 
 // MaxFolderPhotos caps how many folder photos are indexed.
@@ -60,7 +53,6 @@ var (
 	folderRe = regexp.MustCompile(`^[0-9a-f]{16}$`)
 )
 
-// folderFile is one indexed photo in the folder.
 type folderFile struct {
 	rel   string
 	mtime time.Time
@@ -70,22 +62,21 @@ type folderFile struct {
 // Library stores uploads and indexes the folder.
 type Library struct {
 	st     *store.Store
-	blobs  Blobs  // uploaded photos: <name>.jpg and <name>_t.jpg
-	cache  string // resized folder photos
-	folder string // read-only folder, or "" for none
+	blobs  Blobs
+	cache  string
+	folder string
 	log    *slog.Logger
 	now    func() time.Time
 
 	mu    sync.RWMutex
 	index map[string]folderFile
-	ids   []string        // sorted, for a stable order
-	bad   map[string]bool // ids that failed to decode, logged once
+	ids   []string
+	bad   map[string]bool
 
-	genMu sync.Mutex // serialises resizing folder photos
+	genMu sync.Mutex
 }
 
-// New returns a Library storing uploads under dataDir/photos and resized
-// folder photos under dataDir/photo-cache. folder may be "".
+// New returns a Library storing its files under dataDir.
 func New(st *store.Store, dataDir, folder string, log *slog.Logger) (*Library, error) {
 	l := &Library{
 		st:     st,
@@ -117,8 +108,7 @@ func (l *Library) FolderCount() int {
 	return len(l.ids)
 }
 
-// Upload decodes an uploaded image, stores a slideshow-sized copy and a
-// thumbnail, and records it.
+// Upload decodes an uploaded image, stores a slideshow-sized copy and a thumbnail, and records it.
 func (l *Library) Upload(ctx context.Context, householdID, actorID int64, r io.Reader) (dbq.Photo, error) {
 	img, err := picture.Decode(r, MaxUpload)
 	switch {
@@ -210,8 +200,7 @@ func (l *Library) List(ctx context.Context, householdID int64) ([]dbq.Photo, err
 	return ps, nil
 }
 
-// Slides returns the URL of every photo for the slideshow: uploads, then
-// the folder. The page shuffles them.
+// Slides returns the URL of every photo for the slideshow: uploads, then the folder.
 func (l *Library) Slides(ctx context.Context, householdID int64) ([]string, error) {
 	ps, err := l.List(ctx, householdID)
 	if err != nil {
@@ -239,8 +228,7 @@ func UploadURL(file string, thumb bool) string {
 	return "/photos/u/" + file
 }
 
-// OpenUpload opens a household's uploaded photo for serving. Names that
-// aren't the household's photos return ErrNotFound, so paths can't escape.
+// OpenUpload opens a household's uploaded photo for serving.
 func (l *Library) OpenUpload(ctx context.Context, householdID int64, file string, thumb bool) (io.ReadSeekCloser, error) {
 	if !uploadRe.MatchString(file) {
 		return nil, ErrNotFound
@@ -260,9 +248,7 @@ func (l *Library) OpenUpload(ctx context.Context, householdID int64, file string
 	return f, nil
 }
 
-// OpenFolder opens a slideshow-sized copy of an indexed folder photo,
-// resizing it on first use. Only ids from the index are accepted; client
-// input never becomes a path.
+// OpenFolder opens a slideshow-sized copy of an indexed folder photo, resizing it on first use.
 func (l *Library) OpenFolder(ctx context.Context, id string) (*os.File, error) {
 	if !folderRe.MatchString(id) {
 		return nil, ErrNotFound
@@ -293,7 +279,6 @@ func (l *Library) OpenFolder(ctx context.Context, id string) (*os.File, error) {
 		l.mu.Unlock()
 		return nil, ErrNotFound
 	}
-	// Drop copies made from an older version of the file.
 	if old, err := filepath.Glob(filepath.Join(l.cache, id+"-*.jpg")); err == nil {
 		for _, o := range old {
 			if o != cached {
@@ -317,9 +302,7 @@ func (l *Library) resize(ff folderFile, dst string) error {
 	return picture.WriteJPEG(dst, picture.Fit(img, FullSize), 85)
 }
 
-// Rescan re-indexes the folder: regular .jpg/.jpeg/.png/.gif files,
-// skipping hidden files and directories and symlinks, up to
-// MaxFolderPhotos. Cached copies of photos that have gone are removed.
+// Rescan re-indexes the photos folder.
 func (l *Library) Rescan(ctx context.Context) error {
 	if l.folder == "" {
 		return nil
@@ -331,7 +314,7 @@ func (l *Library) Rescan(ctx context.Context) error {
 			if path == l.folder {
 				return err
 			}
-			return nil // unreadable subdirectory: skip it
+			return nil
 		}
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -375,7 +358,6 @@ func (l *Library) Rescan(ctx context.Context) error {
 
 	l.mu.Lock()
 	for id, ff := range l.index {
-		// Forget a failure if the file changed, so a fixed photo comes back.
 		if nf, ok := index[id]; !ok || !nf.mtime.Equal(ff.mtime) || nf.size != ff.size {
 			delete(l.bad, id)
 		}
@@ -403,25 +385,20 @@ func (l *Library) pruneCache(index map[string]folderFile) {
 	}
 }
 
-// SetBlobs stores uploaded photos in b instead of on disk. Call it before
-// serving; photos already uploaded stay where they were.
+// SetBlobs stores uploaded photos in b instead of on disk.
 func (l *Library) SetBlobs(b Blobs) { l.blobs = b }
 
-// blobNames are the stored files of the upload name.
 func blobNames(name string) (full, thumb string) {
 	return name + ".jpg", name + "_t.jpg"
 }
 
-// RemoveFiles deletes an uploaded photo's files, once its row is gone
-// (e.g. its household was deleted). Failures are logged.
+// RemoveFiles deletes an uploaded photo's files, once its row is gone (e.g. its household was deleted).
 func (l *Library) RemoveFiles(ctx context.Context, name string) {
 	if uploadRe.MatchString(name) {
 		l.removeBlobs(ctx, name)
 	}
 }
 
-// removeBlobs deletes both files of the upload name, logging failures: the
-// photo's row is already gone, or was never written.
 func (l *Library) removeBlobs(ctx context.Context, name string) {
 	full, thumb := blobNames(name)
 	for _, n := range []string{full, thumb} {

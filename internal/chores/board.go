@@ -15,91 +15,71 @@ import (
 // OverdueDays is how far back the board looks for missed chores.
 const OverdueDays = 14
 
-// UndoWindow is how long after completing a chore it can be undone from the
-// board without an adult. Later corrections are an admin job.
+// UndoWindow is how long after completing a chore it can be undone from the board without an adult.
 const UndoWindow = 30 * time.Second
 
-// ErrUndoExpired is returned by Undo once UndoWindow has passed or an adult
-// has already reviewed the completion.
+// ErrUndoExpired is returned by Undo once the completion can no longer be undone.
 var ErrUndoExpired = errors.New("too late to undo")
 
 // Board is everything the main board shows for one board day.
 type Board struct {
-	Day     string // YYYY-MM-DD
-	Pool    []Card
-	Columns []Column
-	People  []dbq.Person // active people, for the "who's doing this?" picker
-	// NextChange is the next time an Only on the day chore on the board
-	// runs out (zero if none), so displays can refresh then.
+	Day        string
+	Pool       []Card
+	Columns    []Column
+	People     []dbq.Person
 	NextChange time.Time
-	// Holiday is set while everyone's on holiday (the one ending last).
-	Holiday *Holiday
+	Holiday    *Holiday
 }
 
-// Column is one person's chores and balance (what they can spend: waiting
-// reward claims are held back, and Waiting counts them). TotalToday counts every card
-// in the column (today's chores plus any overdue ones), so "all done" means
-// nothing is left, not just today's.
+// Column is one person's chores and balance on the board.
 type Column struct {
 	Person     dbq.Person
 	Points     int64
 	Pence      int64
 	Waiting    int
-	Goal       *Goal // what they're saving for, if anything
+	Goal       *Goal
 	DoneToday  int
 	TotalToday int
 	Cards      []Card
-	Away       *Holiday // set while this person is on holiday on their own
+	Away       *Holiday
 }
 
-// LeftToday is how many of the column's cards are still to do. A chore
-// waiting for a grown-up to approve it counts as done.
+// LeftToday is how many of the column's cards are still to do.
 func (c Column) LeftToday() int { return c.TotalToday - c.DoneToday }
 
 // Card is one occurrence on the board.
 type Card struct {
 	OccurrenceID int64
 	Title        string
-	Emoji        string // "" for none
+	Emoji        string
 	DueOn        string
 	DueTime      *string
 	Points       int64
 	Pence        int64
-	AdultPoints  int64 // what an adult earns for it (pool chores' picker)
-	Pool         bool  // a pool chore (claimable, or claimed by this column's person)
-	Claimed      bool  // a pool chore claimed by this column's person
-	Overdue      bool  // due before today and not done
-	Done         bool  // completed (pending or approved)
-	Pending      bool  // completed, waiting for an adult
-	CompletionID int64 // set when Done
-	CompletedAt  int64 // unix seconds, set when Done
-	JustDone     bool  // completed in the last few seconds (for the tick animation)
-	// DoneBy is the adult who did this person's chore for them (and got
-	// the points), "" when they did it themselves.
-	DoneBy string
-	// Flexible-day chores, not yet done: Flex names the days left ("Today or
-	// Thu"); LastChance marks the last of several days.
-	Flex       string
-	LastChance bool
-	// Shared chores: For is whose column this copy is in (the person a tap
-	// completes it as), With the other chosen people. Done shared chores
-	// show only under whoever did them.
-	Shared bool
-	For    int64
-	With   []dbq.Person
-	SortOn string // the day it sorts with: today, or an overdue due date
-	// Only on the day chores, not yet done: they come off the board at their
-	// due time (Until, "HH:MM") or, untimed, when the day rolls over.
-	OnTheDay bool
-	Until    string
+	AdultPoints  int64
+	Pool         bool
+	Claimed      bool
+	Overdue      bool
+	Done         bool
+	Pending      bool
+	CompletionID int64
+	CompletedAt  int64
+	JustDone     bool
+	DoneBy       string
+	Flex         string
+	LastChance   bool
+	Shared       bool
+	For          int64
+	With         []dbq.Person
+	SortOn       string
+	OnTheDay     bool
+	Until        string
 }
 
-// FallbackEmoji leads a picture card for a chore with no emoji and nothing
-// to suggest from its title.
+// FallbackEmoji leads a picture card when no other emoji fits.
 const FallbackEmoji = "⭐"
 
-// PictureEmoji is the emoji for a picture card, which always leads with one:
-// the chore's own, or one suggested from its title, or FallbackEmoji.
+// PictureEmoji is the emoji that leads a picture card.
 func (c Card) PictureEmoji() string {
 	if c.Emoji != "" {
 		return c.Emoji
@@ -110,15 +90,9 @@ func (c Card) PictureEmoji() string {
 	return FallbackEmoji
 }
 
-// justDoneFor is how long a completed card counts as JustDone.
 const justDoneFor = 10 * time.Second
 
-// Board builds the board for boardDay (the local midnight from
-// settings.BoardDay). It shows today's occurrences plus overdue ones: an
-// undone occurrence from the last OverdueDays days that is still the latest
-// occurrence of its chore, so a missed weekly chore stays up until the next
-// one is due but a missed daily chore doesn't pile up. An overdue chore
-// finished today stays up (ticked) until the day rolls over.
+// Board builds the board for boardDay (the local midnight from settings.BoardDay).
 func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Time) (Board, error) {
 	today := boardDay.Format(DateLayout)
 	from := boardDay.AddDate(0, 0, -OverdueDays).Format(DateLayout)
@@ -155,10 +129,6 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 	for _, c := range comps {
 		byOcc[c.OccurrenceID] = c
 	}
-	// latest is when each chore's newest occurrence on the board came up
-	// (per person, for an "each" chore): its due date, or the first day of a
-	// flexible-day window. An overdue occurrence older than that has been
-	// superseded.
 	type copyOf struct{ chore, person int64 }
 	latest := map[copyOf]string{}
 	for _, r := range rows {
@@ -194,7 +164,7 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 		}
 		at := &b.Holiday
 		if h.Person != nil {
-			at = &cols[h.Person.ID].Away // holidayViews leaves out archived people
+			at = &cols[h.Person.ID].Away
 		}
 		if *at == nil || h.EndsOn > (*at).EndsOn {
 			*at = &h
@@ -226,7 +196,7 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 	}
 	for i := range b.Columns {
 		if c := &b.Columns[i]; c.Person.Kind == "adult" {
-			c.Pence = 0 // adults have points only
+			c.Pence = 0
 		}
 	}
 
@@ -236,19 +206,16 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 		}
 		comp, done := byOcc[r.ID]
 		if !done && hols.cleared(r.DueOn, today, rowOwners(r, shared)) {
-			continue // paused or cleared by a holiday
+			continue
 		}
 		flex := r.AvailableFrom != nil
 		if r.DueOn < today && latest[copyOf{r.ChoreID, r.ForPerson}] > r.DueOn {
-			continue // superseded by a newer occurrence
+			continue
 		}
 		if (r.DueOn < today || flex) && done && comp.CompletedAt < boardDay.Unix() {
-			continue // caught up on an earlier day, or done earlier in its window
+			continue
 		}
 		dueTime := optTime(r.DueTime)
-		// A timed chore set to show shortly before its time stays off
-		// today's board until then (not counted in today's progress), and
-		// the board refreshes itself when it's due to appear.
 		if !done && !flex && r.DueOn == today {
 			if show, ok := appearsAt(r.DueOn, r.DueTime, r.ShowBefore, loc, dayStart); ok && now.Before(show) {
 				if b.NextChange.IsZero() || show.Before(b.NextChange) {
@@ -261,7 +228,7 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 		onTheDay = onTheDay && !done
 		if onTheDay {
 			if !now.Before(at) {
-				continue // too late: missed, not overdue
+				continue
 			}
 			if b.NextChange.IsZero() || at.Before(b.NextChange) {
 				b.NextChange = at
@@ -306,20 +273,17 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 			owner = r.ClaimedBy
 		}
 		if owner == nil && done {
-			// An unclaimed pool chore someone just did: show it under them,
-			// or a shared chore an adult did for someone: under that person.
 			owner = &comp.PersonID
 			if comp.ForPersonID != nil {
 				owner = comp.ForPersonID
 			}
 		}
 		if owner == nil && card.Shared {
-			// Not done yet: in each chosen person's column, as theirs to do.
 			ids := shared[r.ChoreID]
 			for _, id := range ids {
 				col := cols[id]
 				if col == nil || hols.awayOn(today, []int64{id}) {
-					continue // archived, or away: the others do it
+					continue
 				}
 				c := card
 				c.For = id
@@ -335,12 +299,13 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 			continue
 		}
 		if owner == nil {
+			card.Pool = true
 			b.Pool = append(b.Pool, card)
 			continue
 		}
 		col := cols[*owner]
 		if col == nil {
-			continue // owner archived since
+			continue
 		}
 		card.Claimed = card.Pool && !done
 		card.Points, card.Pence = Earns(col.Person.Kind, r.Points, r.Pence, r.AdultPoints)
@@ -358,8 +323,6 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 	return b, nil
 }
 
-// compareCards orders a column: overdue, then due today (timed before
-// untimed, by time), then done; ties by title.
 func compareCards(a, b Card) int {
 	rank := func(c Card) int {
 		switch {
@@ -390,10 +353,7 @@ func compareCards(a, b Card) int {
 	return cmp.Compare(a.Title, b.Title)
 }
 
-// Undo reverses a board tap: within UndoWindow of completing, and only if no
-// adult has reviewed it, the completion and its ledger credit are removed and
-// the occurrence reopens (claimed again if it was claimed). The activity row
-// is attributed to whoever completed it.
+// Undo reverses a board tap within UndoWindow, if no adult has reviewed it.
 func (s *Service) Undo(ctx context.Context, householdID, completionID int64) error {
 	return s.st.WithTx(ctx, func(q *dbq.Queries) error {
 		c, err := q.GetCompletion(ctx, dbq.GetCompletionParams{HouseholdID: householdID, ID: completionID})
@@ -424,7 +384,6 @@ func (s *Service) Undo(ctx context.Context, householdID, completionID int64) err
 	})
 }
 
-// availableFrom is the first day r is on the board.
 func availableFrom(r dbq.ListBoardRow) string {
 	if r.AvailableFrom != nil {
 		return *r.AvailableFrom
@@ -432,8 +391,7 @@ func availableFrom(r dbq.ListBoardRow) string {
 	return r.DueOn
 }
 
-// SharedPeople maps each active shared chore to its chosen, active people,
-// in board order.
+// SharedPeople maps each active shared chore to its chosen, active people, in board order.
 func (s *Service) SharedPeople(ctx context.Context, householdID int64) (map[int64][]int64, error) {
 	return s.sharedPeople(ctx, householdID)
 }

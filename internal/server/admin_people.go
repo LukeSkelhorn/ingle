@@ -17,27 +17,20 @@ import (
 type peopleView struct {
 	People   []dbq.Person
 	Archived []dbq.Person
-	// Balances are each active person's points and pence, by person ID.
 	Balances map[int64]dbq.BalancesForHouseholdRow
-	// Adjust is the open Give / Take points pop-up, nil when closed.
-	Adjust *pointsDialog
-	// Undo is the adjustment just made from the list, nil for none.
-	Undo *peopleUndo
+	Adjust   *pointsDialog
+	Undo     *peopleUndo
 }
 
-// pointsDialog is the Adjust points pop-up on Admin › People.
 type pointsDialog struct {
 	Person dbq.Person
 	Panel  pointsPanel
 }
 
-// peopleUndo is the Undo button in the flash after adjusting from the list.
 type peopleUndo struct {
 	PersonID, EntryID int64
 }
 
-// fromPeople is the form value that sends an adjustment (or its undo) back
-// to Admin › People instead of the person's page.
 const fromPeople = "people"
 
 func (s *Server) handlePeople(w http.ResponseWriter, r *http.Request) {
@@ -63,8 +56,6 @@ func (s *Server) handlePeople(w http.ResponseWriter, r *http.Request) {
 	s.renderPeople(w, r, http.StatusOK, v, nil, "")
 }
 
-// renderPeople renders Admin › People, with the Adjust points pop-up open
-// when v.Adjust is set.
 func (s *Server) renderPeople(w http.ResponseWriter, r *http.Request, status int, v peopleView, errs valid.Errors, flash string) {
 	ctx := r.Context()
 	var err error
@@ -87,7 +78,7 @@ func (s *Server) renderPeople(w http.ResponseWriter, r *http.Request, status int
 	}
 	for _, p := range v.People {
 		if b, ok := v.Balances[p.ID]; ok && p.Kind == household.KindAdult {
-			b.Pence = 0 // adults have points only
+			b.Pence = 0
 			v.Balances[p.ID] = b
 		}
 	}
@@ -106,20 +97,16 @@ func (s *Server) renderPeople(w http.ResponseWriter, r *http.Request, status int
 	s.render(w, r, status, "admin_people", page)
 }
 
-// personForm is the person edit page: the profile form plus, for adults,
-// their PIN and sign-in.
 type personForm struct {
-	ID         int64 // 0 when creating
-	Name       string
-	Kind       string
-	Colour     string
-	AvatarMode string // none, emoji, photo
-	Emoji      string
-	Photo      string // current photo URL
-	SortOrder  int64
-	Pictures   bool // picture cards on the board
-	// InterestOn shows "Earns interest" (the household pays interest);
-	// EarnsInterest is whether this child does.
+	ID                        int64
+	Name                      string
+	Kind                      string
+	Colour                    string
+	AvatarMode                string
+	Emoji                     string
+	Photo                     string
+	SortOrder                 int64
+	Pictures                  bool
 	InterestOn, EarnsInterest bool
 	Archived                  bool
 
@@ -132,35 +119,31 @@ type personForm struct {
 	Colours []string
 	Emojis  []string
 
-	Birthday         chores.Birthday // as typed, or saved
-	CanAddCountdowns bool            // a child may add countdowns on the board
+	Birthday         chores.Birthday
+	CanAddCountdowns bool
 
-	Goal    int64        // the reward they're saving for, 0 for none
-	Rewards []dbq.Reward // the rewards they may have, to pick a goal from (editing only)
+	Goal    int64
+	Rewards []dbq.Reward
 
-	Points pointsPanel // the Adjust points section (editing only)
-	Bank   bankPanel   // a child's Bank balance section (editing only)
-	Match  matchPanel  // a child's Match savings section (editing only)
+	Points pointsPanel
+	Bank   bankPanel
+	Match  matchPanel
 }
 
-// pointsPanel is the person page's Points section: their balance, the
-// Adjust points form (with what was typed, after an error), the reasons to
-// suggest, their recent adjustments, and the one just made, for Undo.
 type pointsPanel struct {
 	Points, HeldPoints int64
-	Pence, HeldPence   int64  // money they can spend, and what's held
-	PayOut             string // Move to bank's amount, as typed
-	PayAll             bool   // Move to bank's All of it
-	Direction          string // take or give
-	Amount             string // 1, 2, 5, 10 or custom
+	Pence, HeldPence   int64
+	PayOut             string
+	PayAll             bool
+	Direction          string
+	Amount             string
 	Custom             string
 	Reason             string
 	Suggestions        []string
 	History            []chores.Adjustment
-	Undo               int64 // the ledger entry just made, 0 for none
+	Undo               int64
 }
 
-// quickAmounts are the Adjust points form's one-tap amounts.
 var quickAmounts = []string{"1", "2", "5", "10"}
 
 func (pointsPanel) QuickAmounts() []string { return quickAmounts }
@@ -207,7 +190,6 @@ func (s *Server) renderPerson(w http.ResponseWriter, r *http.Request, status int
 		title = f.Name
 	}
 	if f.ID != 0 && !f.Archived {
-		// No rewards, no "Saving for" picker.
 		if s.moduleOn(r.Context(), modRewards) {
 			rewards, err := s.Household.RewardsFor(r.Context(), hhOf(r), f.ID)
 			if err != nil {
@@ -272,9 +254,6 @@ func (s *Server) loadPerson(w http.ResponseWriter, r *http.Request) (dbq.Person,
 	return p, true
 }
 
-// readPersonForm parses the (multipart) profile form. A newly uploaded
-// photo is saved and returned as newPhoto so the caller can delete it if the
-// save fails.
 func (s *Server) readPersonForm(w http.ResponseWriter, r *http.Request, f *personForm, current *string) (in household.PersonInput, newPhoto string, errs valid.Errors, err error) {
 	r.Body = http.MaxBytesReader(w, r.Body, avatar.MaxUpload+maxFormBytes)
 	if err := r.ParseMultipartForm(1 << 20); err != nil && !errors.Is(err, http.ErrNotMultipart) {
@@ -322,7 +301,6 @@ func (s *Server) readPersonForm(w http.ResponseWriter, r *http.Request, f *perso
 				in.Avatar, newPhoto = &v, name
 			}
 		} else {
-			// No new file: keep the current photo if there is one.
 			if kind, _ := avatar.Parse(current); kind == avatar.Photo {
 				in.Avatar = current
 			} else {
@@ -365,9 +343,6 @@ func (s *Server) handlePersonCreate(w http.ResponseWriter, r *http.Request) {
 	redirect(w, r, "/admin/people/"+itoa(p.ID))
 }
 
-// fillChores materialises chore occurrences now, so someone just added (or
-// back) gets their copies of Everyone chores without waiting for the hourly
-// run. A failure is only logged: the hourly run catches up.
 func (s *Server) fillChores(r *http.Request) {
 	if _, err := s.Chores.Materialise(r.Context(), hhOf(r), s.boardDay(r), chores.Window); err != nil {
 		s.Log.ErrorContext(r.Context(), "materialise chores", slog.Any("err", err))
@@ -404,12 +379,10 @@ func (s *Server) handlePersonUpdate(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	// The old photo is no longer referenced.
 	if kind, name := avatar.Parse(cur.Avatar); kind == avatar.Photo && (p.Avatar == nil || *p.Avatar != *cur.Avatar) {
 		_ = s.Avatars.Remove(name)
 	}
 	flash := "Saved."
-	// The checkbox is only on the form while interest is on.
 	if r.Form.Has("interest_shown") && p.Kind == household.KindChild {
 		optOut := !newForm(r).checked("earns_interest")
 		if optOut != (p.InterestOptOut == 1) {
@@ -439,8 +412,7 @@ func (s *Server) handlePersonUpdate(w http.ResponseWriter, r *http.Request) {
 	s.renderPerson(w, r, http.StatusOK, s.personFormFor(r, p), nil, flash)
 }
 
-// savePersonGoal sets or clears what p is saving for, if it changed: saving
-// the same goal again would restart its celebration.
+// savePersonGoal skips an unchanged goal, as saving it again would restart its celebration.
 func (s *Server) savePersonGoal(r *http.Request, p dbq.Person, goal *int64) (dbq.Person, error) {
 	ctx := r.Context()
 	switch {
@@ -474,11 +446,9 @@ func (s *Server) handlePersonArchive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.Calendars != nil {
-		// Their calendars are the family's now.
 		s.Calendars.ForgetPerson(hhOf(r), p.ID)
 	}
 	if actor(r).Person.ID == p.ID {
-		// Archiving yourself ends your own session.
 		s.clearCookie(w, r, sessionCookie)
 		redirect(w, r, "/")
 		return
@@ -499,7 +469,6 @@ func (s *Server) handlePersonRestore(w http.ResponseWriter, r *http.Request) {
 	redirect(w, r, "/admin/people/"+itoa(p.ID))
 }
 
-// credentialAction handles the PIN and sign-in forms on the person page.
 func (s *Server) credentialAction(w http.ResponseWriter, r *http.Request, flash string, fn func(p dbq.Person, f *form) error) {
 	p, ok := s.loadPerson(w, r)
 	if !ok {
@@ -535,7 +504,6 @@ func (s *Server) credentialAction(w http.ResponseWriter, r *http.Request, flash 
 	s.renderPerson(w, r, http.StatusOK, s.personFormFor(r, p), nil, flash)
 }
 
-// errKidPINOff: a child's PIN only opens My money, so it needs that module.
 var errKidPINOff = errors.New("my money is off")
 
 func (s *Server) handlePersonSetPIN(w http.ResponseWriter, r *http.Request) {
@@ -581,7 +549,6 @@ func (s *Server) handlePersonClearLogin(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
-// conflictMessage maps domain rule violations to a message for the page.
 func conflictMessage(err error) (string, bool) {
 	switch {
 	case errors.Is(err, household.ErrHasAssignedChores):
@@ -605,8 +572,6 @@ func boolInt64(b bool) int64 {
 	return 0
 }
 
-// savePersonCountdowns saves the birthday and "Can add countdowns" from the
-// form, when it showed them (Countdowns is on).
 func (s *Server) savePersonCountdowns(r *http.Request, p dbq.Person, f personForm) error {
 	if !r.Form.Has("countdowns_shown") {
 		return nil

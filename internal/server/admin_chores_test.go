@@ -9,7 +9,6 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/chores"
 )
 
-// order returns the titles in body, in the order they appear.
 func order(body string, titles ...string) string {
 	type at struct {
 		i int
@@ -67,23 +66,19 @@ func TestChoresListFilterAndSort(t *testing.T) {
 		t.Errorf("by name: %s", got)
 	}
 
-	// One person.
 	r = phone.get("/admin/chores?person=" + itoa(alfie.ID))
 	expect(t, r, http.StatusOK, "Chores · 4 for Alfie", `href="/admin/chores/new?assignee=`+itoa(alfie.ID)+`&amp;back=`)
 	if got := order(r.body, all...); got != "Aardvark,Bins,Teeth,Zoo trip" {
 		t.Errorf("Alfie's: %s", got)
 	}
-	// Up for grabs.
 	r = phone.get("/admin/chores?person=pool")
 	expect(t, r, http.StatusOK, "Chores · 1 up for grabs")
 	if got := order(r.body, all...); got != "Dishes" {
 		t.Errorf("pool: %s", got)
 	}
-	// Nobody's: the empty state offers a chore for them.
 	r = phone.get("/admin/chores?person=" + itoa(isla.ID))
 	expect(t, r, http.StatusOK, "Chores · 0 for Isla", "No chores for Isla yet.", "Add a chore for Isla", "/admin/chores/new?assignee="+itoa(isla.ID))
 
-	// Sorts, with ties on the other amount then the name; nothing-worth last.
 	r = phone.get("/admin/chores?sort=points")
 	if got := order(r.body, all...); got != "Bins,Teeth,Dishes,Zoo trip,Aardvark" {
 		t.Errorf("by points: %s", got)
@@ -92,11 +87,9 @@ func TestChoresListFilterAndSort(t *testing.T) {
 	if got := order(r.body, all...); got != "Zoo trip,Bins,Teeth,Aardvark" {
 		t.Errorf("Alfie's by money: %s", got)
 	}
-	// The chips keep the sort and the sort keeps the filter.
 	expect(t, r, http.StatusOK, `href="/admin/chores?person=pool&amp;sort=money"`, `href="/admin/chores?sort=money"`,
 		`<input type="hidden" name="person" value="`+itoa(alfie.ID)+`">`, `<option value="money" selected>`)
 
-	// Nonsense is ignored.
 	for _, q := range []string{"person=999", "person=abc", "sort=evil", "person=" + itoa(alfie.ID) + "x"} {
 		r = phone.get("/admin/chores?" + q)
 		expect(t, r, http.StatusOK, "<h1>Chores</h1>")
@@ -114,7 +107,6 @@ func TestChoresListBack(t *testing.T) {
 	alfie := h.person("Alfie")
 	back := "/admin/chores?person=" + itoa(alfie.ID) + "&sort=money"
 
-	// "Add a chore for Alfie" pre-fills him and comes back to his list.
 	r := phone.get("/admin/chores/new?" + url.Values{"assignee": {itoa(alfie.ID)}, "back": {back}}.Encode())
 	expect(t, r, http.StatusOK, `value="assigned" checked`, `name="assignee_id" value="`+itoa(alfie.ID)+`" data-kind="child" checked`,
 		`<a href="/admin/chores?person=`+itoa(alfie.ID)+`&amp;sort=money">‹ Chores</a>`,
@@ -126,26 +118,21 @@ func TestChoresListBack(t *testing.T) {
 	expectRedirect(t, phone.post("/admin/chores", chore), back)
 	bins := h.chore("Bins")
 
-	// The list links into the chore with back, and the edit page keeps it,
-	// including after saving.
 	expect(t, phone.get(back), http.StatusOK, `href="/admin/chores/`+itoa(bins.ID)+`?back=%2Fadmin%2Fchores%3Fperson%3D`+itoa(alfie.ID)+`%26sort%3Dmoney"`)
 	expect(t, phone.get("/admin/chores/"+itoa(bins.ID)+"?"+url.Values{"back": {back}}.Encode()), http.StatusOK,
 		`‹ Chores`, `/admin/chores?person=`+itoa(alfie.ID)+`&amp;sort=money">‹ Chores`)
 	chore.Set("title", "Bins out")
 	expect(t, phone.post("/admin/chores/"+itoa(bins.ID), chore), http.StatusOK, "Saved.", `&amp;sort=money">‹ Chores`)
 
-	// Elsewhere is refused.
 	for _, bad := range []string{"https://evil.example/admin/chores", "//evil.example/admin/chores", "/admin/people", "/admin/chores?person=999"} {
 		chore.Set("title", "Teeth "+bad)
 		chore.Set("back", bad)
 		expectRedirect(t, phone.post("/admin/chores", chore), "/admin/chores")
 	}
-	// An unknown assignee isn't pre-filled.
 	if r := phone.get("/admin/chores/new?assignee=999"); strings.Contains(r.body, `value="999" checked`) {
 		t.Error("unknown assignee pre-filled")
 	}
 
-	// Archive comes back to the filtered list.
 	expectRedirect(t, phone.post("/admin/chores/"+itoa(bins.ID)+"/archive", url.Values{"back": {back}}), back)
 }
 
@@ -203,7 +190,6 @@ func TestChoreFormShared(t *testing.T) {
 		`name="mode" value="shared" checked`,
 		`name="people_ids" value="`+itoa(alfie.ID)+`" data-kind="child" checked`, `name="people_ids" value="`+itoa(isla.ID)+`" data-kind="child" checked`)
 
-	// Nobody ticked.
 	chore.Del("people_ids")
 	chore.Set("title", "Nobody's")
 	expect(t, phone.post("/admin/chores", chore), http.StatusUnprocessableEntity, "Choose at least two people.")
@@ -212,7 +198,6 @@ func TestChoreFormShared(t *testing.T) {
 		"title": {"Hoover"}, "mode": {"pool"}, "repeat": {"daily"}, "starts_on": {"2026-07-01"}, "suggest_offered": {"1"},
 	}), "/admin/chores")
 
-	// The list says who; Isla's chores include it; Up for grabs doesn't.
 	expect(t, phone.get("/admin/chores"), http.StatusOK, "Alfie or Isla", `class="avatar-stack"`)
 	r := phone.get("/admin/chores?person=" + itoa(isla.ID))
 	expect(t, r, http.StatusOK, "Feed the cat", "Chores · 1 for Isla")

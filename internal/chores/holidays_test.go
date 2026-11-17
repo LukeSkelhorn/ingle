@@ -19,7 +19,6 @@ func (f *fixture) day(date string) time.Time {
 	return d
 }
 
-// holiday adds a holiday (for everyone when person is nil), on boardDay.
 func (f *fixture) holiday(person *int64, from, to, boardDay string) int64 {
 	f.t.Helper()
 	id, err := f.svc.AddHoliday(f.t.Context(), f.hh, f.adult.ID, HolidayInput{PersonID: person, From: from, To: to}, f.day(boardDay))
@@ -44,10 +43,9 @@ func TestHolidayForEveryone(t *testing.T) {
 	daily, weekly := "FREQ=DAILY", "FREQ=WEEKLY;BYDAY=TU"
 	f.chore("Feed cat", choreOpts{assignee: &f.kid.ID, rrule: &daily})
 	f.chore("Hoover", choreOpts{assignee: &f.kid.ID, rrule: &weekly})
-	f.chore("Car wash", choreOpts{rrule: &daily}) // up for grabs
+	f.chore("Car wash", choreOpts{rrule: &daily})
 	f.materialise("2026-11-02", Window)
 
-	// Away Wed 4 to Fri 6 Nov, added on Mon 2.
 	f.holiday(nil, "2026-11-04", "2026-11-06", "2026-11-02")
 
 	got := choreDates(f.board("2026-11-02", "2026-11-08"), "Feed cat")
@@ -56,7 +54,6 @@ func TestHolidayForEveryone(t *testing.T) {
 		t.Fatalf("Feed cat due %v, want %v", got, want)
 	}
 
-	// During: nothing on the board, and the banner.
 	b := f.boardAt("2026-11-05")
 	if len(b.Pool) != 0 || len(b.column("Alfie").Cards) != 0 {
 		t.Fatalf("board on holiday: pool %v, Alfie %v", titles(b.Pool), titles(b.column("Alfie").Cards))
@@ -65,8 +62,6 @@ func TestHolidayForEveryone(t *testing.T) {
 		t.Fatalf("Holiday = %+v, want one until Friday", b.Holiday)
 	}
 
-	// The day after: today's chores, and Tuesday's missed Hoover is cleared
-	// (it would otherwise be overdue until next Tuesday).
 	b = f.boardAt("2026-11-07")
 	if b.Holiday != nil {
 		t.Fatalf("Holiday = %+v after it ended", b.Holiday)
@@ -87,7 +82,7 @@ func TestHolidayForOnePerson(t *testing.T) {
 	f.eachChore("Teeth", false, []int64{f.kid.ID, f.kid2.ID})
 	f.sharedChore("Dishes", []int64{f.kid.ID, f.kid2.ID})
 	f.sharedChore("Walk dog", []int64{f.kid.ID, f.kid2.ID})
-	f.chore("Car wash", choreOpts{startsOn: "2026-11-05"}) // one-off, up for grabs
+	f.chore("Car wash", choreOpts{startsOn: "2026-11-05"})
 	f.materialise("2026-11-02", Window)
 	for _, r := range f.board("2026-11-05", "2026-11-05") {
 		if r.Title == "Car wash" {
@@ -97,7 +92,6 @@ func TestHolidayForOnePerson(t *testing.T) {
 		}
 	}
 
-	// Alfie's at camp Wed 4 to Fri 6; Isla joins him on Thursday.
 	f.holiday(&f.kid.ID, "2026-11-04", "2026-11-06", "2026-11-02")
 	isla := f.holiday(&f.kid2.ID, "2026-11-05", "2026-11-05", "2026-11-02")
 
@@ -109,15 +103,12 @@ func TestHolidayForOnePerson(t *testing.T) {
 	if b.Holiday != nil {
 		t.Fatalf("Holiday = %+v, want nil (only Alfie's away)", b.Holiday)
 	}
-	// Isla carries on with the shared chores; her own copy of Teeth stays.
 	got := titles(b.column("Isla").Cards)
 	want := []string{"Dishes@2026-11-04", "Teeth@2026-11-04", "Walk dog@2026-11-04"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("Isla = %v, want %v", got, want)
 	}
 
-	// Thursday both are away: the shared chores pause, and the car wash
-	// Alfie claimed is back up for grabs.
 	b = f.boardAt("2026-11-05")
 	if n := len(b.column("Isla").Cards) + len(b.column("Alfie").Cards); n != 0 {
 		t.Fatalf("Isla %v, Alfie %v, want nothing", titles(b.column("Isla").Cards), titles(b.column("Alfie").Cards))
@@ -126,7 +117,6 @@ func TestHolidayForOnePerson(t *testing.T) {
 		t.Fatalf("pool = %v, want %v", got, want)
 	}
 
-	// Removing Isla's holiday brings her Thursday back.
 	if err := f.svc.RemoveHoliday(ctx, f.hh, f.adult.ID, isla, f.day("2026-11-02")); err != nil {
 		t.Fatal(err)
 	}
@@ -139,8 +129,6 @@ func TestHolidayFlexibleDays(t *testing.T) {
 	f := newFixture(t)
 	rule := "FREQ=WEEKLY;BYDAY=MO,WE,FR"
 	f.chore("Hoover", choreOpts{assignee: &f.kid.ID, rrule: &rule, anyDay: true})
-	// Away Wed to Fri: Monday's still free, so that week stays. Away the
-	// whole of the next week, so it's paused.
 	f.holiday(&f.kid.ID, "2026-11-04", "2026-11-06", "2026-11-02")
 	f.holiday(&f.kid.ID, "2026-11-09", "2026-11-15", "2026-11-02")
 	f.materialise("2026-11-02", Window)
@@ -157,7 +145,6 @@ func TestEndHolidayNow(t *testing.T) {
 	f.chore("Feed cat", choreOpts{assignee: &f.kid.ID, rrule: &daily})
 	id := f.holiday(nil, "2026-11-01", "2026-11-10", "2026-11-02")
 
-	// Back early, on Thu 5: today's chores come back.
 	if err := f.svc.EndHoliday(ctx, f.hh, f.adult.ID, id, f.day("2026-11-05")); err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +160,6 @@ func TestEndHolidayNow(t *testing.T) {
 		t.Fatalf("Holidays = %+v, %v; want one ending Wed 4", hs, err)
 	}
 
-	// Ending one that hasn't started yet removes it.
 	later := f.holiday(nil, "2026-11-20", "2026-11-22", "2026-11-05")
 	if err := f.svc.EndHoliday(ctx, f.hh, f.adult.ID, later, f.day("2026-11-05")); err != nil {
 		t.Fatal(err)
@@ -189,9 +175,8 @@ func TestHolidayMissedAndCalendar(t *testing.T) {
 	f.chore("Teeth", choreOpts{assignee: &f.kid.ID, rrule: &daily, dueTime: ptr("07:00"), onTheDay: true})
 	f.materialise("2026-11-02", Window)
 	f.holiday(nil, "2026-11-04", "2026-11-06", "2026-11-02")
-	f.holiday(nil, "2026-11-20", "2026-11-20", "2026-11-02") // past the materialised window
+	f.holiday(nil, "2026-11-20", "2026-11-20", "2026-11-02")
 
-	// Tuesday's missed Teeth is cleared by the holiday.
 	f.at("2026-11-05", "12:00")
 	missed, err := f.svc.Missed(t.Context(), f.hh, f.day("2026-11-05"))
 	if err != nil || len(missed) != 0 {
@@ -221,8 +206,8 @@ func TestAddHolidayValidation(t *testing.T) {
 	}{
 		{HolidayInput{From: "", To: "2026-11-05"}, "holiday_from"},
 		{HolidayInput{From: "2026-11-05", To: "2026-11-04"}, "holiday_to"},
-		{HolidayInput{From: "2026-10-20", To: "2026-11-01"}, "holiday_to"}, // already over
-		{HolidayInput{From: "2026-11-05", To: "2027-12-01"}, "holiday_to"}, // too long
+		{HolidayInput{From: "2026-10-20", To: "2026-11-01"}, "holiday_to"},
+		{HolidayInput{From: "2026-11-05", To: "2027-12-01"}, "holiday_to"},
 		{HolidayInput{PersonID: &other, From: "2026-11-05", To: "2026-11-06"}, "holiday_person"},
 	}
 	for _, tt := range tests {

@@ -115,8 +115,6 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 	}
 	s.markSetUp(hhOf(r))
 	s.Settings.Invalidate(hhOf(r))
-	// A new household starts with each module's default, so it isn't asked
-	// to choose. If this fails it is asked in Admin instead.
 	if err := s.Modules.SetDefaults(ctx, hhOf(r), &p.ID); err != nil {
 		s.Log.ErrorContext(ctx, "set default modules", slog.Any("err", err))
 	}
@@ -156,7 +154,6 @@ func (s *Server) handleSignInForm(w http.ResponseWriter, r *http.Request) {
 		redirect(w, r, "/admin")
 		return
 	case id.Device != nil:
-		// Displays use PINs; passwords are for personal devices.
 		redirect(w, r, "/admin/unlock")
 		return
 	case s.SignIn != nil:
@@ -183,8 +180,7 @@ func (s *Server) handleSignIn(w http.ResponseWriter, r *http.Request) {
 	data := signInForm{Email: f.str("email")}
 	token, p, err := s.Auth.SignIn(r.Context(), data.Email, f.raw("password"), r.UserAgent(), s.clientAddr(r))
 	if hh := hhOf(r); err == nil && hh != 0 && p.HouseholdID != hh {
-		// Right password, but this server (or address) is for another
-		// household: answer as for a wrong password.
+		// Same answer as a wrong password, so other households aren't revealed.
 		if endErr := s.Auth.EndSession(r.Context(), token); endErr != nil {
 			s.serverError(w, r, endErr)
 			return
@@ -209,10 +205,7 @@ func (s *Server) handleSignIn(w http.ResponseWriter, r *http.Request) {
 	redirect(w, r, "/admin")
 }
 
-// StartSession signs person personID of household hh in with a personal
-// session, once another service has confirmed who they are, and sets its
-// cookie. It fails unless they are an active adult of hh and the request
-// isn't for another household.
+// StartSession signs an active adult of hh in with a personal session and sets its cookie.
 func (s *Server) StartSession(w http.ResponseWriter, r *http.Request, hh, personID int64) error {
 	if cur := hhOf(r); cur != 0 && cur != hh {
 		return auth.ErrBadCredentials
@@ -225,8 +218,7 @@ func (s *Server) StartSession(w http.ResponseWriter, r *http.Request, hh, person
 	return nil
 }
 
-// CreateHousehold makes a household and its first adult, with each
-// module's default on, as first-run setup does.
+// CreateHousehold makes a household and its first adult, with each module's default on.
 func (s *Server) CreateHousehold(ctx context.Context, in household.NewHouseholdInput) (hh, personID int64, err error) {
 	h, p, err := s.Household.CreateHousehold(ctx, in)
 	if err != nil {
@@ -234,15 +226,13 @@ func (s *Server) CreateHousehold(ctx context.Context, in household.NewHouseholdI
 	}
 	ctx = withHousehold(ctx, h.ID)
 	s.Settings.Invalidate(h.ID)
-	// If this fails it is asked in Admin instead, as after first-run setup.
 	if err := s.Modules.SetDefaults(ctx, h.ID, &p.ID); err != nil {
 		s.Log.ErrorContext(ctx, "set default modules", slog.Any("err", err))
 	}
 	return h.ID, p.ID, nil
 }
 
-// SetPIN sets the PIN of the adult signed in on r. As in Admin › People,
-// their other sessions end, but not r's.
+// SetPIN sets the PIN of the adult signed in on r, ending their other sessions.
 func (s *Server) SetPIN(r *http.Request, pin string) error {
 	sess := identityFrom(r.Context()).Session
 	if sess == nil {
@@ -260,7 +250,6 @@ func AdultOf(r *http.Request) (personID int64, ok bool) {
 	return 0, false
 }
 
-// handleSignOut signs out a personal device, or locks admin on a display.
 func (s *Server) handleSignOut(w http.ResponseWriter, r *http.Request) {
 	if c, err := r.Cookie(sessionCookie); err == nil {
 		if err := s.Auth.EndSession(r.Context(), c.Value); err != nil {
@@ -374,16 +363,11 @@ func (s *Server) handleAdminUnlock(w http.ResponseWriter, r *http.Request) {
 		s.render(w, r, http.StatusUnauthorized, "unlock", v)
 		return
 	}
-	// Session cookie (no Max-Age): the server-side idle timeout governs.
 	s.setCookie(w, r, sessionCookie, token, 0)
 	redirect(w, r, "/admin")
 }
 
-// clientAddr is the client's address, used only to rate-limit sign-in and
-// unlocking. It is the TCP peer, unless that peer is a trusted reverse
-// proxy (INGLE_TRUSTED_PROXIES): then it is the rightmost X-Forwarded-For
-// hop that isn't a trusted proxy. The header is ignored from anyone else
-// because it can be forged.
+// clientAddr trusts X-Forwarded-For only from INGLE_TRUSTED_PROXIES, since it can be forged.
 func (s *Server) clientAddr(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {

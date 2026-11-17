@@ -19,15 +19,13 @@ func (f *fixture) pinLength(id int64) *int64 {
 
 func (f *fixture) codeLength() int {
 	f.t.Helper()
-	set, err := settings.New(f.st).Get(f.t.Context(), f.hh) // fresh cache
+	set, err := settings.New(f.st).Get(f.t.Context(), f.hh)
 	if err != nil {
 		f.t.Fatal(err)
 	}
 	return set.UnlockCodeLength
 }
 
-// The fixture's PINs were stored without a length, like PINs set before
-// lengths were kept. A successful unlock records it; a wrong one doesn't.
 func TestPINLengthLearnedOnUnlock(t *testing.T) {
 	f := newFixture(t)
 	ctx := t.Context()
@@ -45,7 +43,6 @@ func TestPINLengthLearnedOnUnlock(t *testing.T) {
 		t.Errorf("pin_length after unlock = %v, want 4", got)
 	}
 
-	// Admin unlock learns it too.
 	pin, _ := auth.HashPIN("135790")
 	must(t, f.st.Q.SetPersonPIN(ctx, dbq.SetPersonPINParams{PinHash: &pin, HouseholdID: f.hh, ID: f.mum.ID}))
 	if _, err := f.svc.UnlockWithPIN(ctx, f.disp, f.mum.ID, "135790"); err != nil {
@@ -64,10 +61,9 @@ func TestUnlockCodeLength(t *testing.T) {
 		t.Errorf("length after SetUnlockCode = %d, want 5", got)
 	}
 
-	// An older code without a length learns it on its first unlock.
 	hash, _ := auth.HashPIN("864200")
 	must(t, f.st.Q.SetUnlockCode(ctx, dbq.SetUnlockCodeParams{UnlockCodeHash: &hash, HouseholdID: f.hh}))
-	svc := auth.New(f.st, settings.New(f.st)) // no cached settings
+	svc := auth.New(f.st, settings.New(f.st))
 	if got := f.codeLength(); got != 0 {
 		t.Fatalf("length before = %d, want 0", got)
 	}

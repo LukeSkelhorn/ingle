@@ -11,13 +11,6 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/valid"
 )
 
-// Bank transfers: someone asks for some of their money to go to their real
-// bank. Ingle never moves real money: an adult does the transfer in their
-// banking app, then approves the request here, which writes a payout to the
-// ledger. A waiting request holds its pence, as a waiting reward claim does,
-// so the same money can't be spent on a reward too. An adult can also pay
-// out directly, which is stored as an already-approved request.
-
 // Transfer request statuses beyond StatusPending and StatusApproved.
 const (
 	StatusDeclined  = "declined"
@@ -36,13 +29,13 @@ var ErrTransferPending = errors.New("a bank request is already waiting")
 // Transfer is a bank transfer request with who it's for and who decided.
 type Transfer struct {
 	ID          int64
-	Person      dbq.Person // ID, Name, Colour and Avatar only
+	Person      dbq.Person
 	Pence       int64
 	Status      string
-	Reason      string // why it was declined
+	Reason      string
 	RequestedAt int64
-	ReviewedAt  int64  // 0 while waiting
-	RequestedBy string // who asked: them, or the adult who paid out
+	ReviewedAt  int64
+	RequestedBy string
 	ReviewedBy  string
 }
 
@@ -50,8 +43,6 @@ type Transfer struct {
 func (t Transfer) Pending() bool { return t.Status == StatusPending }
 
 // RequestTransfer asks for pence of personID's money to go to their bank.
-// It fails with ErrInsufficientBalance unless what they can spend covers
-// it, and with ErrTransferPending if they already have one waiting.
 func (s *Service) RequestTransfer(ctx context.Context, householdID, personID, pence int64) (dbq.TransferRequest, error) {
 	var out dbq.TransferRequest
 	err := s.st.WithTx(ctx, func(q *dbq.Queries) error {
@@ -80,7 +71,6 @@ func (s *Service) RequestTransfer(ctx context.Context, householdID, personID, pe
 	return out, err
 }
 
-// canSpend checks pence is a real amount that personID can spend.
 func canSpend(ctx context.Context, q *dbq.Queries, householdID, personID, pence int64) error {
 	if pence <= 0 {
 		return ErrInsufficientBalance
@@ -95,8 +85,7 @@ func canSpend(ctx context.Context, q *dbq.Queries, householdID, personID, pence 
 	return nil
 }
 
-// CancelTransfer is personID changing their mind about their waiting
-// request.
+// CancelTransfer is personID changing their mind about their waiting request.
 func (s *Service) CancelTransfer(ctx context.Context, householdID, personID, transferID int64) error {
 	return s.st.WithTx(ctx, func(q *dbq.Queries) error {
 		t, err := q.GetTransferRequest(ctx, dbq.GetTransferRequestParams{HouseholdID: householdID, ID: transferID})
@@ -113,8 +102,7 @@ func (s *Service) CancelTransfer(ctx context.Context, householdID, personID, tra
 	})
 }
 
-// ApproveTransfer is an adult saying "I've sent it": the request becomes a
-// payout in the ledger.
+// ApproveTransfer is an adult saying "I've sent it": the request becomes a payout in the ledger.
 func (s *Service) ApproveTransfer(ctx context.Context, householdID, transferID, adultID int64) error {
 	return s.st.WithTx(ctx, func(q *dbq.Queries) error {
 		if err := requireAdult(ctx, q, householdID, adultID); err != nil {
@@ -134,9 +122,7 @@ func (s *Service) ApproveTransfer(ctx context.Context, householdID, transferID, 
 	})
 }
 
-// DeclineTransfer turns down a waiting request with a reason they'll see,
-// and lets its hold go. Without a reason it returns valid.Errors on
-// "reason".
+// DeclineTransfer turns down a waiting request with a reason they'll see, and lets its hold go.
 func (s *Service) DeclineTransfer(ctx context.Context, householdID, transferID, adultID int64, reason string) error {
 	reason = strings.TrimSpace(reason)
 	if n := len([]rune(reason)); n < 1 || n > MaxTransferReason {
@@ -155,8 +141,7 @@ func (s *Service) DeclineTransfer(ctx context.Context, householdID, transferID, 
 	})
 }
 
-// PayOut records an adult moving pence of personID's money to their bank
-// themselves: an approved request and its payout, at once.
+// PayOut records an adult paying pence of personID's money to their bank directly.
 func (s *Service) PayOut(ctx context.Context, householdID, personID, pence, adultID int64) (dbq.TransferRequest, error) {
 	var out dbq.TransferRequest
 	err := s.st.WithTx(ctx, func(q *dbq.Queries) error {
@@ -186,8 +171,6 @@ func (s *Service) PayOut(ctx context.Context, householdID, personID, pence, adul
 	return out, err
 }
 
-// payout writes t's payout to the ledger, links it, and adds it to their
-// bank balance if they have one.
 func (s *Service) payout(ctx context.Context, q *dbq.Queries, t dbq.TransferRequest, adultID int64) error {
 	e, err := q.InsertLedgerEntry(ctx, dbq.InsertLedgerEntryParams{
 		HouseholdID: t.HouseholdID,
@@ -206,7 +189,6 @@ func (s *Service) payout(ctx context.Context, q *dbq.Queries, t dbq.TransferRequ
 	}); err != nil {
 		return fmt.Errorf("link payout: %w", err)
 	}
-	// It's in their bank now, as far as Ingle knows.
 	if err := q.AddToPersonBank(ctx, dbq.AddToPersonBankParams{
 		Pence: t.Pence, HouseholdID: t.HouseholdID, PersonID: t.PersonID,
 	}); err != nil {
@@ -215,8 +197,6 @@ func (s *Service) payout(ctx context.Context, q *dbq.Queries, t dbq.TransferRequ
 	return nil
 }
 
-// settleTransfer moves a waiting request to status, failing with
-// ErrNotPending if someone got there first.
 func (s *Service) settleTransfer(ctx context.Context, q *dbq.Queries, householdID, transferID, by int64, status, reason string) error {
 	now := s.now().Unix()
 	n, err := q.SettleTransferRequest(ctx, dbq.SettleTransferRequestParams{
@@ -234,8 +214,7 @@ func (s *Service) settleTransfer(ctx context.Context, q *dbq.Queries, householdI
 	return nil
 }
 
-// Transfers lists every waiting request and the rest made since since,
-// newest first.
+// Transfers lists every waiting request and the rest made since since, newest first.
 func (s *Service) Transfers(ctx context.Context, householdID int64, since time.Time) ([]Transfer, error) {
 	rows, err := s.st.Q.ListTransferDetails(ctx, dbq.ListTransferDetailsParams{HouseholdID: householdID, SinceUnix: since.Unix()})
 	if err != nil {
@@ -270,9 +249,7 @@ func (s *Service) PendingTransferCount(ctx context.Context, householdID int64) (
 	return int(n), nil
 }
 
-// BankStatus is what My money shows about someone's bank requests: the one
-// waiting, if any, and their latest since since if it was declined, so they
-// see why.
+// BankStatus is what My money shows about someone's bank requests.
 type BankStatus struct {
 	Waiting  *dbq.TransferRequest
 	Declined *dbq.TransferRequest

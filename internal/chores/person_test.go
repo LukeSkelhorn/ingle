@@ -11,7 +11,7 @@ import (
 func TestPersonSummary(t *testing.T) {
 	f := newFixture(t)
 	ctx := t.Context()
-	weekStart := time.Date(2026, 11, 2, 0, 0, 0, 0, london) // Monday
+	weekStart := time.Date(2026, 11, 2, 0, 0, 0, 0, london)
 
 	entry := func(p dbq.Person, kind string, points, pence int64, at time.Time) {
 		t.Helper()
@@ -21,12 +21,12 @@ func TestPersonSummary(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	entry(f.kid, "completion", 10, 50, weekStart.Add(-time.Second)) // last week
-	entry(f.kid, "completion", 5, 20, weekStart)                    // first second of this week
+	entry(f.kid, "completion", 10, 50, weekStart.Add(-time.Second))
+	entry(f.kid, "completion", 5, 20, weekStart)
 	entry(f.kid, "completion", 3, 0, weekStart.Add(26*time.Hour))
-	entry(f.kid, "adjustment", -3, 0, weekStart.Add(27*time.Hour))   // reversed
-	entry(f.kid, "redemption", -8, -40, weekStart.Add(28*time.Hour)) // spending
-	entry(f.kid2, "completion", 100, 0, weekStart.Add(time.Hour))    // someone else
+	entry(f.kid, "adjustment", -3, 0, weekStart.Add(27*time.Hour))
+	entry(f.kid, "redemption", -8, -40, weekStart.Add(28*time.Hour))
+	entry(f.kid2, "completion", 100, 0, weekStart.Add(time.Hour))
 
 	got, err := f.svc.PersonSummary(ctx, f.hh, f.kid.ID, weekStart)
 	if err != nil {

@@ -17,24 +17,20 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
-// maxScreensaverEvents is how many calendar events the screensaver lists.
 const maxScreensaverEvents = 6
 
-// screensaverView is the overlay's information panel.
 type screensaverView struct {
-	Clock    clockView
-	Today    []eventView
-	Tomorrow []eventView
-	People   []progressView
-	// HasCalendars hides the "nothing on" line when no feeds are set up.
+	Clock        clockView
+	Today        []eventView
+	Tomorrow     []eventView
+	People       []progressView
 	HasCalendars bool
-	// Countdown is the soonest countdown, nil for none.
-	Countdown *chores.Countdown
+	Countdown    *chores.Countdown
 }
 
 type eventView struct {
 	Title, When, Colour string
-	Person              *dbq.Person // whose calendar it's from; nil for the family's
+	Person              *dbq.Person
 }
 
 type progressView struct {
@@ -43,7 +39,6 @@ type progressView struct {
 	Overdue     int
 }
 
-// Left is how many of their chores are still to do.
 func (p progressView) Left() int { return p.Total - p.Done }
 
 func (s *Server) handleScreensaver(w http.ResponseWriter, r *http.Request) {
@@ -126,7 +121,7 @@ func (s *Server) screensaver(r *http.Request) (screensaverView, error) {
 				v.Tomorrow = append(v.Tomorrow, ev)
 			}
 		case onToday:
-			if e.Start.Before(now) { // already under way (Upcoming drops finished ones)
+			if e.Start.Before(now) {
 				ev.When = "until " + loc.FormatTime(e.End.In(loc.Location))
 			} else {
 				ev.When = loc.FormatTime(e.Start.In(loc.Location))
@@ -141,7 +136,6 @@ func (s *Server) screensaver(r *http.Request) (screensaverView, error) {
 	return v, nil
 }
 
-// handleSlides lists the slideshow photos as JSON; the page shuffles them.
 func (s *Server) handleSlides(w http.ResponseWriter, r *http.Request) {
 	urls := []string{}
 	if s.Photos != nil {
@@ -156,8 +150,6 @@ func (s *Server) handleSlides(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string][]string{"photos": urls})
 }
 
-// handlePhoto serves an uploaded photo (/photos/u/{name}, ?s=thumb for the
-// admin thumbnail) or a folder photo (/photos/f/{name}).
 func (s *Server) handlePhoto(w http.ResponseWriter, r *http.Request) {
 	if s.Photos == nil {
 		http.NotFound(w, r)
@@ -181,20 +173,16 @@ func (s *Server) handlePhoto(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer f.Close()
-	// A blob store other than disk may not know when a file was written;
-	// uploads don't need it, as their names are never reused.
 	var modTime time.Time
 	if st, ok := f.(interface{ Stat() (os.FileInfo, error) }); ok {
 		if info, err := st.Stat(); err == nil {
 			modTime = info.ModTime()
 			if r.PathValue("kind") != "u" {
-				// Folder photos can change on disk; revalidate by ETag.
 				w.Header().Set("ETag", fmt.Sprintf(`"%x-%x"`, info.ModTime().UnixNano(), info.Size()))
 			}
 		}
 	}
 	if r.PathValue("kind") == "u" {
-		// Upload names are random and never reused.
 		w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
 	} else {
 		w.Header().Set("Cache-Control", "private, no-cache")
@@ -203,9 +191,6 @@ func (s *Server) handlePhoto(w http.ResponseWriter, r *http.Request) {
 	http.ServeContent(w, r, "", modTime, f)
 }
 
-// Admin › Photos.
-
-// maxPhotosPerUpload caps one multi-file upload.
 const maxPhotosPerUpload = 20
 
 type photosPage struct {
@@ -244,8 +229,6 @@ func (s *Server) renderPhotos(w http.ResponseWriter, r *http.Request, status int
 	s.render(w, r, status, "admin_photos", v)
 }
 
-// handlePhotoUpload streams a multi-file upload part by part, so large
-// batches never sit in memory or temp files all at once.
 func (s *Server) handlePhotoUpload(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxPhotosPerUpload*(photos.MaxUpload+maxFormBytes))
 	mr, err := r.MultipartReader()
@@ -322,17 +305,12 @@ func (s *Server) handlePhotoDelete(w http.ResponseWriter, r *http.Request) {
 	s.renderPhotos(w, r, http.StatusOK, "Photo removed.", nil)
 }
 
-// Admin › Calendars.
-
 type calendarsPage struct {
-	Feeds  []feedView
-	People []dbq.Person // who a calendar can belong to
-	// The add form.
-	Name     string
-	URL      string
-	PersonID int64 // 0: the family
-	// Edit is the feed whose edit form failed, shown open with what was
-	// typed; 0 when none did.
+	Feeds      []feedView
+	People     []dbq.Person
+	Name       string
+	URL        string
+	PersonID   int64
 	Edit       int64
 	EditName   string
 	EditPerson int64
@@ -340,8 +318,8 @@ type calendarsPage struct {
 
 type feedView struct {
 	calendar.Feed
-	Owner   *dbq.Person // nil: the family's
-	Updated string      // "Updated 3 min ago", or "" before the first fetch
+	Owner   *dbq.Person
+	Updated string
 }
 
 func (s *Server) handleCalendars(w http.ResponseWriter, r *http.Request) {
@@ -404,7 +382,6 @@ func (s *Server) handleCalendarAdd(w http.ResponseWriter, r *http.Request) {
 	s.renderCalendars(w, r, http.StatusOK, calendarsPage{}, nil, p.Name+" added.")
 }
 
-// handleCalendarEdit changes a calendar's name and whose it is.
 func (s *Server) handleCalendarEdit(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(r)
 	if !ok {
@@ -423,7 +400,6 @@ func (s *Server) handleCalendarEdit(w http.ResponseWriter, r *http.Request) {
 		if who != nil {
 			p.EditPerson = *who
 		}
-		// The edit form's fields are named apart from the add form's.
 		shown := map[string]string{}
 		for k, v := range errs {
 			shown["edit_"+k] = v
@@ -469,7 +445,6 @@ func (s *Server) handleCalendarRefresh(w http.ResponseWriter, r *http.Request) {
 	s.renderCalendars(w, r, http.StatusOK, calendarsPage{}, nil, "Calendars refreshed.")
 }
 
-// ago is a short, friendly duration for status lines.
 func ago(d time.Duration) string {
 	switch {
 	case d < time.Minute:

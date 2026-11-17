@@ -18,7 +18,6 @@ type ClearCalendarFeedPersonParams struct {
 	PersonID    *int64 `json:"person_id"`
 }
 
-// Turns an archived person's calendars into the family's.
 func (q *Queries) ClearCalendarFeedPerson(ctx context.Context, arg ClearCalendarFeedPersonParams) error {
 	_, err := q.db.ExecContext(ctx, clearCalendarFeedPerson, arg.HouseholdID, arg.PersonID)
 	return err

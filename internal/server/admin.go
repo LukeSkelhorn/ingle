@@ -15,23 +15,16 @@ import (
 )
 
 type adminHome struct {
-	People  int
-	Chores  int
-	Rewards int
-	Pending int
-	Bank    int // bank requests waiting
-	// StaleBanks are children whose bank balance wants checking.
-	StaleBanks []chores.StaleBank
-	// ModulesChosen is false until Admin › Modules has been saved once.
-	ModulesChosen bool
-	// ModuleNames lists every module, e.g. "Rewards, My money, Photos and
-	// Calendar", for the card shown until they're chosen.
-	ModuleNames string
-	Lock        lockView
-	Activity    []dbq.ListRecentActivityWithActorRow
-	// NeedPeople and NeedDisplay suggest getting started: adding the
-	// family while there's just one person, and setting up a display
-	// while there's none.
+	People                  int
+	Chores                  int
+	Rewards                 int
+	Pending                 int
+	Bank                    int
+	StaleBanks              []chores.StaleBank
+	ModulesChosen           bool
+	ModuleNames             string
+	Lock                    lockView
+	Activity                []dbq.ListRecentActivityWithActorRow
 	NeedPeople, NeedDisplay bool
 }
 
@@ -73,7 +66,7 @@ func (s *Server) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.moduleOn(ctx, modRewards) {
-		claims = nil // they wait, unseen, until Rewards is back on
+		claims = nil
 	}
 	mods, err := s.Modules.State(ctx, hhOf(r))
 	if err != nil {
@@ -118,8 +111,6 @@ func (s *Server) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, http.StatusOK, "admin_home", v)
 }
 
-// activityActor names who did something when no person did (the schedule
-// or idle lock, monthly interest, the household code).
 func activityActor(verb string) string {
 	if (strings.HasPrefix(verb, "board.") && verb != "board.unlocked_code") || verb == "interest.paid" || verb == "match.taken_back" {
 		return "Ingle"
@@ -127,9 +118,6 @@ func activityActor(verb string) string {
 	return "Someone"
 }
 
-// activityLine is what the feed says after who did it: "asked to move
-// £5.00 to their bank", "approved moving £5.00 to Thomas's bank", or
-// "claimed Lego set".
 func (s *Server) activityLine(a dbq.ListRecentActivityWithActorRow) string {
 	if a.SubjectPence == nil && a.SubjectPerson != nil {
 		switch a.Verb {
@@ -169,7 +157,6 @@ func (s *Server) activityLine(a dbq.ListRecentActivityWithActorRow) string {
 	return d
 }
 
-// describeActivity turns an activity verb into a short phrase for the feed.
 func describeActivity(verb string) string {
 	if d, ok := activityText[verb]; ok {
 		return d
@@ -246,28 +233,20 @@ var activityText = map[string]string{
 	"countdown.removed":       "removed a countdown",
 }
 
-// Settings.
-
 type settingsForm struct {
-	// CanTakeout shows "Your household's data"; StartsAgain says deleting
-	// leads back to first-run setup (self-hosted).
 	CanTakeout, StartsAgain bool
 
-	HouseholdName          string
-	Timezone               string
-	DayStartsAt            string
-	AdminIdleMinutes       int64
-	ScreensaverIdleMinutes int64
-	CalendarIdleMinutes    int64
-	CalendarChores         bool
-	LockDays               int64
-	LockFrom               string
-	LockUntil              string
-	LockIdleHours          int64
-	// KeepHistoryMonths is the Keep history choice (0 for everything);
-	// SavedKeepHistory is what's saved, so the page can ask before a
-	// shorter one is saved. NoClearOut says nothing is cleared (SQLite
-	// with backups off).
+	HouseholdName                       string
+	Timezone                            string
+	DayStartsAt                         string
+	AdminIdleMinutes                    int64
+	ScreensaverIdleMinutes              int64
+	CalendarIdleMinutes                 int64
+	CalendarChores                      bool
+	LockDays                            int64
+	LockFrom                            string
+	LockUntil                           string
+	LockIdleHours                       int64
 	KeepHistoryMonths, SavedKeepHistory int
 	NoClearOut                          bool
 	HasUnlockCode                       bool
@@ -276,7 +255,6 @@ type settingsForm struct {
 	Interest                            interestForm
 }
 
-// weekdayOption is one checkbox of the lock schedule.
 type weekdayOption struct {
 	Bit     int
 	Name    string
@@ -393,8 +371,6 @@ func (s *Server) handleSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 	s.renderSettings(w, r, http.StatusOK, data, nil, "Settings saved.")
 }
 
-// weekdayMask turns the schedule's checked weekdays ("0" = Sunday … "6")
-// into a bitmask, ignoring anything else.
 func weekdayMask(days []string) int64 {
 	var mask int64
 	for _, d := range days {
@@ -405,7 +381,6 @@ func weekdayMask(days []string) int64 {
 	return mask
 }
 
-// handleUnlockCodeSet sets the household unlock code.
 func (s *Server) handleUnlockCodeSet(w http.ResponseWriter, r *http.Request) {
 	if err := parseForm(w, r); err != nil {
 		http.Error(w, "bad form", http.StatusBadRequest)
@@ -433,7 +408,6 @@ func (s *Server) handleUnlockCodeSet(w http.ResponseWriter, r *http.Request) {
 	s.settingsSaved(w, r, "Unlock code saved.")
 }
 
-// handleUnlockCodeClear removes the household unlock code.
 func (s *Server) handleUnlockCodeClear(w http.ResponseWriter, r *http.Request) {
 	if err := s.Auth.ClearUnlockCode(r.Context(), hhOf(r), actor(r).Person.ID); err != nil {
 		s.serverError(w, r, err)
@@ -451,8 +425,7 @@ func (s *Server) settingsSaved(w http.ResponseWriter, r *http.Request, flash str
 	s.renderSettings(w, r, http.StatusOK, s.settingsForm(set), nil, flash)
 }
 
-// commonTimezones is the curated timezone list (the IANA database embedded
-// in Go can't be enumerated). UK first; the current value is always added.
+// commonTimezones is curated because Go's embedded IANA database can't be listed.
 var commonTimezones = []string{
 	"Europe/London", "Europe/Dublin", "Europe/Lisbon", "Europe/Paris", "Europe/Brussels",
 	"Europe/Amsterdam", "Europe/Berlin", "Europe/Madrid", "Europe/Rome", "Europe/Zurich",
@@ -473,8 +446,6 @@ func timezoneOptions(current string) []string {
 	return append([]string{current}, commonTimezones...)
 }
 
-// Devices.
-
 type devicesView struct {
 	Displays      []dbq.Device
 	Sessions      []sessionRow
@@ -486,7 +457,7 @@ type devicesView struct {
 
 type sessionRow struct {
 	dbq.ListPersonalSessionsRow
-	ID      string // hex token hash, for the revoke form
+	ID      string
 	Current bool
 }
 
@@ -526,8 +497,6 @@ func (s *Server) renderDevices(w http.ResponseWriter, r *http.Request, status in
 	s.render(w, r, status, "admin_devices", v)
 }
 
-// handleDeviceRegister turns the current device into a household display.
-// Its personal sign-in ends: on a display, admin is unlocked by PIN.
 func (s *Server) handleDeviceRegister(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id := identityFrom(ctx)
@@ -568,7 +537,6 @@ func (s *Server) handleDeviceRevoke(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	// Revoking the display you're standing at drops you to sign-in.
 	if dev := identityFrom(ctx).Device; dev != nil && dev.ID == devID {
 		s.clearCookie(w, r, deviceCookie)
 		s.clearCookie(w, r, sessionCookie)
@@ -609,8 +577,6 @@ func (s *Server) handleSignOutOthers(w http.ResponseWriter, r *http.Request) {
 	s.renderDevices(w, r, http.StatusOK, "Signed out everywhere else.", nil)
 }
 
-// keepToken is the caller's own session, kept when they change their own
-// credentials.
 func keepToken(r *http.Request, personID int64) []byte {
 	if a := actor(r); a != nil && a.Person.ID == personID {
 		return a.TokenHash

@@ -1,10 +1,5 @@
 -- +goose NO TRANSACTION
 -- +goose Up
--- Keep history: a household can clear out history older than 12 or 24
--- months (0 keeps everything). Ledger lines older than that are added up
--- into one 'brought_forward' line per person, so balances don't change.
--- SQLite can't change a CHECK constraint in place, so ledger_entries is
--- rebuilt, as in 00028.
 PRAGMA foreign_keys = OFF;
 BEGIN;
 ALTER TABLE household_settings

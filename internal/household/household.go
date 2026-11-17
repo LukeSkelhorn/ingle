@@ -1,6 +1,4 @@
-// Package household is the admin side of people and rewards: adding and
-// editing family members, their sign-in credentials, archiving and restoring,
-// and managing rewards. Every change writes an activity row.
+// Package household is the admin side of people and rewards.
 package household
 
 import (
@@ -37,7 +35,7 @@ var (
 	ErrSetupDone         = errors.New("household is already set up")
 )
 
-// Colours is the swatch palette offered for people. Any #RRGGBB is accepted.
+// Colours is the swatch palette offered for people.
 var Colours = []string{
 	"#E5484D", "#F76B15", "#FFC53D", "#46A758", "#12A594",
 	"#0090FF", "#3E63DD", "#8E4EC6", "#D6409F", "#8D8D8D",
@@ -47,32 +45,29 @@ var colourRe = regexp.MustCompile(`^#[0-9A-Fa-f]{6}$`)
 
 // PersonInput is the editable part of a person.
 type PersonInput struct {
-	Name      string
-	Kind      string
-	Colour    string
-	Avatar    *string // "emoji:…" or "photo:…", nil for none
-	SortOrder int64
-	// PictureCards shows their column as big emoji tiles (children only).
+	Name         string
+	Kind         string
+	Colour       string
+	Avatar       *string
+	SortOrder    int64
 	PictureCards bool
 }
 
 // RewardInput is the editable part of a reward.
 type RewardInput struct {
 	Title       string
-	Emoji       string // a single emoji, or "" for none
+	Emoji       string
 	Description string
 	CostPoints  int64
 	CostPence   int64
-	// Chosen makes it for PeopleIDs only. Otherwise it's for everyone,
-	// including people added later.
-	Chosen    bool
-	PeopleIDs []int64
+	Chosen      bool
+	PeopleIDs   []int64
 }
 
 // SetupInput is the first-run form.
 type SetupInput struct {
 	HouseholdName string
-	Person        PersonInput // Kind is forced to adult
+	Person        PersonInput
 	Email         string
 	Password      string
 	PIN           string
@@ -80,10 +75,8 @@ type SetupInput struct {
 
 // Service manages people and rewards.
 type Service struct {
-	st  *store.Store
-	now func() time.Time
-	// external is set when another service signs adults in (Hosted): then
-	// every active adult can sign in, with or without a PIN or password.
+	st       *store.Store
+	now      func() time.Time
 	external bool
 }
 
@@ -95,9 +88,7 @@ func New(st *store.Store) *Service {
 // SetClock replaces the clock (tests).
 func (s *Service) SetClock(now func() time.Time) { s.now = now }
 
-// SetExternalSignIn says another service signs adults in, so any active
-// adult can sign in: the last of them can't be archived or made a child,
-// but their PIN can be cleared.
+// SetExternalSignIn says another service signs adults in, so any active adult can sign in.
 func (s *Service) SetExternalSignIn(on bool) { s.external = on }
 
 // NeedsSetup reports whether no adult can sign in yet.
@@ -109,8 +100,7 @@ func (s *Service) NeedsSetup(ctx context.Context, householdID int64) (bool, erro
 	return n == 0, nil
 }
 
-// Setup names the household and creates the first adult with an email,
-// password and PIN. It fails with ErrSetupDone once any adult can sign in.
+// Setup names the household and creates the first adult with an email, password and PIN.
 func (s *Service) Setup(ctx context.Context, householdID int64, in SetupInput) (dbq.Person, error) {
 	in.Person.Kind = KindAdult
 	errs := validatePerson(in.Person)
@@ -172,20 +162,16 @@ func (s *Service) Setup(ctx context.Context, householdID int64, in SetupInput) (
 	return p, err
 }
 
-// NewHouseholdInput is a new household and its first adult, who has an
-// email but no password.
+// NewHouseholdInput is a new household and its first adult, who has an email but no password.
 type NewHouseholdInput struct {
 	HouseholdName string
-	Timezone      string      // IANA, e.g. Europe/London
-	Person        PersonInput // Kind is forced to adult; Avatar comes from Emoji
-	// Emoji is the adult's picture, one of avatar.Emojis, or "" for none.
-	Emoji string
-	Email string
+	Timezone      string
+	Person        PersonInput
+	Emoji         string
+	Email         string
 }
 
-// CreateHousehold makes a new household, with its settings, and its first
-// adult. Invalid input is a valid.Errors; an email someone already has is
-// one too.
+// CreateHousehold makes a household, its settings and its first adult; invalid input is a valid.Errors.
 func (s *Service) CreateHousehold(ctx context.Context, in NewHouseholdInput) (dbq.Household, dbq.Person, error) {
 	in.Person.Kind = KindAdult
 	in.Person.SortOrder = 0
@@ -215,8 +201,7 @@ func (s *Service) CreateHousehold(ctx context.Context, in NewHouseholdInput) (db
 	}
 
 	now := s.now()
-	// The household is made before it can be scoped to, so as the system;
-	// everything in it is then made in its own scope.
+	// Made as the system: there's no household to scope to until it exists.
 	h, err := s.st.Q.CreateHousehold(store.AsSystem(ctx), dbq.CreateHouseholdParams{Name: name, CreatedAt: now.Unix()})
 	if err != nil {
 		return dbq.Household{}, dbq.Person{}, fmt.Errorf("create household: %w", err)
@@ -241,7 +226,6 @@ func (s *Service) CreateHousehold(ctx context.Context, in NewHouseholdInput) (db
 		return err
 	})
 	if err != nil {
-		// Don't leave an empty household behind.
 		if delErr := s.st.Q.DeleteHousehold(ctx, h.ID); delErr != nil {
 			err = errors.Join(err, fmt.Errorf("remove household: %w", delErr))
 		}
@@ -283,10 +267,7 @@ func (s *Service) CreatePerson(ctx context.Context, householdID, actorID int64, 
 	return p, err
 }
 
-// UpdatePerson edits a family member. Changing an adult to a child removes
-// their PIN and sign-in (and fails with ErrLastAdmin if they are the last
-// adult who can sign in). Changing a child to an adult removes their PIN, so
-// a child's money PIN never starts unlocking admin.
+// UpdatePerson edits a family member.
 func (s *Service) UpdatePerson(ctx context.Context, householdID, actorID, id int64, in PersonInput) (dbq.Person, error) {
 	if err := validatePerson(in).Err(); err != nil {
 		return dbq.Person{}, err
@@ -323,11 +304,7 @@ func (s *Service) UpdatePerson(ctx context.Context, householdID, actorID, id int
 	return p, err
 }
 
-// ArchivePerson hides a person from the board, keeping their history. It
-// fails while they have assigned chores, or if they are the last adult who
-// can sign in. They're taken out of any shared chores; one left with a
-// single person becomes that person's assigned chore. Their calendars
-// become the family's.
+// ArchivePerson hides a person from the board, keeping their history.
 func (s *Service) ArchivePerson(ctx context.Context, householdID, actorID, id int64) error {
 	now := s.now()
 	return s.st.WithTx(ctx, func(q *dbq.Queries) error {
@@ -381,10 +358,7 @@ func (s *Service) RestorePerson(ctx context.Context, householdID, actorID, id in
 	})
 }
 
-// SetPIN sets a person's display PIN. An adult's unlocks admin and opens
-// their My money; a child's only opens their own My money. Their other
-// sessions end, except keep (the caller's own session, if they are changing
-// their own PIN).
+// SetPIN sets a person's display PIN.
 func (s *Service) SetPIN(ctx context.Context, householdID, actorID, id int64, pin string, keep []byte) error {
 	if err := auth.ValidatePIN(pin); err != nil {
 		return valid.Errors{"pin": "Use 4 to 6 digits."}
@@ -398,8 +372,7 @@ func (s *Service) SetPIN(ctx context.Context, householdID, actorID, id int64, pi
 	})
 }
 
-// ClearPIN removes a person's PIN, so they can no longer unlock admin (an
-// adult) or open My money on a display.
+// ClearPIN removes a person's PIN.
 func (s *Service) ClearPIN(ctx context.Context, householdID, actorID, id int64, keep []byte) error {
 	return s.credentialChange(ctx, householdID, actorID, id, "person.pin_cleared", true, keep, func(q *dbq.Queries, p dbq.Person) error {
 		if !s.external && p.Kind == KindAdult && p.PasswordHash == nil && p.PinHash != nil {
@@ -411,8 +384,7 @@ func (s *Service) ClearPIN(ctx context.Context, householdID, actorID, id int64, 
 	})
 }
 
-// SetLogin sets an adult's sign-in email and, if password is non-empty, their
-// password. A password is required if they don't have one yet.
+// SetLogin sets an adult's sign-in email and, if password is non-empty, their password.
 func (s *Service) SetLogin(ctx context.Context, householdID, actorID, id int64, email, password string, keep []byte) error {
 	errs := valid.Errors{}
 	addr, msg := normaliseEmail(email)
@@ -445,8 +417,7 @@ func (s *Service) SetLogin(ctx context.Context, householdID, actorID, id int64, 
 	})
 }
 
-// ClearLogin removes an adult's email and password, so they can only use
-// their PIN on a household display.
+// ClearLogin removes an adult's email and password.
 func (s *Service) ClearLogin(ctx context.Context, householdID, actorID, id int64, keep []byte) error {
 	return s.credentialChange(ctx, householdID, actorID, id, "person.login_cleared", false, keep, func(q *dbq.Queries, p dbq.Person) error {
 		if !s.external && p.PinHash == nil && p.PasswordHash != nil {
@@ -502,21 +473,17 @@ func (s *Service) Reward(ctx context.Context, householdID, id int64) (dbq.Reward
 	return r, notFound(err)
 }
 
-// RewardsFor returns the active rewards personID may have: rewards for
-// everyone or chosen for them, and, as adults have no money, only rewards
-// that cost no money for an adult.
+// RewardsFor returns the active rewards personID may have.
 func (s *Service) RewardsFor(ctx context.Context, householdID, personID int64) ([]dbq.Reward, error) {
 	return s.st.Q.ListRewardsForPerson(ctx, dbq.ListRewardsForPersonParams{HouseholdID: householdID, PersonID: personID})
 }
 
-// RewardPeople returns who a reward is for, when it isn't for everyone
-// (active people only, in board order).
+// RewardPeople returns who a reward is for, when it isn't for everyone.
 func (s *Service) RewardPeople(ctx context.Context, householdID, rewardID int64) ([]int64, error) {
 	return s.st.Q.ListPeopleForReward(ctx, dbq.ListPeopleForRewardParams{HouseholdID: householdID, RewardID: rewardID})
 }
 
-// AllRewardPeople returns every reward's chosen people (active only), by
-// reward.
+// AllRewardPeople returns every reward's chosen people (active only), by reward.
 func (s *Service) AllRewardPeople(ctx context.Context, householdID int64) (map[int64][]int64, error) {
 	rows, err := s.st.Q.ListRewardPeople(ctx, householdID)
 	if err != nil {
@@ -556,9 +523,7 @@ func (s *Service) CreateReward(ctx context.Context, householdID, actorID int64, 
 	return r, err
 }
 
-// UpdateReward edits a reward. Past redemptions keep the cost they had.
-// Anyone saving for it who may no longer have it loses the goal; claims
-// they've already made still wait for an adult.
+// UpdateReward edits a reward.
 func (s *Service) UpdateReward(ctx context.Context, householdID, actorID, id int64, in RewardInput) (dbq.Reward, error) {
 	if err := validateReward(in).Err(); err != nil {
 		return dbq.Reward{}, err
@@ -588,9 +553,6 @@ func (s *Service) UpdateReward(ctx context.Context, householdID, actorID, id int
 	return r, err
 }
 
-// rewardPeople checks who a reward is for: nobody to list when it's for
-// everyone, otherwise distinct, active people from this household, and no
-// adults when it costs money.
 func rewardPeople(ctx context.Context, q *dbq.Queries, householdID int64, in RewardInput) ([]int64, error) {
 	if !in.Chosen {
 		return nil, nil
@@ -618,7 +580,6 @@ func rewardPeople(ctx context.Context, q *dbq.Queries, householdID int64, in Rew
 	return ids, errs.Err()
 }
 
-// setRewardPeople saves who a reward is for.
 func setRewardPeople(ctx context.Context, q *dbq.Queries, r dbq.Reward, everyone bool, people []int64) (dbq.Reward, error) {
 	r.Everyone = 0
 	if everyone {
@@ -638,8 +599,7 @@ func setRewardPeople(ctx context.Context, q *dbq.Queries, r dbq.Reward, everyone
 	return r, nil
 }
 
-// ArchiveReward hides a reward. Anyone saving for it loses the goal; it
-// doesn't come back if the reward is restored.
+// ArchiveReward hides a reward.
 func (s *Service) ArchiveReward(ctx context.Context, householdID, actorID, id int64) error {
 	now := s.now()
 	return s.st.WithTx(ctx, func(q *dbq.Queries) error {
@@ -682,7 +642,6 @@ func createPerson(ctx context.Context, q *dbq.Queries, householdID int64, in Per
 	return p, nil
 }
 
-// pictureCards is the stored picture_cards flag: only children have them.
 func pictureCards(in PersonInput) int64 {
 	if in.PictureCards && in.Kind == KindChild {
 		return 1
@@ -739,8 +698,6 @@ func normaliseEmail(s string) (addr, msg string) {
 	return strings.ToLower(s), ""
 }
 
-// canSignIn reports whether adult p can sign in: with a PIN or password,
-// or, with an outside sign-in, by being an adult at all.
 func (s *Service) canSignIn(p dbq.Person) bool {
 	if s.external {
 		return p.Kind == KindAdult
@@ -783,7 +740,6 @@ func log(ctx context.Context, q *dbq.Queries, householdID, actorID int64, verb, 
 	})
 }
 
-// uniqueErr turns UNIQUE violations into field errors.
 func uniqueErr(err error) error {
 	if err == nil {
 		return nil
@@ -804,14 +760,10 @@ func notFound(err error) error {
 	return err
 }
 
-// leaveSharedChores takes personID out of every shared chore. A shared chore
-// down to one person becomes theirs: assigned, with its not-yet-started
-// occurrences given to them.
 func leaveSharedChores(ctx context.Context, q *dbq.Queries, householdID, personID, at int64) error {
 	if err := q.RemovePersonFromSharedChores(ctx, dbq.RemovePersonFromSharedChoresParams{HouseholdID: householdID, PersonID: personID}); err != nil {
 		return fmt.Errorf("leave shared chores: %w", err)
 	}
-	// Their copies of "each" chores still to do go too.
 	if err := q.DeleteOpenEachOccurrencesForPerson(ctx, dbq.DeleteOpenEachOccurrencesForPersonParams{HouseholdID: householdID, PersonID: personID}); err != nil {
 		return fmt.Errorf("leave each chores: %w", err)
 	}

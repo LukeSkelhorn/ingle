@@ -1,7 +1,5 @@
 # syntax=docker/dockerfile:1
 
-# The build stage runs on the build machine's own platform and Go
-# cross-compiles, so a multi-arch build needs no emulation.
 FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS build
 ARG TARGETOS TARGETARCH
 ARG VERSION=dev
@@ -13,8 +11,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/ingle ./cmd/ingle
-# Empty data and backup dirs, copied below owned by nonroot (65532) so a
-# fresh named volume mounted there inherits write access.
+# Copied owned by nonroot so a fresh named volume mounted there is writable.
 RUN mkdir -p /out/data /out/backups
 
 FROM gcr.io/distroless/static-debian12:nonroot

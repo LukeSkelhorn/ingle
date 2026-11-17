@@ -64,9 +64,6 @@ type seeded struct {
 	calendar, person string
 }
 
-// household makes a household with a little of everything: an adult with
-// a password, PIN and picture, a child, a chore done and paid, a display
-// with a session, a calendar link and a photo.
 func (f *fixture) household(name string) seeded {
 	t := f.t
 	t.Helper()
@@ -236,7 +233,6 @@ func TestDelete(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(f.data, "avatars", b.avatar)); err != nil {
 		t.Errorf("the other household's avatar: %v", err)
 	}
-	// The other household's secrets still open.
 	feeds, _ := f.st.Q.ListCalendarFeeds(store.WithHousehold(ctx, b.id), b.id)
 	if len(feeds) != 1 {
 		t.Fatalf("B's feeds = %d", len(feeds))
@@ -260,13 +256,11 @@ func TestDeleteAndRecreate(t *testing.T) {
 	if people, _ := f.st.Q.ListPeople(ctx, a.id); len(people) != 0 {
 		t.Errorf("recreated household has %d people", len(people))
 	}
-	// Its new key is a different one: the old secrets don't open.
 	if _, err := f.keys.Seal(ctx, a.id, "new"); err != nil {
 		t.Fatal(err)
 	}
 }
 
-// counts is each table's rows for hh, read as hh.
 func (f *fixture) counts(ctx context.Context, hh int64) map[string]int {
 	f.t.Helper()
 	ctx = store.WithHousehold(ctx, hh)
@@ -293,8 +287,6 @@ func mapsEqual(a, b map[string]int) bool {
 	return true
 }
 
-// TestEveryTableListed fails when a table is added without saying how it's
-// exported and deleted: add it to takeout.Tables (or Global).
 func TestEveryTableListed(t *testing.T) {
 	f := newFixture(t)
 	q := `SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name <> 'goose_db_version'`

@@ -12,13 +12,10 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
-// twoHouseholds is one server holding two households, told apart by the
-// Host header: a.test is the harness's own household and b.test a second
-// one. Both are set up, with a child and a chore each.
 type twoHouseholds struct {
 	h        *harness
 	a, b     int64
-	aW, bW   *device // each household's display, unlocked by its adult
+	aW, bW   *device
 	beaID    int64
 	walkID   int64
 	alfieID  int64
@@ -74,7 +71,6 @@ func newTwoHouseholds(t *testing.T) *twoHouseholds {
 	return x
 }
 
-// on is a new browser whose requests go to host.
 func (x *twoHouseholds) on(host string) *device {
 	d := x.h.device()
 	d.host = host
@@ -131,7 +127,6 @@ func TestTenancyOtherHouseholdsIDsAreNotFound(t *testing.T) {
 
 	expect(t, x.aW.get("/admin/people/"+itoa(x.beaID)), http.StatusNotFound)
 	expect(t, x.aW.get("/admin/chores/"+itoa(x.walkID)), http.StatusNotFound)
-	// The board treats an unknown person as one archived since it loaded.
 	r := x.aW.get("/board/people/" + itoa(x.beaID))
 	expect(t, r, http.StatusConflict)
 	expectNot(t, r, "Bea")
@@ -140,7 +135,6 @@ func TestTenancyOtherHouseholdsIDsAreNotFound(t *testing.T) {
 	expect(t, x.aW.post("/admin/people/"+itoa(x.beaID)+"/archive", url.Values{}), http.StatusNotFound)
 	expect(t, x.aW.post("/admin/people/"+itoa(x.beaID)+"/points", url.Values{"points": {"50"}, "note": {"Sneaky"}}), http.StatusNotFound)
 
-	// Countdowns too.
 	expectRedirect(t, x.bW.post("/admin/countdowns", url.Values{"title": {"Bea's party"}, "emoji": {"🎉"}, "on_date": {"2026-07-20"}}),
 		"/admin/countdowns?flash=Added+Bea%27s+party.")
 	party := must(x.h.st.Q.ListCountdowns(store.WithHousehold(t.Context(), x.b), x.b))[0]
@@ -149,11 +143,10 @@ func TestTenancyOtherHouseholdsIDsAreNotFound(t *testing.T) {
 	expectNot(t, x.aW.get("/board/countdowns"), "Bea")
 	expect(t, x.bW.get("/board/countdowns"), http.StatusOK, "Bea&#39;s party")
 
-	// B's chore and child are untouched.
 	if c := x.choreIn(x.b, "Walk the dog"); c.ArchivedAt != nil {
 		t.Error("A archived B's chore")
 	}
-	x.personIn(x.b, "Bea") // still listed, so not archived
+	x.personIn(x.b, "Bea")
 	expect(t, x.bW.get("/board"), http.StatusOK, "Bea", "Walk the dog")
 	expectNot(t, x.bW.get("/board/people/"+itoa(x.beaID)), "Sneaky")
 }
@@ -161,18 +154,15 @@ func TestTenancyOtherHouseholdsIDsAreNotFound(t *testing.T) {
 func TestTenancyCookiesStayInTheirHousehold(t *testing.T) {
 	x := newTwoHouseholds(t)
 
-	// A's display, pointed at B's address: its cookies are dropped.
 	x.aW.host = "b.test"
 	expectRedirect(t, x.aW.get("/board"), "/signin")
 	expectRedirect(t, x.aW.get("/admin"), "/signin")
 
-	// The right password for B's adult, on A's address, doesn't sign in.
 	phone := x.on("a.test")
 	r := phone.post("/signin", url.Values{"email": {x.dadEmail}, "password": {"correct horse battery"}})
 	expect(t, r, http.StatusUnauthorized, "don&#39;t match")
 	expectRedirect(t, phone.get("/admin"), "/signin")
 
-	// Setup is closed for both, once each is set up.
 	expect(t, x.on("a.test").get("/setup"), http.StatusNotFound)
 	expect(t, x.on("b.test").get("/setup"), http.StatusNotFound)
 }
@@ -180,13 +170,11 @@ func TestTenancyCookiesStayInTheirHousehold(t *testing.T) {
 func TestTenancyUnknownAddressFollowsTheSession(t *testing.T) {
 	x := newTwoHouseholds(t)
 
-	// An address the resolver doesn't know: no household until sign-in.
 	d := x.on("")
 	expectRedirect(t, d.get("/"), "/signin")
 	expect(t, d.get("/setup"), http.StatusNotFound)
 	expect(t, d.get("/signin"), http.StatusOK)
 
-	// Signing in picks the household from the account.
 	expectRedirect(t, d.post("/signin", url.Values{"email": {x.dadEmail}, "password": {"correct horse battery"}}), "/admin")
 	r := d.get("/admin/people")
 	expect(t, r, http.StatusOK, "Bea")
@@ -217,7 +205,6 @@ func TestAdminLinksShowInTheAdminBar(t *testing.T) {
 	d := h.setUp()
 	r := d.get("/admin")
 	expect(t, r, http.StatusOK)
-	// Extra links go at the end of the ⚙ Settings menu.
 	if _, menu := adminBar(t, r); !strings.HasSuffix(strings.TrimSpace(strings.Split(menu, "</div>")[0]), `<a href="/admin/billing">Billing</a>`) {
 		t.Errorf("Billing isn't last in the ⚙ Settings menu: %s", menu)
 	}

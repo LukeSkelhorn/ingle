@@ -10,11 +10,9 @@ import (
 	"golang.org/x/crypto/argon2"
 )
 
-// argon2id parameters (RFC 9106 second recommended option, scaled for a
-// small home server).
 const (
 	argonTime    = 3
-	argonMemory  = 64 * 1024 // KiB
+	argonMemory  = 64 * 1024
 	argonThreads = 2
 	argonKeyLen  = 32
 	saltLen      = 16
@@ -25,8 +23,6 @@ const (
 
 var b64 = base64.RawStdEncoding
 
-// hashSecret returns an encoded argon2id hash of secret in the PHC string
-// format: $argon2id$v=19$m=...,t=...,p=...$salt$key.
 func hashSecret(secret string) (string, error) {
 	salt := make([]byte, saltLen)
 	if _, err := rand.Read(salt); err != nil {
@@ -38,8 +34,6 @@ func hashSecret(secret string) (string, error) {
 		b64.EncodeToString(salt), b64.EncodeToString(key)), nil
 }
 
-// verifySecret reports whether secret matches the encoded hash. Malformed
-// hashes never match.
 func verifySecret(encoded, secret string) bool {
 	parts := strings.Split(encoded, "$")
 	if len(parts) != 6 || parts[1] != "argon2id" {
@@ -70,8 +64,7 @@ func verifySecret(encoded, secret string) bool {
 	return subtle.ConstantTimeCompare(got, want) == 1
 }
 
-// dummyHash is verified against when an account doesn't exist, so a failed
-// sign-in takes the same time whether or not the email is known.
+// Verified against for unknown emails so timing doesn't reveal which emails exist.
 var dummyHash = func() string {
 	h, err := hashSecret("ingle-dummy-password")
 	if err != nil {

@@ -9,11 +9,9 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
-// The Up for grabs picker shows what each person would earn: adults get
-// the points only.
 func TestPickerShowsWhatEachPersonEarns(t *testing.T) {
 	h, wall, _ := boardHousehold(t)
-	occ := h.occurrence("Hoover the lounge") // 5 pts · £0.50, no adults' points sent
+	occ := h.occurrence("Hoover the lounge")
 	r := wall.get("/board/occurrences/" + itoa(occ.ID) + "/pick")
 	expect(t, r, http.StatusOK)
 	for name, want := range map[string]string{"Alfie": "5 pts · £0.50", "Mum": "5 pts"} {
@@ -28,8 +26,6 @@ func TestPickerShowsWhatEachPersonEarns(t *testing.T) {
 	}
 }
 
-// Adults' points are saved for every way of choosing who does a chore, and
-// a form without them gives adults the kids' points.
 func TestChoreFormAdultPoints(t *testing.T) {
 	h, _, phone := boardHousehold(t)
 	if c := h.chore("Hoover the lounge"); c.AdultPoints != 5 {
@@ -44,8 +40,6 @@ func TestChoreFormAdultPoints(t *testing.T) {
 		t.Errorf("assigned adults' points = %d, want 8", c.AdultPoints)
 	}
 
-	// The form marks who's an adult, and the list shows an adult's chore at
-	// its adults' points.
 	expect(t, phone.get("/admin/chores/new"), http.StatusOK,
 		`value="`+itoa(mum.ID)+`" data-kind="adult"`, `data-pay="kids"`, `data-pay="adults"`, `name="adult_points" value="0" min="0" max="100000" inputmode="numeric" data-follow`)
 	list := phone.get("/admin/chores")
@@ -55,8 +49,6 @@ func TestChoreFormAdultPoints(t *testing.T) {
 	}
 }
 
-// Adults have no money: Admin › People shows points only and there's no
-// Move to bank for them.
 func TestAdultsHaveNoMoneyInAdmin(t *testing.T) {
 	h, _, phone := boardHousehold(t)
 	mum, alfie := h.person("Mum"), h.person("Alfie")

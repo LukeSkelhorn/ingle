@@ -13,7 +13,6 @@ func TestMoneyPIN(t *testing.T) {
 	f := newFixture(t)
 	ctx := t.Context()
 
-	// A child's PIN opens their money, and only on a display.
 	if _, err := f.svc.CheckMoneyPIN(ctx, nil, f.kid.ID, "1111", "a"); !errors.Is(err, auth.ErrNotDisplay) {
 		t.Errorf("no display: %v", err)
 	}
@@ -24,7 +23,6 @@ func TestMoneyPIN(t *testing.T) {
 	if who, ok := f.svc.MoneyToken(f.disp, tok); !ok || who != f.kid.ID {
 		t.Errorf("MoneyToken = %d, %v", who, ok)
 	}
-	// An adult's PIN opens their own money too.
 	mumTok, err := f.svc.CheckMoneyPIN(ctx, f.disp, f.mum.ID, "2468", "a")
 	if err != nil {
 		t.Fatal(err)
@@ -32,12 +30,10 @@ func TestMoneyPIN(t *testing.T) {
 	if who, ok := f.svc.MoneyToken(f.disp, mumTok); !ok || who != f.mum.ID {
 		t.Errorf("mum's MoneyToken = %d, %v", who, ok)
 	}
-	// Someone else's PIN doesn't.
 	if _, err := f.svc.CheckMoneyPIN(ctx, f.disp, f.kid.ID, "2468", "a"); !errors.Is(err, auth.ErrBadCredentials) {
 		t.Errorf("mum's PIN for Alfie: %v", err)
 	}
 
-	// The token is for that display only…
 	_, other, err := f.svc.RegisterDisplay(ctx, f.hh, "Hall", f.mum.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -51,7 +47,6 @@ func TestMoneyPIN(t *testing.T) {
 	if _, ok := f.svc.MoneyToken(f.disp, "nonsense"); ok {
 		t.Error("made-up token works")
 	}
-	// …and for a minute after each use, up to ten minutes in all.
 	start := f.now
 	for f.now.Before(start.Add(auth.MoneyTokenMax - auth.MoneyTokenTTL)) {
 		f.now = f.now.Add(auth.MoneyTokenTTL - time.Second)
@@ -72,7 +67,6 @@ func TestMoneyPIN(t *testing.T) {
 		t.Error("unused token outlives its minute")
 	}
 
-	// A child's PIN never opens admin or unlocks the displays.
 	if _, err := f.svc.UnlockWithPIN(ctx, f.disp, f.kid.ID, "1111"); !errors.Is(err, auth.ErrBadCredentials) {
 		t.Errorf("kid admin unlock: %v", err)
 	}

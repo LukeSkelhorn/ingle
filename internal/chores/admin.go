@@ -17,22 +17,22 @@ import (
 // Input is the editable part of a chore, as submitted by the admin form.
 type Input struct {
 	Title            string
-	Emoji            string // a single emoji, or "" for none
+	Emoji            string
 	Description      string
-	Mode             string  // ModeAssigned, ModePool, ModeShared or ModeEach
-	AssigneeID       *int64  // required for ModeAssigned, ignored otherwise
-	PeopleIDs        []int64 // ModeShared: who it's for (two or more); ModeEach: who does their own (one or more)
-	Everyone         bool    // ModeEach: everyone, including people added later (PeopleIDs is ignored)
-	AdultPoints      int64   // what an adult earns for it (adults never get money)
+	Mode             string
+	AssigneeID       *int64
+	PeopleIDs        []int64
+	Everyone         bool
+	AdultPoints      int64
 	Repeat           Recurrence
-	DayMode          string   // DayEach or DayAny; "" means DayEach
-	StartsOn         string   // YYYY-MM-DD
-	DueTimes         []string // HH:MM, any order; blanks are ignored. Empty for an untimed chore
-	ShowBefore       *int64   // minutes before each time it appears on the board; nil for all day
+	DayMode          string
+	StartsOn         string
+	DueTimes         []string
+	ShowBefore       *int64
 	Points           int64
 	Pence            int64
 	RequiresApproval bool
-	OnTheDay         bool // it can't be done late: off the board once its time has passed
+	OnTheDay         bool
 }
 
 // Chores returns active chores, by title.
@@ -46,8 +46,7 @@ func (s *Service) Chore(ctx context.Context, householdID, id int64) (dbq.Chore, 
 	return c, notFound(err)
 }
 
-// CreateChore adds a chore and materialises its occurrences from boardDay
-// (the household's current day) for the usual Window.
+// CreateChore adds a chore and materialises its occurrences from boardDay.
 func (s *Service) CreateChore(ctx context.Context, householdID, actorID int64, in Input, boardDay time.Time) (dbq.Chore, error) {
 	var c dbq.Chore
 	now := s.now()
@@ -85,9 +84,7 @@ func (s *Service) CreateChore(ctx context.Context, householdID, actorID int64, i
 	return c, err
 }
 
-// UpdateChore edits a chore. Its not-yet-started occurrences from boardDay
-// on are replaced so a new schedule or assignee shows up straight away;
-// claimed, done and previously completed occurrences are kept.
+// UpdateChore edits a chore.
 func (s *Service) UpdateChore(ctx context.Context, householdID, actorID, id int64, in Input, boardDay time.Time) (dbq.Chore, error) {
 	var c dbq.Chore
 	now := s.now()
@@ -157,7 +154,6 @@ func (s *Service) ArchiveChore(ctx context.Context, householdID, actorID, id int
 	})
 }
 
-// setDayMode stores c's day mode when it differs.
 func setDayMode(ctx context.Context, q *dbq.Queries, c dbq.Chore, mode string) (dbq.Chore, error) {
 	if c.DayMode == mode {
 		return c, nil
@@ -169,7 +165,6 @@ func setDayMode(ctx context.Context, q *dbq.Queries, c dbq.Chore, mode string) (
 	return c, nil
 }
 
-// setOnTheDay stores whether c is Only on the day, when it differs.
 func setOnTheDay(ctx context.Context, q *dbq.Queries, c dbq.Chore, on bool) (dbq.Chore, error) {
 	v := int64(0)
 	if on {
@@ -185,8 +180,6 @@ func setOnTheDay(ctx context.Context, q *dbq.Queries, c dbq.Chore, on bool) (dbq
 	return c, nil
 }
 
-// setEach stores an "each" chore's Everyone (0 for other chores) and any
-// chore's adults' points, when they differ.
 func setEach(ctx context.Context, q *dbq.Queries, c dbq.Chore, everyone, adultPoints int64) (dbq.Chore, error) {
 	if c.ForEveryone == everyone && c.AdultPoints == adultPoints {
 		return c, nil
@@ -200,8 +193,6 @@ func setEach(ctx context.Context, q *dbq.Queries, c dbq.Chore, everyone, adultPo
 	return c, nil
 }
 
-// setPeople replaces who a shared or "each" chore is for; other chores
-// (and Everyone chores) have nobody listed.
 func setPeople(ctx context.Context, q *dbq.Queries, c dbq.Chore, people []int64) error {
 	if err := q.DeleteChorePeople(ctx, dbq.DeleteChorePeopleParams{HouseholdID: c.HouseholdID, ChoreID: c.ID}); err != nil {
 		return fmt.Errorf("clear chore people: %w", err)
@@ -217,14 +208,11 @@ func setPeople(ctx context.Context, q *dbq.Queries, c dbq.Chore, people []int64)
 	return nil
 }
 
-// ChorePeople returns who a shared or "each" chore is for (active people
-// only; none for an Everyone chore).
+// ChorePeople returns the active people a shared or "each" chore is for.
 func (s *Service) ChorePeople(ctx context.Context, householdID, choreID int64) ([]int64, error) {
 	return s.st.Q.ListPeopleForChore(ctx, dbq.ListPeopleForChoreParams{HouseholdID: householdID, ChoreID: choreID})
 }
 
-// refresh replaces c's not-yet-started occurrences and re-materialises the
-// window from boardDay. old is the chore before an edit (nil on create).
 func (s *Service) refresh(ctx context.Context, q *dbq.Queries, c dbq.Chore, old *dbq.Chore, boardDay time.Time) error {
 	if old != nil {
 		if _, err := q.DeleteFutureOpenOccurrences(ctx, dbq.DeleteFutureOpenOccurrencesParams{
@@ -247,11 +235,8 @@ func (s *Service) refresh(ctx context.Context, q *dbq.Queries, c dbq.Chore, old 
 	return err
 }
 
-// clearFrom is the first date whose open occurrences are replaced. One-off
-// chores keep their single occurrence even when it is overdue, so if either
-// version is one-off every open occurrence is cleared (otherwise moving an
-// overdue one-off would leave the old one behind).
 func clearFrom(c dbq.Chore, old *dbq.Chore, boardDay time.Time) string {
+	// One-off chores keep an overdue occurrence, so clear them all or the old one stays behind.
 	if c.Rrule == nil || (old != nil && old.Rrule == nil) {
 		return "0001-01-01"
 	}
@@ -309,7 +294,6 @@ func (s *Service) validate(ctx context.Context, q *dbq.Queries, householdID int6
 		}
 	case ModePool:
 	case ModeShared:
-		// Distinct, active people. One is just an assigned chore.
 		for _, id := range in.PeopleIDs {
 			if slices.Contains(out.PeopleIDs, id) {
 				continue
@@ -363,8 +347,6 @@ func (s *Service) validate(ctx context.Context, q *dbq.Queries, householdID int6
 	case "", DayEach:
 		out.DayMode = DayEach
 	case DayAny:
-		// Only weekly-style schedules have days to choose between; for the
-		// rest the choice is hidden, so it quietly means each.
 		out.DayMode = DayEach
 		if AnyDayAllowed(in.Repeat.Kind) {
 			out.DayMode = DayAny

@@ -1,6 +1,3 @@
-{{/* The screensaver's information panel, over the slideshow. The board
-     page re-fetches it every minute while the screensaver is showing, and
-     when the board changes. */}}
 {{define "screensaver"}}
 <div class="saver__clock">{{template "big_clock" .Clock}}</div>
 {{if or .Today .Tomorrow .HasCalendars}}

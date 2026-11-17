@@ -10,7 +10,6 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
-// holidayIDs lists household hh's holidays, soonest first.
 func (h *harness) holidayIDs(hh int64) []int64 {
 	h.t.Helper()
 	var ids []int64
@@ -20,7 +19,6 @@ func (h *harness) holidayIDs(hh int64) []int64 {
 	return ids
 }
 
-// The harness's board day is Wed 1 Jul 2026.
 func TestHolidayMode(t *testing.T) {
 	h, wall, phone := boardHousehold(t)
 	expect(t, phone.get("/admin/settings"), http.StatusOK, "Holiday mode", "No holidays planned.", `value="2026-07-01"`)
@@ -28,7 +26,6 @@ func TestHolidayMode(t *testing.T) {
 	expect(t, phone.post("/admin/settings/holidays", url.Values{"holiday_from": {"2026-07-03"}, "holiday_to": {"2026-07-02"}}),
 		http.StatusUnprocessableEntity, "The last day can&#39;t be before the first.")
 
-	// Everyone away until Sunday: the board's empty, with the banner.
 	expect(t, phone.post("/admin/settings/holidays", url.Values{"holiday_from": {"2026-07-01"}, "holiday_to": {"2026-07-05"}, "holiday_person": {""}}),
 		http.StatusOK, "Holiday added.", "Everyone", "Wed 1 Jul – Sun 5 Jul", "On now", "End now")
 	r := wall.get("/")
@@ -38,14 +35,12 @@ func TestHolidayMode(t *testing.T) {
 	}
 	expect(t, wall.get("/board"), http.StatusOK, "🏖️ On holiday until Sunday")
 
-	// End now (it started today, so it's removed): the chores are back.
 	ids := h.holidayIDs(h.hh)
 	expect(t, phone.post("/admin/settings/holidays/"+itoa(ids[0])+"/end", url.Values{}), http.StatusOK, "Holiday ended.", "No holidays planned.")
 	r = wall.get("/")
 	expect(t, r, http.StatusOK, "Feed the cat", "Up for grabs <span")
 	expectNot(t, r, "On holiday")
 
-	// Just Alfie, until Friday.
 	alfie := h.person("Alfie")
 	expect(t, phone.post("/admin/settings/holidays", url.Values{"holiday_from": {"2026-07-01"}, "holiday_to": {"2026-07-03"}, "holiday_person": {itoa(alfie.ID)}}),
 		http.StatusOK, "Alfie</strong> · Wed 1 Jul – Fri 3 Jul")
@@ -63,10 +58,8 @@ func TestHolidayMode(t *testing.T) {
 
 func TestTenancyHolidays(t *testing.T) {
 	x := newTwoHouseholds(t)
-	// A can't send B's child on holiday…
 	expect(t, x.aW.post("/admin/settings/holidays", url.Values{"holiday_from": {"2026-07-01"}, "holiday_to": {"2026-07-02"}, "holiday_person": {itoa(x.beaID)}}),
 		http.StatusUnprocessableEntity, "Choose someone in the household.")
-	// …or end or remove B's holiday.
 	expect(t, x.bW.post("/admin/settings/holidays", url.Values{"holiday_from": {"2026-07-01"}, "holiday_to": {"2026-07-02"}}), http.StatusOK, "Holiday added.")
 	id := x.h.holidayIDs(x.b)[0]
 	expect(t, x.aW.post("/admin/settings/holidays/"+itoa(id)+"/end", url.Values{}), http.StatusNotFound)

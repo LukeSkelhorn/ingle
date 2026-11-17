@@ -98,7 +98,6 @@ func TestRun(t *testing.T) {
 		t.Errorf("photo = %q", got["photos/a.jpg"])
 	}
 
-	// The snapshot is a working database with the household in it.
 	restored := filepath.Join(t.TempDir(), "ingle.db")
 	if err := os.WriteFile(restored, got["ingle.db"], 0o640); err != nil {
 		t.Fatal(err)
@@ -113,7 +112,6 @@ func TestRun(t *testing.T) {
 		t.Errorf("restored household = %q, %v", name, err)
 	}
 
-	// Only the archive is left: no snapshot or .tmp.
 	files, _ := os.ReadDir(dest)
 	if len(files) != 1 {
 		t.Errorf("backup dir has %d files, want 1", len(files))
@@ -147,7 +145,7 @@ func TestPrune(t *testing.T) {
 func TestRunFailureLeavesNothing(t *testing.T) {
 	db, dir := setup(t)
 	dest := t.TempDir()
-	db.Close() // the snapshot fails
+	db.Close()
 	if _, err := Run(context.Background(), db, dir, dest, 14, time.Now()); err == nil {
 		t.Fatal("Run on a closed database succeeded")
 	}
@@ -167,7 +165,6 @@ func TestNext(t *testing.T) {
 		{time.Date(2026, 11, 4, 2, 0, 0, 0, london), "03:00", time.Date(2026, 11, 4, 3, 0, 0, 0, london)},
 		{time.Date(2026, 11, 4, 3, 0, 0, 0, london), "03:00", time.Date(2026, 11, 5, 3, 0, 0, 0, london)},
 		{time.Date(2026, 11, 4, 22, 0, 0, 0, london), "03:00", time.Date(2026, 11, 5, 3, 0, 0, 0, london)},
-		// Spring forward: 01:30 doesn't exist on 29 March 2026.
 		{time.Date(2026, 3, 29, 0, 30, 0, 0, london), "01:30", time.Date(2026, 3, 29, 2, 30, 0, 0, london)},
 	} {
 		if got := Next(tc.now, london, tc.at); !got.Equal(tc.want) {
@@ -196,8 +193,6 @@ func TestCheck(t *testing.T) {
 	}
 }
 
-// Backups from before the rename to Ingle are still pruned, oldest first,
-// alongside the new ones.
 func TestPruneLegacyNames(t *testing.T) {
 	db, dir := setup(t)
 	dest := t.TempDir()

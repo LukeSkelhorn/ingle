@@ -13,11 +13,9 @@ import (
 const ReverseWindow = 7 * 24 * time.Hour
 
 var (
-	// ErrTooOld is returned when reversing a completion older than
-	// ReverseWindow.
+	// ErrTooOld is returned when reversing a completion older than ReverseWindow.
 	ErrTooOld = errors.New("too long ago to reverse")
-	// ErrNotCounted is returned when reversing a completion that has already
-	// been rejected or reversed.
+	// ErrNotCounted is returned when reversing a completion already rejected or reversed.
 	ErrNotCounted = errors.New("already not counted")
 )
 
@@ -30,17 +28,14 @@ type CompletionDetail struct {
 	ReviewedAt   *int64
 	Points       int64
 	Pence        int64
-	Person       dbq.Person // ID, Name, Colour and Avatar only
+	Person       dbq.Person
 	ReviewerName string
-	// ForName is whose chore it was when Person did it for them, "" when
-	// they did their own.
-	ForName string
-	Title   string
-	Emoji   string // the chore's, "" for none
-	DueOn   string
-	DueTime *string // the occurrence's time, nil for none
-	// CanReverse is set for approved completions inside ReverseWindow.
-	CanReverse bool
+	ForName      string
+	Title        string
+	Emoji        string
+	DueOn        string
+	DueTime      *string
+	CanReverse   bool
 }
 
 // Pending reports whether the completion is waiting for an adult.
@@ -49,8 +44,7 @@ func (c CompletionDetail) Pending() bool { return c.Status == StatusPending }
 // Counted reports whether the completion's points stand.
 func (c CompletionDetail) Counted() bool { return c.Status == StatusApproved }
 
-// Completions lists every pending completion plus everything completed in the
-// last ReverseWindow, pending first, then newest first.
+// Completions lists pending completions and everything completed in the last ReverseWindow.
 func (s *Service) Completions(ctx context.Context, householdID int64) ([]CompletionDetail, error) {
 	now := s.now()
 	rows, err := s.st.Q.ListCompletionDetails(ctx, dbq.ListCompletionDetailsParams{
@@ -105,11 +99,6 @@ func withinReverseWindow(now time.Time, completedAt int64) bool {
 }
 
 // Reverse is an adult taking back a completion that shouldn't have counted.
-// A pending completion is simply rejected. An approved one, if completed
-// within ReverseWindow, gets a compensating ledger adjustment (the original
-// credit stays, so the ledger remains a true history) and is marked
-// rejected. Either way the chore reopens on the board, claimed again if it
-// was claimed. Balances may go negative if the points were already spent.
 func (s *Service) Reverse(ctx context.Context, householdID, completionID, reviewerID int64) error {
 	return s.st.WithTx(ctx, func(q *dbq.Queries) error {
 		if err := requireAdult(ctx, q, householdID, reviewerID); err != nil {

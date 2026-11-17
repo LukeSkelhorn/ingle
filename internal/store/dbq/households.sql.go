@@ -30,7 +30,6 @@ const deleteHousehold = `-- name: DeleteHousehold :exec
 DELETE FROM households WHERE id = ?
 `
 
-// Its rows in every other table go with it (ON DELETE CASCADE).
 func (q *Queries) DeleteHousehold(ctx context.Context, id int64) error {
 	_, err := q.db.ExecContext(ctx, deleteHousehold, id)
 	return err

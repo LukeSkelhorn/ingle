@@ -9,10 +9,6 @@ ORDER BY created_at DESC, id DESC
 LIMIT ?;
 
 -- name: ListRecentActivityWithActor :many
--- subject_title names the reward for reward claims ("claimed Lego set");
--- for bank transfers, subject_pence is the amount and subject_person who
--- it was for; for bank balances, interest and matching, subject_person is
--- whose.
 SELECT activity.*, people.name AS actor_name, rewards.title AS subject_title,
     transfer_requests.pence AS subject_pence, tp.name AS subject_person
 FROM activity

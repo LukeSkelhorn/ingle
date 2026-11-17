@@ -12,12 +12,10 @@ ON CONFLICT (person_id) DO UPDATE SET
 DELETE FROM person_bank WHERE household_id = ? AND person_id = ?;
 
 -- name: AddToPersonBank :exec
--- Money Ingle has just sent there. updated_at stays: nobody checked.
 UPDATE person_bank SET pence = pence + sqlc.arg(pence)
 WHERE household_id = sqlc.arg(household_id) AND person_id = sqlc.arg(person_id);
 
 -- name: StalePersonBanks :many
--- Children whose balance nobody has checked since before_unix.
 SELECT p.id AS person_id, p.name, b.updated_at
 FROM person_bank b
 JOIN people p ON p.id = b.person_id

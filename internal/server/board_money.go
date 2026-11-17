@@ -14,38 +14,27 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
-// moneyPinView is the PIN pad that opens someone's My money.
 type moneyPinView struct {
-	Person dbq.Person
-	// NotDisplay: My money only opens on a household display.
+	Person     dbq.Person
 	NotDisplay bool
-	// Expired: their last PIN check ran out, so it's asking again.
-	Expired bool
+	Expired    bool
 }
 
-// myMoneyView is someone's My money: on the board after their PIN (Token
-// re-opens it until it runs out), on the board for a signed-in adult (no
-// Token), or on their admin page (Admin).
 type myMoneyView struct {
 	chores.Summary
-	Waiting []chores.HistoryItem // reward claims waiting for a grown-up
-	Bank    chores.BankStatus    // their bank request waiting, or just declined
-	InBank  *chores.Bank         // what's in their real bank, nil if not set up
-	Page    moneyHistoryView     // the first page of history
-	Admin   bool                 // on Admin › People, not in the board's sheet
-	// Interest is the Bank of Mum and Dad, for a child who earns it.
+	Waiting  []chores.HistoryItem
+	Bank     chores.BankStatus
+	InBank   *chores.Bank
+	Page     moneyHistoryView
+	Admin    bool
 	Interest *moneyInterest
 }
 
-// moneyInterest is what a child has earned in interest so far, and what
-// keeping their balance for a year would come to.
 type moneyInterest struct {
-	SoFar  string // "34p and 12 pts", or "" for nothing yet
-	Saving string // "If you keep saving £10.00, you'll have about £11.27 this time next year."
+	SoFar  string
+	Saving string
 }
 
-// newMoneyInterest describes interest for a child with the available
-// balance in sum, who has earned soFarPoints and soFarPence.
 func (s *Server) newMoneyInterest(in chores.Interest, sum chores.Summary, soFarPoints, soFarPence int64) *moneyInterest {
 	and := func(points, pence int64) string {
 		var parts []string
@@ -72,16 +61,11 @@ func (s *Server) newMoneyInterest(in chores.Interest, sum chores.Summary, soFarP
 	return mi
 }
 
-// minTransfer is the least a child can ask to move to their bank, and the
-// step the amount moves in.
 const minTransfer = 50
 
-// declinedShown is how long My money says why a bank request was declined.
 const declinedShown = 7 * 24 * time.Hour
 
-// Asking reports a child in their own My money on a display, who can ask
-// for money to go to their bank and cancel the request. An adult pays out
-// from Admin › People instead.
+// Asking reports a child in their own My money on a display, who can ask to move money to their bank.
 func (v myMoneyView) Asking() bool { return !v.Admin && v.Page.Token != "" }
 
 // CanAsk reports whether the Ask to move to my bank button shows.
@@ -94,13 +78,12 @@ func (v myMoneyView) BankURL() string {
 	return v.Page.Base + "/bank?" + url.Values{"t": {v.Page.Token}}.Encode()
 }
 
-// moneyBankView is the panel where a child picks how much to ask for.
 type moneyBankView struct {
 	Person    dbq.Person
-	Available int64 // what they can ask for, in pence
-	Start     int64 // the amount it starts at
+	Available int64
+	Start     int64
 	Step      int64
-	Symbol    string // the currency symbol, for the stepper's script
+	Symbol    string
 	Base      string
 	Token     string
 }
@@ -110,9 +93,6 @@ func (v moneyBankView) BackURL() string {
 	return moneyHistoryView{Base: v.Base, Token: v.Token}.RefreshURL()
 }
 
-// moneyHistoryView is a page of someone's money history. Next is where Show
-// more carries on from (0 when there's nothing older); Base and Token build
-// its URL.
 type moneyHistoryView struct {
 	History []chores.HistoryItem
 	Next    int64
@@ -137,26 +117,20 @@ func (v moneyHistoryView) RefreshURL() string {
 	return v.Base + "/view?" + url.Values{"t": {v.Token}}.Encode()
 }
 
-// moneyHistoryDays is how far back My money's history goes before Show more.
 const moneyHistoryDays = 30
 
-// handleMoneyPin is the PIN pad for one person's My money.
 func (s *Server) handleMoneyPin(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.moneyPerson(w, r)
 	if !ok {
 		return
 	}
 	if moneyAdult(r) {
-		// A signed-in adult on a phone can see anyone's money without
-		// their PIN.
 		s.renderMyMoney(w, r, p, "")
 		return
 	}
 	s.renderMoneyPin(w, r, p, false)
 }
 
-// handleMoneyCheck checks the PIN typed on the pad and, if it's right, shows
-// their My money. Errors are JSON for the pad, as for unlocking.
 func (s *Server) handleMoneyCheck(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.moneyPerson(w, r)
 	if !ok {
@@ -184,8 +158,6 @@ func (s *Server) handleMoneyCheck(w http.ResponseWriter, r *http.Request) {
 	s.renderMyMoney(w, r, p, token)
 }
 
-// handleMyMoney re-opens My money while the PIN check is still good (or for
-// a signed-in adult), and asks for the PIN again once it isn't.
 func (s *Server) handleMyMoney(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.moneyPerson(w, r)
 	if !ok {
@@ -199,8 +171,6 @@ func (s *Server) handleMyMoney(w http.ResponseWriter, r *http.Request) {
 	s.renderMyMoney(w, r, p, token)
 }
 
-// handleMoneyHistory is Show more on the board's My money. Once the PIN
-// check has run out the whole sheet goes back to the keypad.
 func (s *Server) handleMoneyHistory(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.moneyPerson(w, r)
 	if !ok {
@@ -216,9 +186,6 @@ func (s *Server) handleMoneyHistory(w http.ResponseWriter, r *http.Request) {
 	s.renderMoneyHistory(w, r, p, boardMoneyBase(p.ID), token)
 }
 
-// childMoney is a bank request handler's person and PIN check: refused for
-// an adult (they pay out from Admin › People), and back to the keypad once
-// the check runs out.
 func (s *Server) childMoney(w http.ResponseWriter, r *http.Request) (dbq.Person, string, bool) {
 	p, ok := s.moneyPerson(w, r)
 	if !ok {
@@ -244,7 +211,6 @@ func (s *Server) childMoney(w http.ResponseWriter, r *http.Request) (dbq.Person,
 	return p, token, true
 }
 
-// handleBankAsk is the panel where a child picks how much to ask for.
 func (s *Server) handleBankAsk(w http.ResponseWriter, r *http.Request) {
 	p, token, ok := s.childMoney(w, r)
 	if !ok {
@@ -256,7 +222,6 @@ func (s *Server) handleBankAsk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !v.CanAsk() {
-		// Already asked, or not enough: My money says which.
 		s.renderMyMoney(w, r, p, token)
 		return
 	}
@@ -269,8 +234,6 @@ func (s *Server) handleBankAsk(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleBankRequest sends a child's request, then shows My money with it
-// waiting.
 func (s *Server) handleBankRequest(w http.ResponseWriter, r *http.Request) {
 	p, token, ok := s.childMoney(w, r)
 	if !ok {
@@ -295,7 +258,6 @@ func (s *Server) handleBankRequest(w http.ResponseWriter, r *http.Request) {
 	s.renderMyMoney(w, r, p, token)
 }
 
-// handleBankCancel is a child cancelling their waiting request.
 func (s *Server) handleBankCancel(w http.ResponseWriter, r *http.Request) {
 	p, token, ok := s.childMoney(w, r)
 	if !ok {
@@ -322,9 +284,6 @@ func (s *Server) handleBankCancel(w http.ResponseWriter, r *http.Request) {
 	s.renderMyMoney(w, r, p, token)
 }
 
-// moneyAccess reports whether this request may see p's money: a signed-in
-// adult on a phone always can, and a display can with a good token for p
-// (in the query, or a posted form). A good token is extended.
 func (s *Server) moneyAccess(r *http.Request, p dbq.Person) (token string, ok bool) {
 	if moneyAdult(r) {
 		return "", true
@@ -334,10 +293,7 @@ func (s *Server) moneyAccess(r *http.Request, p dbq.Person) (token string, ok bo
 	return token, ok && who == p.ID
 }
 
-// moneyAdult reports a signed-in adult off the household displays, who can
-// see anyone's My money without their PIN. On a display, even with admin
-// unlocked, each person types their own PIN, so a child walking up to it
-// can't see their brother's.
+// moneyAdult excludes displays: there each person types their own PIN, even with admin unlocked.
 func moneyAdult(r *http.Request) bool {
 	id := identityFrom(r.Context())
 	return id.Session != nil && id.Device == nil
@@ -347,7 +303,6 @@ func boardMoneyBase(personID int64) string {
 	return "/board/money/" + strconv.FormatInt(personID, 10)
 }
 
-// moneyPerson is the person in the path, if they're on the board.
 func (s *Server) moneyPerson(w http.ResponseWriter, r *http.Request) (dbq.Person, bool) {
 	id, ok := pathID(r)
 	if !ok {
@@ -387,8 +342,6 @@ func (s *Server) renderMyMoney(w http.ResponseWriter, r *http.Request, p dbq.Per
 	s.renderPartial(w, r, "my_money", v)
 }
 
-// myMoney loads someone's My money: balance, goal, waiting claims and the
-// first page of history.
 func (s *Server) myMoney(r *http.Request, p dbq.Person, base, token string) (myMoneyView, error) {
 	ctx := r.Context()
 	loc := s.Locale
@@ -426,7 +379,6 @@ func (s *Server) myMoney(r *http.Request, p dbq.Person, base, token string) (myM
 	return v, err
 }
 
-// renderMoneyHistory is the next page of history after ?before=.
 func (s *Server) renderMoneyHistory(w http.ResponseWriter, r *http.Request, p dbq.Person, base, token string) {
 	before, err := strconv.ParseInt(r.URL.Query().Get("before"), 10, 64)
 	if err != nil || before <= 0 {
@@ -447,8 +399,6 @@ func (s *Server) renderMoneyHistory(w http.ResponseWriter, r *http.Request, p db
 	s.renderPartial(w, r, "money_history", v)
 }
 
-// handleAdminMoney is someone's My money on Admin › People, for adults on
-// any device and without the person's PIN.
 func (s *Server) handleAdminMoney(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.loadPerson(w, r)
 	if !ok {
@@ -474,7 +424,6 @@ func (s *Server) handleAdminMoney(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, http.StatusOK, "admin_money", v)
 }
 
-// handleAdminMoneyHistory is Show more on the admin My money page.
 func (s *Server) handleAdminMoneyHistory(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.loadPerson(w, r)
 	if !ok {

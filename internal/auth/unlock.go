@@ -16,10 +16,7 @@ import (
 // ErrNoUnlockCode is returned when clearing a code that isn't set.
 var ErrNoUnlockCode = errors.New("no household unlock code is set")
 
-// CheckUnlockCode checks code, entered on a locked household display,
-// against the household unlock code and then every adult's PIN. It returns
-// the adult whose PIN matched, or nil for the household code. Wrong codes
-// are limited per display and, more loosely, per client address.
+// CheckUnlockCode checks code against the household unlock code, then every adult's PIN.
 func (s *Service) CheckUnlockCode(ctx context.Context, device *dbq.Device, code, clientAddr string) (*int64, error) {
 	if device == nil {
 		return nil, ErrNotDisplay
@@ -40,8 +37,7 @@ func (s *Service) CheckUnlockCode(ctx context.Context, device *dbq.Device, code,
 		return nil, fmt.Errorf("list PINs: %w", err)
 	}
 
-	// Always do at least one hash so a wrong guess takes as long whether
-	// or not a household code is set.
+	// Always hash at least once so timing doesn't reveal whether a code is set.
 	var who *int64
 	ok := false
 	if set.HasUnlockCode() {
@@ -71,9 +67,7 @@ func (s *Service) CheckUnlockCode(ctx context.Context, device *dbq.Device, code,
 	return who, nil
 }
 
-// CheckUnlockPIN checks the PIN of one adult, picked on a locked household
-// display. Wrong PINs count against that adult (as for admin), the display
-// and the client address.
+// CheckUnlockPIN checks the PIN of one adult, picked on a household display.
 func (s *Service) CheckUnlockPIN(ctx context.Context, device *dbq.Device, personID int64, pin, clientAddr string) error {
 	if device == nil {
 		return ErrNotDisplay
@@ -114,17 +108,12 @@ func (s *Service) CheckUnlockPIN(ctx context.Context, device *dbq.Device, person
 	return nil
 }
 
-// learnPINLength records the length of an adult's PIN that was set before
-// lengths were stored, now that it has just unlocked. Failing to record it
-// only means the keypad keeps asking for →, so errors are logged, not
-// returned.
 func (s *Service) learnPINLength(ctx context.Context, householdID, personID int64, pin string) {
 	if err := s.st.Q.LearnPINLength(ctx, dbq.LearnPINLengthParams{PinLength: PINLength(pin), HouseholdID: householdID, ID: personID}); err != nil {
 		slog.WarnContext(ctx, "record PIN length", slog.Int64("person", personID), slog.Any("err", err))
 	}
 }
 
-// learnCodeLength is learnPINLength for the household unlock code.
 func (s *Service) learnCodeLength(ctx context.Context, set settings.Settings, code string) {
 	if set.UnlockCodeLength != 0 {
 		return
@@ -145,8 +134,7 @@ func (s *Service) SetUnlockCode(ctx context.Context, householdID, actorID int64,
 	return s.setUnlockCode(ctx, householdID, actorID, &hash, PINLength(code), "lock.code_set")
 }
 
-// ClearUnlockCode removes the household unlock code; adult PINs still
-// unlock the displays.
+// ClearUnlockCode removes the household unlock code; adult PINs still unlock the displays.
 func (s *Service) ClearUnlockCode(ctx context.Context, householdID, actorID int64) error {
 	return s.setUnlockCode(ctx, householdID, actorID, nil, nil, "lock.code_cleared")
 }
@@ -166,8 +154,7 @@ func (s *Service) setUnlockCode(ctx context.Context, householdID, actorID int64,
 	return err
 }
 
-// CanUnlockOnDisplay reports whether anything can unlock a locked display
-// in place: a household code or at least one adult PIN.
+// CanUnlockOnDisplay reports whether a household code or any adult PIN can unlock a display.
 func (s *Service) CanUnlockOnDisplay(ctx context.Context, householdID int64) (bool, error) {
 	set, err := s.settings.Get(ctx, householdID)
 	if err != nil {

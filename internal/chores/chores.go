@@ -1,8 +1,4 @@
-// Package chores holds the chore lifecycle on top of the generated queries:
-// expanding recurrence rules into occurrences, claiming from the shared pool,
-// completing, approving and redeeming rewards. Every state change that moves
-// points or money also writes a ledger entry and an activity row in the same
-// transaction.
+// Package chores holds the chore lifecycle on top of the generated queries.
 package chores
 
 import (
@@ -23,11 +19,8 @@ import (
 const (
 	ModeAssigned = "assigned"
 	ModePool     = "pool"
-	// ModeShared is done once by any of a few chosen people (chore_people).
-	ModeShared = "shared"
-	// ModeEach puts a copy on each chosen person's column (chore_people,
-	// or everyone with for_everyone), and each does their own.
-	ModeEach = "each"
+	ModeShared   = "shared"
+	ModeEach     = "each"
 )
 
 // Status values shared by occurrences, completions and redemptions.
@@ -62,9 +55,7 @@ var (
 // Window is how many days ahead occurrences are materialised.
 const Window = 14
 
-// LocationFunc returns the timezone recurrence is evaluated in for a
-// household. It is a func so a timezone change in settings applies without a
-// restart.
+// LocationFunc returns the timezone recurrence is evaluated in for a household.
 type LocationFunc func(ctx context.Context, householdID int64) *time.Location
 
 // FixedLocation returns a LocationFunc that always returns loc.
@@ -72,8 +63,7 @@ func FixedLocation(loc *time.Location) LocationFunc {
 	return func(context.Context, int64) *time.Location { return loc }
 }
 
-// DayStartFunc returns when a household's board day rolls over, as time
-// since local midnight.
+// DayStartFunc returns when a household's board day rolls over, as time since local midnight.
 type DayStartFunc func(ctx context.Context, householdID int64) time.Duration
 
 // Service runs chore operations for the households in a store.
@@ -81,7 +71,7 @@ type Service struct {
 	st       *store.Store
 	loc      LocationFunc
 	dayStart DayStartFunc
-	modules  ModulesFunc // nil: every module on
+	modules  ModulesFunc
 	now      func() time.Time
 }
 
@@ -93,8 +83,7 @@ func New(st *store.Store, loc LocationFunc) *Service {
 	}
 }
 
-// SetDayStart sets where the board day's rollover comes from (midnight
-// until set). Only on the day chores come off the board at it.
+// SetDayStart sets where the board day's rollover comes from (midnight until set).
 func (s *Service) SetDayStart(f DayStartFunc) { s.dayStart = f }
 
 // SetClock replaces the clock (tests).
@@ -108,9 +97,7 @@ func ValidateRRule(rule string) error {
 	return nil
 }
 
-// Materialise creates occurrence rows for every active chore in the household
-// for the local dates [from, from+days). It is idempotent and returns the
-// number of new occurrences.
+// Materialise creates occurrence rows for every active chore for the local dates [from, from+days).
 func (s *Service) Materialise(ctx context.Context, householdID int64, from time.Time, days int) (int, error) {
 	loc := s.loc(ctx, householdID)
 	start, end := window(from, days, loc)
@@ -142,7 +129,6 @@ func (s *Service) Materialise(ctx context.Context, householdID int64, from time.
 	return created, err
 }
 
-// window returns local midnight on from's date and days-1 days later.
 func window(from time.Time, days int, loc *time.Location) (start, end time.Time) {
 	y, m, d := from.In(loc).Date()
 	start = time.Date(y, m, d, 0, 0, 0, 0, loc)
@@ -150,9 +136,6 @@ func window(from time.Time, days int, loc *time.Location) (start, end time.Time)
 	return start, end
 }
 
-// materialiseChore creates c's occurrences in [start, end], leaving out
-// copies that hols pause. who is who an "each" chore is for (each gets
-// their own copy) and who a shared chore's people are.
 func materialiseChore(ctx context.Context, q *dbq.Queries, c dbq.Chore, who doers, hols holidays, start, end time.Time, loc *time.Location) (int, error) {
 	if c.DayMode == DayAny && c.Rrule != nil {
 		return materialiseFlex(ctx, q, c, who, hols, start, end, loc)
@@ -186,9 +169,6 @@ func materialiseChore(ctx context.Context, q *dbq.Queries, c dbq.Chore, who doer
 	return created, nil
 }
 
-// materialiseFlex creates one occurrence per week for a flexible-day chore,
-// on the board from the week's first allowed day and due on its last. A
-// week is left out only when hols pause every one of its days.
 func materialiseFlex(ctx context.Context, q *dbq.Queries, c dbq.Chore, who doers, hols holidays, start, end time.Time, loc *time.Location) (int, error) {
 	ws, err := flexWindows(c, start, end, loc)
 	if err != nil {
@@ -205,7 +185,7 @@ func materialiseFlex(ctx context.Context, q *dbq.Queries, c dbq.Chore, who doers
 				HouseholdID:   c.HouseholdID,
 				ChoreID:       c.ID,
 				DueOn:         w.Due(),
-				DueTime:       times(c)[0], // flexible chores have one time
+				DueTime:       times(c)[0],
 				AssigneeID:    sl.assignee,
 				AvailableFrom: &from,
 				ForPerson:     sl.forPerson,
@@ -219,9 +199,6 @@ func materialiseFlex(ctx context.Context, q *dbq.Queries, c dbq.Chore, who doers
 	return created, nil
 }
 
-// occurrenceDates returns the local dates in [start, end] on which c is due.
-// One-off chores (no rrule) are due on starts_on, and are still created when
-// that date is already in the past so they don't silently disappear.
 func occurrenceDates(c dbq.Chore, start, end time.Time, loc *time.Location) ([]string, error) {
 	dtstart, err := time.ParseInLocation(DateLayout, c.StartsOn, loc)
 	if err != nil {
@@ -231,6 +208,7 @@ func occurrenceDates(c dbq.Chore, start, end time.Time, loc *time.Location) ([]s
 		if dtstart.After(end) {
 			return nil, nil
 		}
+		// Created even when already past, so a one-off doesn't silently disappear.
 		return []string{c.StartsOn}, nil
 	}
 
@@ -265,7 +243,6 @@ func (s *Service) Claim(ctx context.Context, householdID, occurrenceID, personID
 		if err != nil {
 			return fmt.Errorf("get chore: %w", err)
 		}
-		// A shared chore is already theirs to do; nobody claims it.
 		if chore.Mode == ModeShared {
 			return ErrNotClaimable
 		}
@@ -320,11 +297,7 @@ func (s *Service) Release(ctx context.Context, householdID, occurrenceID, person
 	})
 }
 
-// Complete records personID finishing an occurrence. Assigned chores can only
-// be completed by their assignee, and claimed pool chores by the claimant; an
-// unclaimed pool chore can be completed by anyone. Chores that require
-// approval stay pending until an adult approves them; others are credited
-// straight away.
+// Complete records personID finishing an occurrence.
 func (s *Service) Complete(ctx context.Context, householdID, occurrenceID, personID int64) (dbq.Completion, error) {
 	var out dbq.Completion
 	err := s.st.WithTx(ctx, func(q *dbq.Queries) error {
@@ -362,8 +335,6 @@ func (s *Service) Complete(ctx context.Context, householdID, occurrenceID, perso
 	return out, err
 }
 
-// canDo checks personID may complete occ: its assignee or claimant, one of
-// a shared chore's people, or anyone for an unclaimed pool chore.
 func canDo(ctx context.Context, q *dbq.Queries, chore dbq.Chore, occ dbq.ChoreOccurrence, personID int64) error {
 	owner := occ.AssigneeID
 	if owner == nil {
@@ -387,15 +358,10 @@ func canDo(ctx context.Context, q *dbq.Queries, chore dbq.Chore, occ dbq.ChoreOc
 	return nil
 }
 
-// recordCompletion creates personID's completion of an occurrence of chore,
-// marks the occurrence done and, when approved, credits it. reviewer is the
-// adult who approved it, if one did.
 func (s *Service) recordCompletion(ctx context.Context, q *dbq.Queries, chore dbq.Chore, occurrenceID, personID int64, status string, reviewer *int64) (dbq.Completion, error) {
 	return s.recordCompletionFor(ctx, q, chore, occurrenceID, personID, nil, status, reviewer)
 }
 
-// recordCompletionFor is recordCompletion for someone doing another
-// person's chore: personID did it and earns it, forPerson is whose it was.
 func (s *Service) recordCompletionFor(ctx context.Context, q *dbq.Queries, chore dbq.Chore, occurrenceID, personID int64, forPerson *int64, status string, reviewer *int64) (dbq.Completion, error) {
 	now := s.now().Unix()
 	p, err := getPerson(ctx, q, chore.HouseholdID, personID)
@@ -434,8 +400,7 @@ func (s *Service) Approve(ctx context.Context, householdID, completionID, review
 	return s.review(ctx, householdID, completionID, reviewerID, StatusApproved)
 }
 
-// Reject declines a pending completion and reopens the occurrence so it can
-// be done again. reviewerID must be an adult.
+// Reject declines a pending completion and reopens the occurrence so it can be done again.
 func (s *Service) Reject(ctx context.Context, householdID, completionID, reviewerID int64) error {
 	return s.review(ctx, householdID, completionID, reviewerID, StatusRejected)
 }
@@ -497,8 +462,6 @@ func (s *Service) reviewTx(ctx context.Context, q *dbq.Queries, householdID, com
 	return s.activity(ctx, q, householdID, reviewerID, verb, completionID)
 }
 
-// creditCompletion adds a completion to the ledger, and its match if the
-// person is being matched towards a goal.
 func (s *Service) creditCompletion(ctx context.Context, q *dbq.Queries, c dbq.Completion, by *int64, now int64) error {
 	if _, err := q.InsertLedgerEntry(ctx, dbq.InsertLedgerEntryParams{
 		HouseholdID:  c.HouseholdID,
@@ -553,8 +516,6 @@ func (s *Service) activity(ctx context.Context, q *dbq.Queries, householdID, act
 	return nil
 }
 
-// getPerson loads an active person, scoped to the household so IDs from
-// another household can't be used.
 func getPerson(ctx context.Context, q *dbq.Queries, householdID, id int64) (dbq.Person, error) {
 	p, err := q.GetPerson(ctx, dbq.GetPersonParams{HouseholdID: householdID, ID: id})
 	if err != nil {

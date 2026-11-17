@@ -28,7 +28,6 @@ func needPG(t *testing.T) {
 	}
 }
 
-// tables lists the app's tables (not goose's).
 func tables(t *testing.T, ctx context.Context, db *sql.DB) []string {
 	t.Helper()
 	rows, err := db.QueryContext(store.AsSystem(ctx), `
@@ -53,9 +52,6 @@ func tables(t *testing.T, ctx context.Context, db *sql.DB) []string {
 	return out
 }
 
-// TestRowLevelSecurityCoverage fails if a table has no row-level security,
-// isn't FORCEd (so its owner would skip it) or has no policy: add the table
-// to migrations/postgres's policies.
 func TestRowLevelSecurityCoverage(t *testing.T) {
 	needPG(t)
 	ctx := t.Context()
@@ -87,9 +83,6 @@ func TestRowLevelSecurityCoverage(t *testing.T) {
 	}
 }
 
-// TestRowLevelSecurityKeepsHouseholdsApart runs SQL that forgets its
-// WHERE household_id = ... as household A, connected as the app's role,
-// and gets none of household B's rows.
 func TestRowLevelSecurityKeepsHouseholdsApart(t *testing.T) {
 	needPG(t)
 	ctx := t.Context()
@@ -104,7 +97,6 @@ func TestRowLevelSecurityKeepsHouseholdsApart(t *testing.T) {
 	b := seed(t, st, "B", now)
 	actx, bctx := store.WithHousehold(ctx, a), store.WithHousehold(ctx, b)
 
-	// Every table, read with no WHERE at all: only A's rows, or none.
 	for _, table := range tables(t, ctx, db) {
 		col := "household_id"
 		switch table {
@@ -126,7 +118,6 @@ func TestRowLevelSecurityKeepsHouseholdsApart(t *testing.T) {
 		t.Errorf("A sees %d people (%v), want just its own 1", people, err)
 	}
 
-	// Writing B's rows as A is refused, and so is changing them.
 	_, err := st.Q.CreatePerson(actx, dbq.CreatePersonParams{
 		HouseholdID: b, Name: "Intruder", Kind: "child", Colour: "#000000", CreatedAt: now.Unix(),
 	})
@@ -144,7 +135,6 @@ func TestRowLevelSecurityKeepsHouseholdsApart(t *testing.T) {
 		t.Errorf("B's people = %v, %v", p, err)
 	}
 
-	// The same holds inside a transaction.
 	err = st.WithTx(actx, func(q *dbq.Queries) error {
 		p, err := q.ListPeople(actx, b)
 		if len(p) != 0 {
@@ -156,11 +146,9 @@ func TestRowLevelSecurityKeepsHouseholdsApart(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// No household: refused before it reaches the database.
 	if _, err := st.Q.ListPeople(ctx, a); !errors.Is(err, store.ErrNoHousehold) {
 		t.Errorf("no household: err = %v, want ErrNoHousehold", err)
 	}
-	// A system lookup may read people, but not change them.
 	sys := store.AsSystem(ctx)
 	if p, err := st.Q.ListPeople(sys, b); err != nil || len(p) != 1 {
 		t.Errorf("system lookup of B's people = %d, %v", len(p), err)
@@ -179,7 +167,6 @@ func TestRowLevelSecurityKeepsHouseholdsApart(t *testing.T) {
 	}
 }
 
-// seed makes a household with one child and one chore.
 func seed(t *testing.T, st *store.Store, name string, now time.Time) int64 {
 	t.Helper()
 	h, err := st.Q.CreateHousehold(store.AsSystem(t.Context()), dbq.CreateHouseholdParams{Name: name, CreatedAt: now.Unix()})
@@ -200,22 +187,18 @@ func seed(t *testing.T, st *store.Store, name string, now time.Time) int64 {
 	return h.ID
 }
 
-// TestAsSystemCallers keeps AsSystem to the lookups made before the
-// household is known. A new caller means a query that can read any
-// household's households, displays, sessions or people: check it really
-// has to, then add it here.
 func TestAsSystemCallers(t *testing.T) {
 	want := map[string]int{
-		"app/app.go:build":                                1, // list households for the jobs
-		"app/app.go:eachHousehold":                        1, // list households for the jobs
-		"internal/auth/auth.go:Display":                   1, // display by token
-		"internal/auth/auth.go:SignIn":                    1, // adult by email
-		"internal/auth/auth.go:Session":                   1, // session by token
-		"internal/auth/auth.go:EndSession":                1, // session by token
-		"internal/household/household.go:CreateHousehold": 1, // a new household, before it has an id
-		"internal/server/modules.go:households":           1, // list households for the module loops
-		"internal/store/store.go:EnsureHousehold":         1, // self-hosted's one household
-		"internal/store/store.go:CanBypassRLS":            1, // reads pg_roles
+		"app/app.go:build":                                1,
+		"app/app.go:eachHousehold":                        1,
+		"internal/auth/auth.go:Display":                   1,
+		"internal/auth/auth.go:SignIn":                    1,
+		"internal/auth/auth.go:Session":                   1,
+		"internal/auth/auth.go:EndSession":                1,
+		"internal/household/household.go:CreateHousehold": 1,
+		"internal/server/modules.go:households":           1,
+		"internal/store/store.go:EnsureHousehold":         1,
+		"internal/store/store.go:CanBypassRLS":            1,
 	}
 	root := filepath.Join("..", "..")
 	got := map[string]int{}

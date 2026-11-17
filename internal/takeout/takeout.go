@@ -17,24 +17,16 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
-// Table says how one table is exported. Every table in the schema is
-// listed (TestEveryTableListed), so a new one has to be thought about.
+// Table says how one table is exported and deleted.
 type Table struct {
-	Name string
-	// Key is the column naming the household: household_id, or id for
-	// households.
-	Key string
-	// Skip leaves the table out of the export: sign-in tokens and keys.
-	Skip bool
-	// Omit leaves out columns: password, PIN and token hashes.
-	Omit []string
-	// Secrets are columns encrypted with the household's key; the export
-	// has them decrypted.
+	Name    string
+	Key     string
+	Skip    bool
+	Omit    []string
 	Secrets []string
 }
 
-// Tables lists every table, in an order that deletes cleanly: rows that
-// others point at (with ON DELETE RESTRICT) come after those rows.
+// Tables lists every table, ordered so deleting in sequence never hits ON DELETE RESTRICT.
 var Tables = []Table{
 	{Name: "sessions", Key: "household_id", Skip: true},
 	{Name: "devices", Key: "household_id", Omit: []string{"token_hash"}},
@@ -83,9 +75,7 @@ func New(st *store.Store, keys *secrets.Keyring, lib *photos.Library, avatars *a
 	return &Service{st: st, keys: keys, photos: lib, avatars: avatars, log: log, now: time.Now}
 }
 
-// Export writes household hh's data to w as a zip: a JSON file per table
-// under data/, and its uploaded photos and avatar pictures. Password, PIN
-// and sign-in token hashes are left out, and secrets are decrypted.
+// Export writes household hh's data and files to w as a zip, without credential hashes.
 func (s *Service) Export(ctx context.Context, hh int64, w io.Writer) error {
 	ctx = store.WithHousehold(ctx, hh)
 	z := zip.NewWriter(w)
@@ -167,8 +157,6 @@ avatars/   people's pictures.
 	return err
 }
 
-// copyIn adds a file to the zip. A missing file is logged and skipped: the
-// rest of the export is still worth having.
 func (s *Service) copyIn(z *zip.Writer, name string, open func() (io.ReadCloser, error)) error {
 	r, err := open()
 	if err != nil {
@@ -184,7 +172,6 @@ func (s *Service) copyIn(z *zip.Writer, name string, open func() (io.ReadCloser,
 	return err
 }
 
-// rows reads a table's rows for hh as column → value.
 func (s *Service) rows(ctx context.Context, t Table, hh int64) ([]map[string]any, error) {
 	rows, err := s.st.SQL().QueryContext(ctx, "SELECT * FROM "+t.Name+" WHERE "+t.Key+" = ?", hh)
 	if err != nil {
@@ -214,11 +201,7 @@ func (s *Service) rows(ctx context.Context, t Table, hh int64) ([]map[string]any
 	return out, rows.Err()
 }
 
-// Delete removes household hh and everything in it: its rows in every
-// table, its key (so secrets in old backups can't be read), and its photo
-// and avatar files. With recreate, an empty household with the same id is
-// made in its place, for self-hosted Ingle, which has just the one: it
-// starts again at first-run setup.
+// Delete removes household hh's rows, key and files, recreating it empty if recreate is set.
 func (s *Service) Delete(ctx context.Context, hh int64, recreate bool) error {
 	ctx = store.WithHousehold(ctx, hh)
 	var photoFiles, avatarFiles []string
@@ -261,7 +244,6 @@ func (s *Service) Delete(ctx context.Context, hh int64, recreate bool) error {
 		return err
 	}
 	s.keys.Forget(hh)
-	// The rows are gone, so a file that fails to go is only logged.
 	for _, name := range photoFiles {
 		s.photos.RemoveFiles(ctx, name)
 	}

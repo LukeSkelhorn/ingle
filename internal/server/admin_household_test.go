@@ -50,11 +50,9 @@ func TestHouseholdExportAndDelete(t *testing.T) {
 		t.Error("export has password or PIN hashes")
 	}
 
-	// The wrong name keeps everything.
 	expect(t, wall.post("/admin/household/delete", url.Values{"confirm": {"The Smith"}}), http.StatusUnprocessableEntity, "Type the household")
 	expect(t, wall.get("/admin/people"), http.StatusOK, "Alfie")
 
-	// The right one (any case) deletes it, signs out and starts again.
 	expectRedirect(t, wall.post("/admin/household/delete", url.Values{"confirm": {" the smiths "}}), "/")
 	expectRedirect(t, wall.get("/"), "/setup")
 	expectRedirect(t, wall.get("/admin/people"), "/setup")
@@ -62,19 +60,15 @@ func TestHouseholdExportAndDelete(t *testing.T) {
 		t.Errorf("people after delete = %d, %v", len(people), err)
 	}
 
-	// Set up again, from scratch.
 	again := h.device()
 	expectRedirect(t, again.post("/setup", setupValues), "/admin")
 	expectNot(t, again.get("/admin/people"), "Alfie")
 }
 
-// Deleting one household of many leaves the others alone, and needs that
-// household's own admin.
 func TestHouseholdDeleteLeavesOthers(t *testing.T) {
 	x := newTwoHouseholds(t)
 	expectNot(t, x.bW.get("/admin/settings"), "starts again at first-run setup")
 
-	// B's admin can't export or delete A: it's B's own household it gets.
 	files := zipFiles(t, x.bW.get("/admin/household/export").body)
 	if strings.Contains(files["data/people.json"], "Alfie") || !strings.Contains(files["data/people.json"], "Bea") {
 		t.Errorf("B's export people: %s", files["data/people.json"])

@@ -123,7 +123,6 @@ func TestArchiveRules(t *testing.T) {
 		t.Errorf("demote last admin: %v", err)
 	}
 
-	// With a second adult who can sign in, Mum can be archived and restored.
 	dad := f.add("Dad", KindAdult)
 	if err := f.svc.SetPIN(ctx, f.hh, f.mum.ID, dad.ID, "1357", nil); err != nil {
 		t.Fatal(err)
@@ -165,8 +164,6 @@ func TestKidPIN(t *testing.T) {
 		t.Error("kid PIN not cleared")
 	}
 
-	// A child who becomes an adult loses their PIN, so it never starts
-	// unlocking admin.
 	if err := f.svc.SetPIN(ctx, f.hh, f.mum.ID, kid.ID, "2468", nil); err != nil {
 		t.Fatal(err)
 	}
@@ -187,7 +184,6 @@ func TestCredentialsAdultOnly(t *testing.T) {
 		t.Errorf("kid login: %v", err)
 	}
 
-	// Demoting an adult (not the last) strips their credentials.
 	dad := f.add("Dad", KindAdult)
 	if err := f.svc.SetLogin(ctx, f.hh, f.mum.ID, dad.ID, "dad@example.com", "", nil); err == nil {
 		t.Error("login without a password accepted")
@@ -198,7 +194,6 @@ func TestCredentialsAdultOnly(t *testing.T) {
 	if err := f.svc.SetLogin(ctx, f.hh, f.mum.ID, dad.ID, "dad@example.com", "a long password", nil); err != nil {
 		t.Fatal(err)
 	}
-	// Email-only change keeps the password.
 	if err := f.svc.SetLogin(ctx, f.hh, f.mum.ID, dad.ID, "dad2@example.com", "", nil); err != nil {
 		t.Fatal(err)
 	}
@@ -280,8 +275,6 @@ func TestRewardEmojiAndGoals(t *testing.T) {
 		t.Fatalf("UpdateReward = %+v, %v", r, err)
 	}
 
-	// Archiving a reward clears anyone saving for it; restoring doesn't
-	// bring the goal back.
 	kid := f.add("Alfie", KindChild)
 	at := int64(1)
 	if _, err := f.st.Q.SetGoal(ctx, dbq.SetGoalParams{RewardID: &r.ID, SetAt: &at, HouseholdID: f.hh, ID: kid.ID}); err != nil {
@@ -317,7 +310,6 @@ func TestTypedRewardEmojiAndPictureCards(t *testing.T) {
 	if err != nil || kid.PictureCards != 0 {
 		t.Fatalf("turned off = %d, %v", kid.PictureCards, err)
 	}
-	// Only children have them.
 	dad, err := f.svc.CreatePerson(ctx, f.hh, f.mum.ID, PersonInput{Name: "Dad", Kind: KindAdult, Colour: "#46A758", PictureCards: true})
 	if err != nil || dad.PictureCards != 0 {
 		t.Fatalf("adult with picture cards = %d, %v", dad.PictureCards, err)
@@ -350,7 +342,6 @@ func TestArchiveLeavesSharedChores(t *testing.T) {
 	three := shared("Feed the cat", alfie.ID, isla.ID, freddie.ID)
 	two := shared("Tidy the den", alfie.ID, isla.ID)
 
-	// Shared chores don't block archiving Alfie; he's taken out of both.
 	if err := f.svc.ArchivePerson(ctx, f.hh, f.mum.ID, alfie.ID); err != nil {
 		t.Fatalf("archive Alfie: %v", err)
 	}
@@ -362,7 +353,6 @@ func TestArchiveLeavesSharedChores(t *testing.T) {
 		t.Errorf("three-person chore mode = %q", c.Mode)
 	}
 
-	// The two-person one is Isla's now, today's occurrence included.
 	c, _ = f.st.Q.GetChore(ctx, dbq.GetChoreParams{HouseholdID: f.hh, ID: two.ID})
 	if c.Mode != "assigned" || c.AssigneeID == nil || *c.AssigneeID != isla.ID {
 		t.Errorf("two-person chore = %+v, want assigned to Isla", c)
@@ -379,14 +369,11 @@ func TestArchiveLeavesSharedChores(t *testing.T) {
 			t.Errorf("occurrence assignee = %v, want Isla", r.AssigneeID)
 		}
 	}
-	// Now it's assigned, it blocks archiving Isla like any other.
 	if err := f.svc.ArchivePerson(ctx, f.hh, f.mum.ID, isla.ID); !errors.Is(err, ErrHasAssignedChores) {
 		t.Errorf("archive Isla = %v, want ErrHasAssignedChores", err)
 	}
 }
 
-// Archiving someone makes their calendars the family's, for good: restoring
-// them doesn't give the calendars back.
 func TestArchiveHandsCalendarsToFamily(t *testing.T) {
 	f := newFixture(t)
 	ctx := t.Context()

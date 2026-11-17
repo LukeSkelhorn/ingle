@@ -11,7 +11,6 @@ import (
 
 var unsafeFileChars = regexp.MustCompile(`[^A-Za-z0-9]+`)
 
-// handleHouseholdExport downloads all of the household's data as a zip.
 func (s *Server) handleHouseholdExport(w http.ResponseWriter, r *http.Request) {
 	hh := hhOf(r)
 	set, err := s.Settings.Get(r.Context(), hh)
@@ -35,9 +34,6 @@ func (s *Server) handleHouseholdExport(w http.ResponseWriter, r *http.Request) {
 	s.Log.InfoContext(r.Context(), "household exported", slog.Int64("household", hh))
 }
 
-// handleHouseholdDelete deletes the household and everything in it, once
-// its name is typed to confirm. Self-hosted Ingle gets an empty household
-// in its place and starts again at first-run setup.
 func (s *Server) handleHouseholdDelete(w http.ResponseWriter, r *http.Request) {
 	if err := parseForm(w, r); err != nil {
 		http.Error(w, "bad form", http.StatusBadRequest)
@@ -72,7 +68,7 @@ func (s *Server) handleHouseholdDelete(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	s.events.publish(hh, "") // open boards reload and find it gone
+	s.events.publish(hh, "")
 	s.clearCookie(w, r, sessionCookie)
 	s.clearCookie(w, r, deviceCookie)
 	http.Redirect(w, r, "/", http.StatusSeeOther)

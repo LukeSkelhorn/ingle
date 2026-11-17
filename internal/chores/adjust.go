@@ -10,9 +10,6 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/valid"
 )
 
-// Manual adjustments: an adult gives someone a bonus, or takes points away,
-// with a reason they'll see on the board. The balance can go below zero, and
-// points held for waiting reward claims stay held.
 const (
 	// MaxAdjustment is the most points one adjustment can give or take.
 	MaxAdjustment = 1000
@@ -25,15 +22,13 @@ const (
 // Adjustment is one manual adjustment, for the history lists.
 type Adjustment struct {
 	ID     int64
-	Points int64 // positive for a bonus, negative for points taken away
+	Points int64
 	Note   string
 	At     time.Time
-	By     string // the adult who made it
+	By     string
 }
 
-// AdjustPoints gives personID points (or takes them away, when points is
-// negative) with a reason. adultID must be an adult. Bad amounts or reasons
-// come back as valid.Errors on "amount" and "reason".
+// AdjustPoints gives personID points (or takes them away, when points is negative) with a reason.
 func (s *Service) AdjustPoints(ctx context.Context, householdID, adultID, personID, points int64, note string) (dbq.LedgerEntry, error) {
 	note = strings.TrimSpace(note)
 	errs := valid.Errors{}
@@ -72,9 +67,7 @@ func (s *Service) AdjustPoints(ctx context.Context, householdID, adultID, person
 	return out, err
 }
 
-// UndoAdjustment removes a manual adjustment made in the last
-// AdjustmentUndoWindow. It returns ErrUndoExpired if it's older than that,
-// already undone, or not a manual adjustment.
+// UndoAdjustment removes a manual adjustment made in the last AdjustmentUndoWindow.
 func (s *Service) UndoAdjustment(ctx context.Context, householdID, adultID, entryID int64) error {
 	return s.st.WithTx(ctx, func(q *dbq.Queries) error {
 		if err := requireAdult(ctx, q, householdID, adultID); err != nil {
@@ -94,8 +87,7 @@ func (s *Service) UndoAdjustment(ctx context.Context, householdID, adultID, entr
 	})
 }
 
-// Adjustments lists personID's manual adjustments since since, newest
-// first, up to limit.
+// Adjustments lists personID's manual adjustments since since, newest first, up to limit.
 func (s *Service) Adjustments(ctx context.Context, householdID, personID int64, since time.Time, limit int) ([]Adjustment, error) {
 	rows, err := s.st.Q.ListManualAdjustments(ctx, dbq.ListManualAdjustmentsParams{
 		HouseholdID: householdID, PersonID: personID, SinceUnix: since.Unix(), Lim: int64(limit),
@@ -110,8 +102,7 @@ func (s *Service) Adjustments(ctx context.Context, householdID, personID int64, 
 	return out, nil
 }
 
-// ReasonSuggestions returns the last few distinct reasons used, newest
-// first, to offer on the form.
+// ReasonSuggestions returns the last few distinct reasons used, newest first, to offer on the form.
 func (s *Service) ReasonSuggestions(ctx context.Context, householdID int64) ([]string, error) {
 	notes, err := s.st.Q.RecentManualNotes(ctx, householdID)
 	if err != nil {

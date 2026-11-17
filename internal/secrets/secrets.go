@@ -1,17 +1,4 @@
-// Package secrets encrypts the secrets a household stores in the
-// database, such as calendar links with a key in them.
-//
-// It uses envelope encryption. Each household has its own random data key,
-// stored in household_keys wrapped (encrypted) by the master key, which is
-// held outside the database (INGLE_MASTER_KEY). A secret is encrypted with
-// its household's data key, bound to the household, so a value copied into
-// another household won't open. Deleting a household deletes its key, so
-// anything encrypted with it, including in old backups, can't be read.
-//
-// Without a master key (self-hosted, by default) secrets are stored as they
-// are and a nil *Keyring is fine to use. Stored values that aren't
-// encrypted are read as they are either way, so turning the key on later
-// works: they're encrypted the next time they're saved.
+// Package secrets encrypts household secrets with per-household data keys.
 package secrets
 
 import (
@@ -35,19 +22,14 @@ import (
 // KeySize is the length of the master key and of each data key: AES-256.
 const KeySize = 32
 
-// prefix marks an encrypted value: version 1 is AES-256-GCM with the
-// household's data key, as base64 of nonce || ciphertext.
 const prefix = "enc:v1:"
 
-// wrapVersion is the first byte of a wrapped data key: 1 is AES-256-GCM
-// with the master key. A key service (KMS) could wrap them later as 2.
 const wrapVersion = 1
 
 // ErrNoKey is returned for an encrypted value when no master key is set.
 var ErrNoKey = errors.New("this is encrypted, and INGLE_MASTER_KEY isn't set")
 
-// ParseMasterKey decodes a base64 master key of KeySize bytes, e.g. from
-// `openssl rand -base64 32`.
+// ParseMasterKey decodes a base64 master key of KeySize bytes.
 func ParseMasterKey(s string) ([]byte, error) {
 	s = strings.TrimSpace(s)
 	for _, enc := range []*base64.Encoding{base64.StdEncoding, base64.RawStdEncoding, base64.URLEncoding, base64.RawURLEncoding} {
@@ -71,8 +53,7 @@ type Keyring struct {
 	keys map[int64]cipher.AEAD
 }
 
-// New returns a Keyring using master (KeySize bytes). A nil master returns
-// nil: secrets are stored as they are.
+// New returns a Keyring using master, or nil when master is nil.
 func New(st *store.Store, master []byte) (*Keyring, error) {
 	if master == nil {
 		return nil, nil
@@ -90,8 +71,7 @@ func (k *Keyring) Enabled() bool { return k != nil }
 // IsSealed reports whether stored is an encrypted value.
 func IsSealed(stored string) bool { return strings.HasPrefix(stored, prefix) }
 
-// Seal encrypts plaintext for household hh, for storing. Without a master
-// key it returns plaintext.
+// Seal encrypts plaintext for household hh, or returns it as is without a master key.
 func (k *Keyring) Seal(ctx context.Context, hh int64, plaintext string) (string, error) {
 	if k == nil {
 		return plaintext, nil
@@ -108,8 +88,7 @@ func (k *Keyring) Seal(ctx context.Context, hh int64, plaintext string) (string,
 	return prefix + base64.RawStdEncoding.EncodeToString(sealed), nil
 }
 
-// Open returns the plaintext of a value from Seal. A value that isn't
-// encrypted (stored before the master key was set) is returned as it is.
+// Open returns the plaintext of a value from Seal; unencrypted values pass through.
 func (k *Keyring) Open(ctx context.Context, hh int64, stored string) (string, error) {
 	if !IsSealed(stored) {
 		return stored, nil
@@ -135,8 +114,6 @@ func (k *Keyring) Open(ctx context.Context, hh int64, stored string) (string, er
 	return string(plain), nil
 }
 
-// dataKey returns household hh's data key, making it first if create is
-// set and it has none.
 func (k *Keyring) dataKey(ctx context.Context, hh int64, create bool) (cipher.AEAD, error) {
 	k.mu.Lock()
 	aead := k.keys[hh]

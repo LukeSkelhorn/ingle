@@ -12,7 +12,6 @@ import (
 	"github.com/lukeskelhorn/ingle/app"
 )
 
-// version is set at build time: -ldflags "-X main.version=v1.2.3".
 var version = "dev"
 
 func main() {
@@ -27,10 +26,9 @@ func main() {
 	case "":
 		err = app.Run(ctx, app.Options{Version: version, Log: log})
 	case "healthcheck":
-		// For Docker's HEALTHCHECK: the image has no shell or curl.
+		// Docker's HEALTHCHECK: the image has no shell or curl.
 		err = app.Healthcheck(ctx)
 	case "backup":
-		// One backup, e.g. before an upgrade: docker compose exec ingle /ingle backup.
 		var path string
 		if path, err = app.Backup(ctx); err == nil {
 			fmt.Println(path)

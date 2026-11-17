@@ -58,7 +58,6 @@ func newFixture(t *testing.T) *fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Friday 23 October 2026, 08:00.
 	f := &fixture{t: t, st: st, set: set, hh: h.ID, mum: mum.ID, now: time.Date(2026, 10, 23, 8, 0, 0, 0, london)}
 	f.svc = New(st, set, func(context.Context, int64) error { f.ended++; return nil })
 	f.svc.SetClock(f.clock)
@@ -124,7 +123,6 @@ func TestManualLockAndUnlock(t *testing.T) {
 	if !st.Locked || st.Reason != Remote || st.By == nil || *st.By != f.mum || !st.Since.Equal(f.clock()) {
 		t.Fatalf("after lock: %+v", st)
 	}
-	// Locking again is a no-op.
 	if err := f.svc.Lock(ctx, f.hh, nil, Manual); err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +142,7 @@ func TestManualLockAndUnlock(t *testing.T) {
 
 func TestSchedule(t *testing.T) {
 	f := newFixture(t)
-	f.settings(0b0111110, "09:00", "15:00", 0) // weekdays 9–3
+	f.settings(0b0111110, "09:00", "15:00", 0)
 
 	if f.tick(day(23, 8, 59)).Locked {
 		t.Fatal("locked before the window")
@@ -152,8 +150,6 @@ func TestSchedule(t *testing.T) {
 	if st := f.tick(day(23, 9, 0)); !st.Locked || st.Reason != Schedule {
 		t.Fatalf("not locked at 09:00: %+v", st)
 	}
-	// Someone gets home early and unlocks: it stays unlocked for the rest
-	// of the window, even across a restart (a fresh Service).
 	if err := f.svc.Unlock(t.Context(), f.hh, nil, ByCode); err != nil {
 		t.Fatal(err)
 	}
@@ -165,14 +161,12 @@ func TestSchedule(t *testing.T) {
 	if f.tick(day(23, 11, 1)).Locked {
 		t.Fatal("re-locked after a restart")
 	}
-	// Monday's window locks; it unlocks itself at 15:00.
 	if !f.tick(day(26, 9, 30)).Locked {
 		t.Fatal("Monday window didn't lock")
 	}
 	if f.tick(day(26, 15, 0)).Locked {
 		t.Fatal("didn't unlock at the end of the window")
 	}
-	// A manual lock isn't undone when a window ends.
 	f.tick(day(27, 9, 0))
 	if err := f.svc.Unlock(t.Context(), f.hh, nil, ByCode); err != nil {
 		t.Fatal(err)
@@ -183,7 +177,6 @@ func TestSchedule(t *testing.T) {
 	if st := f.tick(day(27, 15, 1)); !st.Locked || st.Reason != Remote {
 		t.Fatalf("manual lock undone by the schedule: %+v", st)
 	}
-	// Turning the schedule off releases a schedule lock.
 	if err := f.svc.Unlock(t.Context(), f.hh, &f.mum, ByPhone); err != nil {
 		t.Fatal(err)
 	}
@@ -198,19 +191,18 @@ func TestIdle(t *testing.T) {
 	f := newFixture(t)
 	f.settings(0, "09:00", "15:00", 3)
 	start := f.clock()
-	f.svc.SetClock(f.clock) // idle counts from now
+	f.svc.SetClock(f.clock)
 
 	if f.tick(start.Add(2 * time.Hour)).Locked {
 		t.Fatal("locked too soon")
 	}
-	f.svc.Touch(f.hh) // someone taps the board at +2h
+	f.svc.Touch(f.hh)
 	if f.tick(start.Add(4*time.Hour + 59*time.Minute)).Locked {
 		t.Fatal("Touch didn't hold off the idle lock")
 	}
 	if st := f.tick(start.Add(5 * time.Hour)); !st.Locked || st.Reason != Idle {
 		t.Fatalf("not locked after 3h idle: %+v", st)
 	}
-	// Unlocking restarts the idle clock.
 	if err := f.svc.Unlock(t.Context(), f.hh, nil, ByCode); err != nil {
 		t.Fatal(err)
 	}
