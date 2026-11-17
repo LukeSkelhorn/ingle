@@ -160,7 +160,7 @@
 </form>
 {{end}}
 
-{{define "do_for"}}{{$v := .}}
+{{define "do_for"}}{{$v := .}}{{if .NeedPIN}}{{template "do_for_pin" .}}{{else}}
 <form class="picker" hx-target="#board" hx-swap="outerHTML" onsubmit="return false">
   <h2 class="picker__title" tabindex="-1" autofocus>{{with .Emoji}}<span class="picker__emoji" aria-hidden="true">{{.}}</span> {{end}}{{.Title}}</h2>
   <div class="review__who">
@@ -189,6 +189,97 @@
             hx-post="/board/occurrences/{{.OccurrenceID}}/do-for" hx-vals='{"person": "{{.Child.ID}}"}'>{{if gt (len .Adults) 1}}Done{{else}}I did it{{end}}</button>
     <button class="btn btn--ghost btn--block" type="button" data-close>Cancel</button>
   </div>
+</form>
+{{end}}{{end}}
+
+{{define "do_for_pin"}}{{$v := .}}{{$one := eq (len .Adults) 1}}
+<form class="picker" data-do-for-pin data-url="/board/occurrences/{{.OccurrenceID}}/do-for" onsubmit="return false">
+  <h2 class="picker__title" tabindex="-1" autofocus>{{with .Emoji}}<span class="picker__emoji" aria-hidden="true">{{.}}</span> {{end}}{{.Title}}</h2>
+  <div class="review__who">
+    {{template "avatar" (avatar .Child "md")}}
+    <p>{{.Child.Name}}'s chore</p>
+  </div>
+  {{if not .Adults}}
+  <p>Ask a grown-up to set their PIN in Admin › People.</p>
+  <div class="picker__actions">
+    <button class="btn btn--ghost btn--block" type="button" data-close>Close</button>
+  </div>
+  {{else}}
+  <input type="hidden" name="person" value="{{.Child.ID}}">
+  <div data-step="who"{{if $one}} hidden{{end}}>
+    <p class="picker__ask">Who did it?</p>
+    <div class="picker__people">
+      {{range .Adults}}
+      <label class="picker__person" style="--person: {{.Colour}}" data-name="{{.Name}}" data-length="{{with .PinLength}}{{.}}{{end}}">
+        <input class="visually-hidden" type="radio" name="by" value="{{.ID}}"{{if $one}} checked{{end}}>
+        {{template "avatar" (avatar . "lg")}}
+        <span>{{.Name}}</span>
+        {{with $v.Points}}<small class="picker__worth">{{pts .}}</small>{{end}}
+      </label>
+      {{end}}
+    </div>
+  </div>
+  <div data-step="pin"{{if not $one}} hidden{{end}}>
+    <p class="picker__ask" data-ask tabindex="-1">{{if $one}}{{(index .Adults 0).Name}}, enter your PIN.{{end}}</p>
+    {{template "pinpad" (and $one (index .Adults 0).PinLength)}}
+  </div>
+  <p class="muted">The grown-up gets {{if .Points}}{{pts .Points}}{{else}}the credit{{end}}, and it's ticked off for {{.Child.Name}} without any points.</p>
+  <div class="picker__actions">
+    {{if not $one}}<button class="btn btn--ghost btn--block" type="button" data-who-back hidden>Back</button>{{end}}
+    <button class="btn btn--ghost btn--block" type="button" data-close>Cancel</button>
+  </div>
+  <script>
+    (function () {
+      var form = document.querySelector("#sheet-body [data-do-for-pin]"),
+          sheet = document.getElementById("sheet"),
+          who = form.querySelector('[data-step="who"]'),
+          pinStep = form.querySelector('[data-step="pin"]'),
+          ask = form.querySelector("[data-ask]"),
+          backBtn = form.querySelector("[data-who-back]"),
+          padEl = form.querySelector("[data-pinpad]"),
+          busy = false, pad;
+      pad = InglePinpad(padEl, {
+        active: function () { return sheet.open && document.body.contains(padEl) && !pinStep.hidden; },
+        onSubmit: function (pin) {
+          var by = form.querySelector('[name="by"]:checked');
+          if (busy || !by) return;
+          busy = true;
+          htmx.ajax("POST", form.dataset.url, {
+            source: form, target: "#board", swap: "outerHTML",
+            values: { person: form.elements.person.value, by: by.value, pin: pin },
+          });
+        },
+      });
+      form.addEventListener("htmx:afterRequest", function (e) {
+        busy = false;
+        var xhr = e.detail.xhr;
+        if (/json/.test(xhr.getResponseHeader("Content-Type") || "")) {
+          var d = {};
+          try { d = JSON.parse(xhr.responseText); } catch (err) {}
+          pad.error(d.error || "That didn't work. Try again.");
+          return;
+        }
+        if (!xhr.status) { pad.error("Can't reach Ingle. Try again."); return; }
+        sheet.close();
+      });
+      form.addEventListener("change", function (e) {
+        var p = e.target.closest(".picker__person");
+        if (!p) return;
+        ask.textContent = p.dataset.name + ", enter your PIN.";
+        pad.reset("", p.dataset.length);
+        who.hidden = true; pinStep.hidden = false;
+        if (backBtn) backBtn.hidden = false;
+        ask.focus();
+      });
+      if (backBtn) backBtn.addEventListener("click", function () {
+        var by = form.querySelector('[name="by"]:checked');
+        if (by) by.checked = false;
+        pad.reset();
+        pinStep.hidden = true; who.hidden = false; backBtn.hidden = true;
+      });
+    })();
+  </script>
+  {{end}}
 </form>
 {{end}}
 

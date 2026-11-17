@@ -214,7 +214,6 @@ func TestMoneyModuleOff(t *testing.T) {
 	notContains(t, phone.get("/admin/people/"+alfie), "/money\"")
 	expect(t, wall.post("/board/money/"+alfie+"/pin", url.Values{"pin": {"1357"}}), http.StatusNotFound)
 	notContains(t, wall.get("/board/people/"+alfie), "/board/money/")
-	notContains(t, wall.get("/"), "/static/pinpad.js")
 	notContains(t, phone.get("/admin/people/"+alfie), `/pin"`)
 	expect(t, phone.post("/admin/people/"+alfie+"/pin", url.Values{"pin": {"2222"}, "pin_confirm": {"2222"}}), http.StatusConflict, "Turn My money on")
 	expect(t, phone.get("/admin/people/"+itoa(h.person("Mum").ID)), http.StatusOK, "Unlocks admin on a household display.", "PIN is set",
