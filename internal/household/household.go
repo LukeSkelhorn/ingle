@@ -172,9 +172,8 @@ func (s *Service) Setup(ctx context.Context, householdID int64, in SetupInput) (
 	return p, err
 }
 
-// NewHouseholdInput is a new household and its first adult, for a program
-// whose outside sign-in signs adults in: the adult has an email to be known
-// by, but no password.
+// NewHouseholdInput is a new household and its first adult, who has an
+// email but no password.
 type NewHouseholdInput struct {
 	HouseholdName string
 	Timezone      string      // IANA, e.g. Europe/London

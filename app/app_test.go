@@ -194,8 +194,8 @@ func TestRunRefusesSignInWithoutURL(t *testing.T) {
 	}
 }
 
-// A program with its own sign-in makes households with CreateHousehold,
-// signs their adult in with StartSession and sets a PIN with SetPIN.
+// CreateHousehold makes a household whose adult StartSession signs in,
+// and SetPIN sets their PIN.
 func TestCreateHousehold(t *testing.T) {
 	addr := freeAddr(t)
 	t.Setenv("INGLE_ADDR", addr)

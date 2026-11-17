@@ -6,10 +6,6 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ## [Unreleased]
 
-### Added
-
-- **For developers: making households with another sign-in service.** With `app.Options.SignIn` set, `Helpers.CreateHousehold` makes a new household and its first adult. The adult has their name, colour, emoji and timezone, and an email for the sign-in service to know them by. Each module's default is on, as after first-run setup, and `Helpers.StartSession` then signs them in. `Helpers.SetPIN` sets the signed-in adult's PIN, and `app.AdultOf` says who's signed in. `app.PersonColours` and `app.PersonEmojis` are the choices Ingle offers, and invalid input comes back as `app.FieldErrors`. Nothing changes for self-hosted Ingle.
-
 ## [v0.4.5] - 2026-11-16
 
 ### Added

@@ -225,9 +225,8 @@ func (s *Server) StartSession(w http.ResponseWriter, r *http.Request, hh, person
 	return nil
 }
 
-// CreateHousehold makes a new household and its first adult, for a
-// program whose outside sign-in signs them in (Deps.SignIn). It turns on
-// each module's default, as first-run setup does.
+// CreateHousehold makes a household and its first adult, with each
+// module's default on, as first-run setup does.
 func (s *Server) CreateHousehold(ctx context.Context, in household.NewHouseholdInput) (hh, personID int64, err error) {
 	h, p, err := s.Household.CreateHousehold(ctx, in)
 	if err != nil {
@@ -242,9 +241,8 @@ func (s *Server) CreateHousehold(ctx context.Context, in household.NewHouseholdI
 	return h.ID, p.ID, nil
 }
 
-// SetPIN sets the PIN of the adult signed in on r, for unlocking admin
-// on a display. Like changing it in Admin › People, it signs them out
-// everywhere else, but not here.
+// SetPIN sets the PIN of the adult signed in on r. As in Admin › People,
+// their other sessions end, but not r's.
 func (s *Server) SetPIN(r *http.Request, pin string) error {
 	sess := identityFrom(r.Context()).Session
 	if sess == nil {

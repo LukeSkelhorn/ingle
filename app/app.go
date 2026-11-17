@@ -130,9 +130,7 @@ func (h Helpers) StartSession(w http.ResponseWriter, r *http.Request, hh, person
 	return h.srv.StartSession(w, r, hh, personID)
 }
 
-// CreateHouseholdInput is a new household and its first adult, for a
-// program whose [SignIn] service signs adults in: the adult has an email
-// to be known by, but no password.
+// CreateHouseholdInput is a new household and its first adult.
 type CreateHouseholdInput struct {
 	// Name is the household's, e.g. "The Smiths".
 	Name string
@@ -144,14 +142,11 @@ type CreateHouseholdInput struct {
 	Colour string
 	// Emoji is one of [PersonEmojis], or "" for none.
 	Emoji string
-	// Email is how the SignIn service knows them. It must be no one
-	// else's.
+	// Email is theirs, and must be no one else's.
 	Email string
 }
 
-// FieldErrors are what was wrong with a form's input: a message for each
-// field. CreateHousehold uses household_name, name, colour, emoji, email
-// and timezone; SetPIN uses pin.
+// FieldErrors are a message for each invalid field.
 type FieldErrors map[string]string
 
 func (e FieldErrors) Error() string { return valid.Errors(e).Error() }
@@ -165,9 +160,8 @@ func fieldErrors(err error) error {
 	return err
 }
 
-// CreateHousehold makes a new household, with each module's default on,
-// and its first adult, who can then be signed in with StartSession.
-// Invalid input is a [FieldErrors].
+// CreateHousehold makes a household and its first adult. Invalid input is
+// a [FieldErrors].
 func (h Helpers) CreateHousehold(ctx context.Context, in CreateHouseholdInput) (householdID, personID int64, err error) {
 	hh, p, err := h.srv.CreateHousehold(ctx, householdpkg.NewHouseholdInput{
 		HouseholdName: in.Name,
@@ -179,9 +173,7 @@ func (h Helpers) CreateHousehold(ctx context.Context, in CreateHouseholdInput) (
 	return hh, p, fieldErrors(err)
 }
 
-// SetPIN sets the PIN (4 to 6 digits) of the adult signed in on r, which
-// unlocks admin on a household display. As when it's changed in Admin,
-// their other sessions end, but not r's. An invalid PIN is a
+// SetPIN sets the PIN of the adult signed in on r. An invalid PIN is a
 // [FieldErrors].
 func (h Helpers) SetPIN(r *http.Request, pin string) error {
 	return fieldErrors(h.srv.SetPIN(r, pin))
