@@ -6,6 +6,10 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Up for grabs:** an overdue chore left over after the chore was changed to someone specific can be picked again. Tapping it opens "Who's doing this?" instead of showing "Choose who did it." ([DOM-137](https://linear.app/skeltech/issue/DOM-137))
+
 ## [v0.4.5] - 2026-11-16
 
 ### Added

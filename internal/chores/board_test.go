@@ -133,6 +133,33 @@ func TestBoardPoolClaimAndDone(t *testing.T) {
 	}
 }
 
+func TestBoardPoolLeftoverAfterAssigning(t *testing.T) {
+	f := newFixture(t)
+	ctx := t.Context()
+	mondays := Recurrence{Kind: RepeatWeekly, Days: []time.Weekday{time.Monday}}
+	in := Input{Title: "Bins", Mode: ModePool, Repeat: mondays, StartsOn: "2026-11-02"}
+	c, err := f.svc.CreateChore(ctx, f.hh, f.adult.ID, in, f.day("2026-11-02"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.boardAt("2026-11-04")
+	in.Mode, in.AssigneeID = ModeAssigned, &f.kid.ID
+	if _, err := f.svc.UpdateChore(ctx, f.hh, f.adult.ID, c.ID, in, f.day("2026-11-04")); err != nil {
+		t.Fatal(err)
+	}
+
+	b := f.boardAt("2026-11-04")
+	if len(b.Pool) != 1 || b.Pool[0].DueOn != "2026-11-02" {
+		t.Fatalf("pool = %v, want Monday's leftover", titles(b.Pool))
+	}
+	if left := b.Pool[0]; !left.Pool || !left.Overdue {
+		t.Fatalf("leftover = %+v, want an overdue pool card", left)
+	}
+	if err := f.svc.Claim(ctx, f.hh, b.Pool[0].OccurrenceID, f.kid2.ID); err != nil {
+		t.Fatalf("claim leftover: %v", err)
+	}
+}
+
 func TestBoardOrderingAndPending(t *testing.T) {
 	f := newFixture(t)
 	ctx := t.Context()
