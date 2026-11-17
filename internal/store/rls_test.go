@@ -189,15 +189,16 @@ func seed(t *testing.T, st *store.Store, name string, now time.Time) int64 {
 
 func TestAsSystemCallers(t *testing.T) {
 	want := map[string]int{
-		"app/app.go:build":                        1,
-		"app/app.go:eachHousehold":                1,
-		"internal/auth/auth.go:Display":           1,
-		"internal/auth/auth.go:SignIn":            1,
-		"internal/auth/auth.go:Session":           1,
-		"internal/auth/auth.go:EndSession":        1,
-		"internal/server/modules.go:households":   1,
-		"internal/store/store.go:EnsureHousehold": 1,
-		"internal/store/store.go:CanBypassRLS":    1,
+		"app/app.go:build":                                1,
+		"app/app.go:eachHousehold":                        1,
+		"internal/auth/auth.go:Display":                   1,
+		"internal/auth/auth.go:SignIn":                    1,
+		"internal/auth/auth.go:Session":                   1,
+		"internal/auth/auth.go:EndSession":                1,
+		"internal/household/household.go:CreateHousehold": 1,
+		"internal/server/modules.go:households":           1,
+		"internal/store/store.go:EnsureHousehold":         1,
+		"internal/store/store.go:CanBypassRLS":            1,
 	}
 	root := filepath.Join("..", "..")
 	got := map[string]int{}

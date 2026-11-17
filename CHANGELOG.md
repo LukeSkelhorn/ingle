@@ -6,6 +6,12 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ## [Unreleased]
 
+## [v0.4.7] - 2026-11-17
+
+### Added
+
+- **Getting started.** Admin's home now suggests what to do next. While you're the only person in the household, it says **Add your family**. Until there's a household display, it says **Set up the wall display**, which takes you to Admin › Devices. Each suggestion goes once it's done.
+
 ### Changed
 
 - **Press and hold works without signing in.** On a household display, press and hold a child's chore to do it for them even when nobody has unlocked admin. Tap your face, then enter your PIN; with one grown-up it goes straight to the PIN. If a grown-up is already signed in, there's no PIN to enter. ([DOM-138](https://linear.app/skeltech/issue/DOM-138))

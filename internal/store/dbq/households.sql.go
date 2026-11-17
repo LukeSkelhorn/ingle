@@ -26,6 +26,15 @@ func (q *Queries) CreateHousehold(ctx context.Context, arg CreateHouseholdParams
 	return i, err
 }
 
+const deleteHousehold = `-- name: DeleteHousehold :exec
+DELETE FROM households WHERE id = ?
+`
+
+func (q *Queries) DeleteHousehold(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, deleteHousehold, id)
+	return err
+}
+
 const getFirstHousehold = `-- name: GetFirstHousehold :one
 SELECT id, name, created_at FROM households ORDER BY id LIMIT 1
 `

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 
@@ -30,6 +31,7 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/settings"
 	"github.com/lukeskelhorn/ingle/internal/store"
 	"github.com/lukeskelhorn/ingle/internal/takeout"
+	"github.com/lukeskelhorn/ingle/internal/valid"
 )
 
 // Options are what a program passes to [Run].
@@ -82,6 +84,55 @@ func (h Helpers) RequireViewer(next http.Handler) http.Handler { return h.srv.Re
 func (h Helpers) StartSession(w http.ResponseWriter, r *http.Request, hh, personID int64) error {
 	return h.srv.StartSession(w, r, hh, personID)
 }
+
+// CreateHouseholdInput is a new household and its first adult.
+type CreateHouseholdInput struct {
+	Name     string
+	Timezone string
+	Adult    string
+	Colour   string
+	Emoji    string
+	Email    string
+}
+
+// FieldErrors are a message for each invalid field.
+type FieldErrors map[string]string
+
+func (e FieldErrors) Error() string { return valid.Errors(e).Error() }
+
+func fieldErrors(err error) error {
+	var ve valid.Errors
+	if errors.As(err, &ve) {
+		return FieldErrors(ve)
+	}
+	return err
+}
+
+// CreateHousehold makes a household and its first adult; invalid input is a FieldErrors.
+func (h Helpers) CreateHousehold(ctx context.Context, in CreateHouseholdInput) (householdID, personID int64, err error) {
+	hh, p, err := h.srv.CreateHousehold(ctx, householdpkg.NewHouseholdInput{
+		HouseholdName: in.Name,
+		Timezone:      in.Timezone,
+		Person:        householdpkg.PersonInput{Name: in.Adult, Colour: in.Colour},
+		Emoji:         in.Emoji,
+		Email:         in.Email,
+	})
+	return hh, p, fieldErrors(err)
+}
+
+// SetPIN sets the PIN of the adult signed in on r; an invalid PIN is a FieldErrors.
+func (h Helpers) SetPIN(r *http.Request, pin string) error {
+	return fieldErrors(h.srv.SetPIN(r, pin))
+}
+
+// AdultOf returns the adult signed in on a request, if any.
+func AdultOf(r *http.Request) (personID int64, ok bool) { return server.AdultOf(r) }
+
+// PersonColours are the colours offered for people.
+func PersonColours() []string { return slices.Clone(householdpkg.Colours) }
+
+// PersonEmojis are the emoji offered as people's pictures.
+func PersonEmojis() []string { return slices.Clone(avatar.Emojis) }
 
 // HouseholdOf returns the household a request is for, or 0 if not yet known.
 func HouseholdOf(r *http.Request) int64 { return server.HouseholdOf(r) }

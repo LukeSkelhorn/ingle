@@ -12,3 +12,6 @@ SELECT * FROM households ORDER BY id LIMIT 1;
 UPDATE households SET name = ? WHERE id = ?;
 -- name: ListHouseholdIDs :many
 SELECT id FROM households ORDER BY id;
+
+-- name: DeleteHousehold :exec
+DELETE FROM households WHERE id = ?;
