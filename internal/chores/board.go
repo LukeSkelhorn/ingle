@@ -299,6 +299,7 @@ func (s *Service) Board(ctx context.Context, householdID int64, boardDay time.Ti
 			continue
 		}
 		if owner == nil {
+			card.Pool = true
 			b.Pool = append(b.Pool, card)
 			continue
 		}
