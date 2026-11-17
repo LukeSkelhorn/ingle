@@ -12,8 +12,7 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/valid"
 )
 
-// BankStale is how old a bank balance gets before Admin home asks an adult
-// to check it.
+// BankStale is how old a bank balance gets before Admin home asks an adult to check it.
 const BankStale = 14 * 24 * time.Hour
 
 // MaxBankLabel is the longest account name, e.g. "Monzo".
@@ -30,7 +29,7 @@ type Bank struct {
 	Label     string
 	Pence     int64
 	Source    string
-	UpdatedAt time.Time // when someone last checked the real bank
+	UpdatedAt time.Time
 }
 
 // StaleBank is a child whose bank balance nobody has checked for a while.
@@ -52,8 +51,7 @@ func (s *Service) PersonBank(ctx context.Context, householdID, personID int64) (
 	return &Bank{Label: b.Label, Pence: b.Pence, Source: b.Source, UpdatedAt: time.Unix(b.UpdatedAt, 0)}, nil
 }
 
-// SetBank is an adult typing in what's in a child's bank now. Bad input
-// returns valid.Errors on "bank_label" and "bank_pence".
+// SetBank is an adult typing in what's in a child's bank now.
 func (s *Service) SetBank(ctx context.Context, householdID, personID int64, label string, pence, adultID int64) error {
 	label = strings.TrimSpace(label)
 	errs := valid.Errors{}

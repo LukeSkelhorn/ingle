@@ -7,8 +7,6 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
-// doers is who each "each of these people" chore is for: every active
-// person for an Everyone chore, otherwise its chosen people (still active).
 type doers struct {
 	all    []int64
 	chosen map[int64][]int64
@@ -33,8 +31,6 @@ func loadDoers(ctx context.Context, q *dbq.Queries, householdID int64) (doers, e
 	return d, nil
 }
 
-// of returns who c is for when it's an "each" chore, in board order, and
-// nil for any other chore.
 func (d doers) of(c dbq.Chore) []int64 {
 	switch {
 	case c.Mode != ModeEach:
@@ -45,15 +41,11 @@ func (d doers) of(c dbq.Chore) []int64 {
 	return d.chosen[c.ID]
 }
 
-// slot is one copy of an occurrence: who it's assigned to, and its
-// for_person key (the person for an "each" chore, 0 otherwise).
 type slot struct {
 	assignee  *int64
 	forPerson int64
 }
 
-// slots lists the copies of each occurrence of c: one per person for an
-// "each" chore (none if it has nobody), otherwise one.
 func slots(c dbq.Chore, people []int64) []slot {
 	if c.Mode != ModeEach {
 		return []slot{{assignee: c.AssigneeID}}
@@ -65,9 +57,7 @@ func slots(c dbq.Chore, people []int64) []slot {
 	return out
 }
 
-// Earns is what a person of kind ("adult" or "child") gets for a chore:
-// adults earn its adults' points and no money, whoever the chore is for;
-// children earn its points and money.
+// Earns is what a person of kind ("adult" or "child") gets for a chore.
 func Earns(kind string, points, pence, adultPoints int64) (int64, int64) {
 	if kind == "adult" {
 		return adultPoints, 0

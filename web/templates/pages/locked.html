@@ -1,10 +1,6 @@
 {{define "title"}}Ingle{{end}}
 {{define "bodyclass"}}is-board locked{{end}}
 {{define "content"}}
-{{/* The locked display: photos and the clock, nothing personal (no
-     household name, kids, chores or calendar; adults' names only in the
-     unlock picker). A tap asks who's unlocking, then their PIN (or the
-     household code); that unlocks every display. */}}
 <main id="locked-page" data-locked="1">
   <div id="screensaver" class="saver" role="button" aria-label="The displays are locked. Tap to unlock.">
     <div class="saver__photos"></div>
@@ -15,11 +11,9 @@
     </div>
   </div>
 
-  {{/* Unlocking: pick who you are (an adult, or the household code),
-       then type the PIN or code. Names only show once someone taps. */}}
   <dialog id="keypad" class="keypad card unlock" aria-label="Unlock the displays">
     <div class="keypad__step" data-step="who">
-      {{/* Focus the title, not the first person, so nobody looks pre-chosen. */}}
+      {{/* Focus the title, not a person, so nobody looks pre-chosen. */}}
       <h1 class="unlock__title" tabindex="-1" autofocus>Who's unlocking?</h1>
       {{template "unlock_people" (dict "Adults" .Data.Adults "Locked" true "HasCode" .Data.HasCode "CodeLength" .Data.CodeLength)}}
       <p><button class="btn btn--ghost" type="button" data-cancel>Cancel</button></p>
@@ -57,7 +51,6 @@
     saver.start();
 
     function idleClose() {
-      // Don't leave the unlock screen up on an empty house.
       clearTimeout(closeTimer);
       closeTimer = setTimeout(function () { pad.close(); }, 30000);
     }
@@ -68,13 +61,11 @@
     function showPin(choice) {
       person = choice.dataset.person;
       pinpad.reset("", choice.dataset.length);
-      // The same header as admin unlock: their avatar and "Hi <name>".
       var avatar = pinStep.querySelector("[data-avatar]");
       avatar.textContent = "";
       avatar.appendChild(choice.querySelector(".avatar").cloneNode(true));
       pinStep.querySelector("[data-title]").textContent = choice.dataset.title;
       pinStep.querySelector("[data-sub]").textContent = choice.dataset.sub;
-      // With only one way to unlock there's nothing to go back to.
       pinStep.querySelector("[data-not]").textContent = choices.length > 1 ? choice.dataset.not : "Cancel";
       whoStep.hidden = true; pinStep.hidden = false;
       pinStep.querySelector("[data-title]").focus();
@@ -118,7 +109,6 @@
       if (!pad.open) open(); else idleClose();
     });
 
-    // Unlocking anywhere (another display, a phone, the schedule) reloads.
     if (window.EventSource) {
       var es = new EventSource("/board/events");
       es.addEventListener("lock", function (e) { if (e.data === "unlocked") location.replace("/"); });

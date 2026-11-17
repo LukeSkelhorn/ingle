@@ -20,7 +20,6 @@ type AddToPersonBankParams struct {
 	PersonID    int64 `json:"person_id"`
 }
 
-// Money Ingle has just sent there. updated_at stays: nobody checked.
 func (q *Queries) AddToPersonBank(ctx context.Context, arg AddToPersonBankParams) error {
 	_, err := q.db.ExecContext(ctx, addToPersonBank, arg.Pence, arg.HouseholdID, arg.PersonID)
 	return err
@@ -87,7 +86,6 @@ type StalePersonBanksRow struct {
 	UpdatedAt int64  `json:"updated_at"`
 }
 
-// Children whose balance nobody has checked since before_unix.
 func (q *Queries) StalePersonBanks(ctx context.Context, arg StalePersonBanksParams) ([]StalePersonBanksRow, error) {
 	rows, err := q.db.QueryContext(ctx, stalePersonBanks, arg.HouseholdID, arg.BeforeUnix)
 	if err != nil {

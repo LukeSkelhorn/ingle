@@ -10,10 +10,6 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
-// rebind rewrites SQLite placeholders for Postgres: each bare ? becomes the
-// next $n, and ?N (sqlc's numbered form) becomes $N. Text inside quotes and
-// -- comments is left alone. The queries come from sqlc, so the set is
-// small and fixed; results are cached.
 func rebind(query string) string {
 	if v, ok := rebound.Load(query); ok {
 		return v.(string)
@@ -28,7 +24,7 @@ func rebind(query string) string {
 			j := i + 1
 			for j < len(query) {
 				if query[j] == c {
-					if j+1 < len(query) && query[j+1] == c { // doubled quote
+					if j+1 < len(query) && query[j+1] == c {
 						j += 2
 						continue
 					}
@@ -67,9 +63,8 @@ func rebind(query string) string {
 	return out
 }
 
-var rebound sync.Map // query string -> rebound string
+var rebound sync.Map
 
-// pgConn wraps a *sql.DB or *sql.Tx so sqlc's SQLite queries run on Postgres.
 type pgConn struct{ db dbq.DBTX }
 
 func (c pgConn) ExecContext(ctx context.Context, q string, args ...any) (sql.Result, error) {

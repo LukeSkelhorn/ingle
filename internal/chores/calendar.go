@@ -15,45 +15,33 @@ type CalStatus string
 
 // Calendar statuses.
 const (
-	CalUpcoming CalStatus = "upcoming" // a future day
-	CalToday    CalStatus = "today"    // due on the board day, not done yet
-	CalDone     CalStatus = "done"     // completed (pending or approved)
-	CalMissed   CalStatus = "missed"   // an earlier day, never done
+	CalUpcoming CalStatus = "upcoming"
+	CalToday    CalStatus = "today"
+	CalDone     CalStatus = "done"
+	CalMissed   CalStatus = "missed"
 )
 
-// CalChore is one chore on one day of the board calendar. Days within the
-// materialised window come from occurrence rows; later ones are projected
-// from the chore's schedule and have no OccurrenceID.
+// CalChore is one chore on one day of the board calendar.
 type CalChore struct {
-	OccurrenceID int64 // 0 when projected
+	OccurrenceID int64
 	ChoreID      int64
-	Date         string // YYYY-MM-DD
+	Date         string
 	Title        string
 	Emoji        string
 	DueTime      *string
 	Points       int64
 	Pence        int64
 	Pool         bool
-	// PersonID is whose it is: the assignee, whoever claimed a pool chore,
-	// or whoever did an unclaimed one. Nil for a pool chore up for grabs.
-	PersonID *int64
-	Status   CalStatus
-	DoneByID *int64 // who completed it, when Done
-	DoneAt   int64  // unix seconds, when Done
-	Pending  bool   // done, waiting for an adult
-	// Or names a flexible-day chore's days ("Tue or Thu"); it is shown on
-	// each of them until it's done. "" for everything else.
-	Or string
-	// People is who a shared chore is for, until it's done (then PersonID
-	// is whoever did it).
-	People []int64
+	PersonID     *int64
+	Status       CalStatus
+	DoneByID     *int64
+	DoneAt       int64
+	Pending      bool
+	Or           string
+	People       []int64
 }
 
-// Calendar returns the chores due on each local date in [from, to]
-// (YYYY-MM-DD), keyed by date and in time order. Skipped occurrences are
-// left out. Nothing is written: dates past the materialised window are
-// projected from each chore's schedule, and nothing is projected before
-// boardDay.
+// Calendar returns the chores due on each local date in [from, to], keyed by date.
 func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time.Time, from, to string) (map[string][]CalChore, error) {
 	loc, dayStart, now := s.loc(ctx, householdID), s.dayStart(ctx, householdID), s.now()
 	today := boardDay.Format(DateLayout)
@@ -89,7 +77,6 @@ func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time
 	for _, p := range people {
 		kind[p.ID] = p.Kind
 	}
-	// earns is what a chore's copy for person is worth.
 	earns := func(person *int64, points, pence, adultPoints int64) (int64, int64) {
 		if person == nil {
 			return points, pence
@@ -114,8 +101,6 @@ func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time
 	}
 	for _, r := range rows {
 		seen[key{r.ChoreID, r.DueOn}] = true
-		// A dismissed Only on the day chore (Admin › Completions) still
-		// shows as missed; other skipped occurrences are hidden.
 		if r.Status == "skipped" && r.OnTheDay != 1 {
 			continue
 		}
@@ -133,9 +118,8 @@ func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time
 		c.Points, c.Pence = earns(c.PersonID, r.Points, r.Pence, r.AdultPoints)
 		comp, done := byOcc[r.ID]
 		if !done && r.AvailableFrom == nil && hols.awayOn(r.DueOn, rowOwners(r, shared)) {
-			continue // on holiday
+			continue
 		}
-		// An Only on the day chore past its time is missed, even today.
 		at, onTheDay := onTheDayCutoff(r.OnTheDay, r.DueOn, optTime(r.DueTime), loc, dayStart)
 		tooLate := onTheDay && !done && !now.Before(at)
 		if tooLate && c.Status == CalToday {
@@ -153,9 +137,6 @@ func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time
 			continue
 		}
 
-		// A flexible-day chore: once done, it's on the day it was done; until
-		// then, on each of its days that hasn't passed (and on its last day,
-		// missed, once that has).
 		days := windowDays(r.Rrule, r.StartsOn, *r.AvailableFrom, r.DueOn, loc)
 		c.Or = DaysHint(days)
 		if done {
@@ -178,7 +159,6 @@ func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time
 		}
 	}
 
-	// Project the rest from today onwards.
 	start := max(from, today)
 	if start <= to {
 		chores, err := q.ListChores(ctx, householdID)
@@ -195,8 +175,6 @@ func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time
 		}
 		for _, ch := range chores {
 			if ch.DayMode == DayAny && ch.Rrule != nil {
-				// From the Monday, so a week seen from mid-week still names
-				// all its days.
 				ws, err := flexWindows(ch, mondayOf(first), last, loc)
 				if err != nil {
 					continue
@@ -262,16 +240,13 @@ func (s *Service) Calendar(ctx context.Context, householdID int64, boardDay time
 	return out, nil
 }
 
-// CalPick narrows ChoreOn to one copy of a chore that's on a day more than
-// once: whose it is (an "each" chore) and its time. Zero values match any.
+// CalPick narrows ChoreOn to one copy of a chore that's on a day more than once.
 type CalPick struct {
 	PersonID int64
-	At       string // HH:MM
+	At       string
 }
 
-// ChoreOn returns chore choreID as it falls on date, with the chore itself,
-// for the calendar's read-only chore sheet. ErrNotFound means it isn't due
-// that day.
+// ChoreOn returns chore choreID as it falls on date, for the calendar's chore sheet.
 func (s *Service) ChoreOn(ctx context.Context, householdID int64, boardDay time.Time, choreID int64, date string, pick CalPick) (CalChore, dbq.Chore, error) {
 	ch, err := s.st.Q.GetChore(ctx, dbq.GetChoreParams{HouseholdID: householdID, ID: choreID})
 	if err != nil || ch.ArchivedAt != nil {
@@ -302,7 +277,6 @@ func statusOn(date, today string) CalStatus {
 	return CalUpcoming
 }
 
-// compareCal orders a day: timed chores by time, then untimed, by title.
 func compareCal(a, b CalChore) int {
 	switch {
 	case a.DueTime != nil && b.DueTime == nil:

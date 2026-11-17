@@ -24,8 +24,6 @@ type AssignOpenOccurrencesParams struct {
 	ChoreID     int64  `json:"chore_id"`
 }
 
-// Gives a chore's not-yet-started occurrences to person_id (a shared chore
-// that's down to one person becomes theirs).
 func (q *Queries) AssignOpenOccurrences(ctx context.Context, arg AssignOpenOccurrencesParams) error {
 	_, err := q.db.ExecContext(ctx, assignOpenOccurrences, arg.PersonID, arg.HouseholdID, arg.ChoreID)
 	return err
@@ -73,9 +71,6 @@ type DeleteFutureOpenOccurrencesParams struct {
 	FromDate    string `json:"from_date"`
 }
 
-// Drops not-yet-started occurrences of a chore from from_date onwards so an
-// edited schedule or assignee can be re-materialised. Claimed, done and
-// previously-completed occurrences are kept.
 func (q *Queries) DeleteFutureOpenOccurrences(ctx context.Context, arg DeleteFutureOpenOccurrencesParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, deleteFutureOpenOccurrences, arg.HouseholdID, arg.ChoreID, arg.FromDate)
 	if err != nil {
@@ -97,8 +92,6 @@ type DeleteOpenEachOccurrencesForPersonParams struct {
 	PersonID    int64 `json:"person_id"`
 }
 
-// Drops a person's not-yet-started copies of 'each' chores (they've left
-// the household, so they stop getting them).
 func (q *Queries) DeleteOpenEachOccurrencesForPerson(ctx context.Context, arg DeleteOpenEachOccurrencesForPersonParams) error {
 	_, err := q.db.ExecContext(ctx, deleteOpenEachOccurrencesForPerson, arg.HouseholdID, arg.PersonID)
 	return err
@@ -114,9 +107,6 @@ type DismissOccurrenceParams struct {
 	ID          int64 `json:"id"`
 }
 
-// Takes a missed Only on the day occurrence off Admin > Completions. It
-// stays missed (never done); claimed_by is kept so a restore puts it back
-// as it was.
 func (q *Queries) DismissOccurrence(ctx context.Context, arg DismissOccurrenceParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, dismissOccurrence, arg.HouseholdID, arg.ID)
 	if err != nil {
@@ -232,8 +222,6 @@ type ListBoardRow struct {
 	OnTheDay         int64   `json:"on_the_day"`
 }
 
-// Occurrences on the board at some point in [from_date, to_date]: due in the
-// range, or (flexible-day chores) with their window overlapping it.
 func (q *Queries) ListBoard(ctx context.Context, arg ListBoardParams) ([]ListBoardRow, error) {
 	rows, err := q.db.QueryContext(ctx, listBoard, arg.HouseholdID, arg.FromDate, arg.ToDate)
 	if err != nil {
@@ -329,7 +317,6 @@ type RestoreOccurrenceParams struct {
 	ID          int64 `json:"id"`
 }
 
-// Undoes DismissOccurrence.
 func (q *Queries) RestoreOccurrence(ctx context.Context, arg RestoreOccurrenceParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, restoreOccurrence, arg.HouseholdID, arg.ID)
 	if err != nil {

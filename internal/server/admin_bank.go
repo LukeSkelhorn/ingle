@@ -9,15 +9,11 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/valid"
 )
 
-// bankHistoryDays is how far back Admin › Bank lists decided requests.
 const bankHistoryDays = 30
 
-// bankPage is Admin › Bank: requests to move money to someone's bank that
-// are waiting, then the last 30 days of them.
 type bankPage struct {
-	Waiting []chores.Transfer
-	Recent  []chores.Transfer
-	// Declining is the request whose decline failed, with what was typed.
+	Waiting   []chores.Transfer
+	Recent    []chores.Transfer
 	Declining int64
 	Reason    string
 }
@@ -35,7 +31,7 @@ func (s *Server) renderBank(w http.ResponseWriter, r *http.Request, status int, 
 	p.Waiting, p.Recent = nil, nil
 	for _, t := range all {
 		if t.Pending() {
-			p.Waiting = append([]chores.Transfer{t}, p.Waiting...) // oldest first
+			p.Waiting = append([]chores.Transfer{t}, p.Waiting...)
 		} else {
 			p.Recent = append(p.Recent, t)
 		}
@@ -47,7 +43,6 @@ func (s *Server) renderBank(w http.ResponseWriter, r *http.Request, status int, 
 	s.render(w, r, status, "admin_bank", v)
 }
 
-// handleBankApprove is an adult saying they've sent the money.
 func (s *Server) handleBankApprove(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(r)
 	if !ok {
@@ -66,7 +61,6 @@ func (s *Server) handleBankApprove(w http.ResponseWriter, r *http.Request) {
 	s.renderBank(w, r, http.StatusOK, bankPage{}, nil, "Approved. It's come off their balance in Ingle.")
 }
 
-// handleBankDecline turns a request down with a reason they'll see.
 func (s *Server) handleBankDecline(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(r)
 	if !ok {
@@ -107,8 +101,6 @@ func (s *Server) bankFailed(w http.ResponseWriter, r *http.Request, err error, p
 	}
 }
 
-// handlePayOut is Move to bank on Admin › People: the adult has sent some
-// of someone's money to their bank and records it straight away.
 func (s *Server) handlePayOut(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.loadPerson(w, r)
 	if !ok {
@@ -149,7 +141,7 @@ func (s *Server) handlePayOut(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, chores.ErrInsufficientBalance):
 		again(http.StatusUnprocessableEntity, "That's more than "+p.Name+" has to spend.")
 		return
-	case errors.Is(err, chores.ErrNotFound): // archived
+	case errors.Is(err, chores.ErrNotFound):
 		s.renderPerson(w, r, http.StatusConflict, s.personFormFor(r, p), nil, "Restore them before moving their money.")
 		return
 	case errors.Is(err, chores.ErrNotAdult):

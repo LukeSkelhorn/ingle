@@ -1,16 +1,8 @@
-# Ingle for a home lab: Ingle plus Caddy for HTTPS.
-# Setup and day-to-day use: see README.md in this folder.
-#
-# Ingle used to be called Domus. A .env from then still works: each INGLE_*
-# setting falls back to its old DOMUS_* name, and the volumes keep their old
-# names so your data, backups and certificates carry straight over.
 name: ingle
 
 services:
   ingle:
     image: ghcr.io/lukeskelhorn/ingle:${INGLE_TAG:-${DOMUS_TAG:-latest}}
-    # Or build from this checkout instead of pulling:
-    # build: ..
     restart: unless-stopped
     environment:
       INGLE_TZ: ${INGLE_TZ:-${DOMUS_TZ:-Europe/London}}
@@ -20,20 +12,13 @@ services:
       INGLE_CURRENCY: ${INGLE_CURRENCY:-${DOMUS_CURRENCY:-GBP}}
       INGLE_BACKUP_KEEP: ${INGLE_BACKUP_KEEP:-${DOMUS_BACKUP_KEEP:-14}}
       INGLE_BACKUP_AT: ${INGLE_BACKUP_AT:-${DOMUS_BACKUP_AT:-03:00}}
-      # Only set when PHOTOS_PATH is mounted below.
       INGLE_PHOTOS_DIR: ${INGLE_PHOTOS_DIR:-${DOMUS_PHOTOS_DIR:-}}
-      # Caddy's address: believe its X-Forwarded-For, so sign-in and unlock
-      # attempts are rate-limited per device, not for the whole house.
       INGLE_TRUSTED_PROXIES: ${INGLE_PROXY_IP:-${DOMUS_PROXY_IP:-172.30.40.2}}
     volumes:
       - ingle-data:/data
       - ${BACKUP_PATH:-./backups}:/backups
-      # A read-only photos folder (e.g. a NAS share) for the screensaver.
-      # Uncomment, set PHOTOS_PATH and INGLE_PHOTOS_DIR=/photos in .env.
       # - ${PHOTOS_PATH}:/photos:ro
     networks: [ingle]
-    # No published port: everything goes through Caddy. For plain HTTP on
-    # the LAN without Caddy, see README.md.
 
   caddy:
     build: ./caddy
@@ -42,8 +27,7 @@ services:
       ingle:
         condition: service_healthy
     environment:
-      # Set INGLE_HOSTNAME in .env. (No "required" check here: older
-      # Docker Compose versions would also demand the old DOMUS_HOSTNAME.)
+      # No :? check: older Compose versions would also demand DOMUS_HOSTNAME.
       INGLE_HOSTNAME: ${INGLE_HOSTNAME:-${DOMUS_HOSTNAME:-}}
       CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:?set CLOUDFLARE_API_TOKEN in .env}
     ports:
@@ -56,7 +40,6 @@ services:
       - caddy-config:/config
     networks:
       ingle:
-        # Fixed, so Ingle can trust exactly this address.
         ipv4_address: ${INGLE_PROXY_IP:-${DOMUS_PROXY_IP:-172.30.40.2}}
 
 networks:
@@ -65,8 +48,7 @@ networks:
       config:
         - subnet: ${INGLE_SUBNET:-${DOMUS_SUBNET:-172.30.40.0/24}}
 
-# Named as they were when Ingle was called Domus, so an upgrade keeps the
-# same data. A new install gets these names too; they're never shown.
+# Old Domus names, so upgrades keep the same data.
 volumes:
   ingle-data:
     name: domus_domus-data

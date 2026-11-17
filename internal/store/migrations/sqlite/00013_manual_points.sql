@@ -1,9 +1,5 @@
 -- +goose NO TRANSACTION
 -- +goose Up
--- Manual points adjustments: an adult gives a bonus or takes points away,
--- with a reason. They get their own kind, 'manual', so they can be listed
--- apart from chore reversals (which stay 'adjustment'). SQLite can't change a
--- CHECK constraint in place, so ledger_entries is rebuilt, as in 00011.
 PRAGMA foreign_keys = OFF;
 BEGIN;
 CREATE TABLE ledger_entries_new (

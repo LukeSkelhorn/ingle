@@ -1,8 +1,4 @@
 // Package storetest opens a migrated database for tests.
-//
-// Tests use SQLite by default. With INGLE_TEST_PG_URL set (task test:pg),
-// each test gets its own empty Postgres schema instead, so the same tests
-// run on both engines.
 package storetest
 
 import (
@@ -25,12 +21,6 @@ const EnvPG = "INGLE_TEST_PG_URL"
 func Postgres() bool { return os.Getenv(EnvPG) != "" }
 
 // Open returns a freshly migrated database, closed when the test ends.
-// sqlitePath is where the SQLite file goes ("" for a temp dir); it is
-// ignored on Postgres.
-//
-// On Postgres it connects as the server's superuser, which skips row-level
-// security, and lets statements run without a household in their context.
-// It checks the SQL works on Postgres. OpenScoped checks the scoping.
 func Open(t testing.TB, sqlitePath string) *sql.DB {
 	t.Helper()
 	if base := os.Getenv(EnvPG); base != "" {
@@ -39,14 +29,10 @@ func Open(t testing.TB, sqlitePath string) *sql.DB {
 	return openSQLite(t, sqlitePath)
 }
 
-// AppRole is the role OpenScoped connects as. It isn't a superuser, can't
-// bypass row-level security and doesn't own the tables, like the app's own
-// role in production.
+// AppRole is the role OpenScoped connects as.
 const AppRole = "ingle_app_test"
 
-// OpenScoped is Open, but on Postgres it connects as AppRole, as the app
-// does in production: row-level security applies, and a statement without
-// a household (or store.AsSystem) in its context fails.
+// OpenScoped is Open, but on Postgres it connects as AppRole so row-level security applies.
 func OpenScoped(t testing.TB, sqlitePath string) *sql.DB {
 	t.Helper()
 	base := os.Getenv(EnvPG)
@@ -104,8 +90,7 @@ func openSQLite(t testing.TB, sqlitePath string) *sql.DB {
 	return db
 }
 
-// Schema creates an empty schema on the Postgres server at base, dropped
-// when the test ends, and returns a URL whose connections use it.
+// Schema creates a throwaway Postgres schema and returns a URL that uses it.
 func Schema(t testing.TB, base string) string {
 	t.Helper()
 	b := make([]byte, 6)

@@ -1,6 +1,4 @@
-// Package picture decodes untrusted uploaded or on-disk images safely
-// (format allow-list, decompression-bomb guard, EXIF auto-orientation) and
-// writes JPEGs atomically. Avatars and the screensaver photos share it.
+// Package picture safely decodes untrusted images and writes JPEGs atomically.
 package picture
 
 import (
@@ -8,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
-	_ "image/gif" // register decoders for DecodeConfig
+	_ "image/gif"
 	"image/jpeg"
 	_ "image/png"
 	"io"
@@ -18,8 +16,7 @@ import (
 	"github.com/disintegration/imaging"
 )
 
-// MaxPixels guards against decompression bombs (a tiny file that decodes to
-// a huge image).
+// MaxPixels guards against decompression bombs.
 const MaxPixels = 50_000_000
 
 // Errors returned by Decode.
@@ -28,8 +25,7 @@ var (
 	ErrNotAnImage = errors.New("not a JPEG, PNG or GIF image")
 )
 
-// Decode reads at most maxBytes from r and decodes a JPEG, PNG or GIF,
-// rotated upright according to its EXIF orientation.
+// Decode reads at most maxBytes from r and decodes an upright JPEG, PNG or GIF.
 func Decode(r io.Reader, maxBytes int64) (image.Image, error) {
 	data, err := io.ReadAll(io.LimitReader(r, maxBytes+1))
 	if err != nil {
@@ -61,14 +57,13 @@ func Fit(img image.Image, maxSide int) image.Image {
 	return imaging.Fit(img, maxSide, maxSide, imaging.Lanczos)
 }
 
-// WriteJPEG encodes img to path via a temp file in the same directory and a
-// rename, so readers never see a half-written file.
+// WriteJPEG encodes img to path atomically via a temp file and rename.
 func WriteJPEG(path string, img image.Image, quality int) error {
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".upload-*")
 	if err != nil {
 		return fmt.Errorf("create temp: %w", err)
 	}
-	defer os.Remove(tmp.Name()) // no-op after a successful rename
+	defer os.Remove(tmp.Name())
 	if err := jpeg.Encode(tmp, img, &jpeg.Options{Quality: quality}); err != nil {
 		_ = tmp.Close()
 		return fmt.Errorf("encode jpeg: %w", err)

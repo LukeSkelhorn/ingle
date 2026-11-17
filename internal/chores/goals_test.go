@@ -62,7 +62,6 @@ func TestGoalLifecycle(t *testing.T) {
 		t.Fatalf("goal = %+v, want Lego at 70%%", g)
 	}
 
-	// Holds count: a waiting claim for something else slows the goal down.
 	comic, err := f.svc.ClaimReward(ctx, f.hh, other.ID, f.kid.ID, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -70,7 +69,6 @@ func TestGoalLifecycle(t *testing.T) {
 	if g := f.summary(f.kid).Goal; g.Percent != 60 {
 		t.Errorf("with a hold, percent = %d, want 60", g.Percent)
 	}
-	// Approving a different reward leaves the goal alone.
 	if err := f.svc.ApproveRedemption(ctx, f.hh, comic.ID, f.adult.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +76,6 @@ func TestGoalLifecycle(t *testing.T) {
 		t.Fatal("approving another reward cleared the goal")
 	}
 
-	// Reached: it shows on the board too.
 	f.earn(f.kid, 40, 0)
 	if g := f.summary(f.kid).Goal; !g.Reached {
 		t.Errorf("goal = %+v, want reached", g)
@@ -88,7 +85,6 @@ func TestGoalLifecycle(t *testing.T) {
 		t.Errorf("column goal = %+v, want Lego reached", col.Goal)
 	}
 
-	// Claimed: waiting, and the hold doesn't empty the bar.
 	red, err := f.svc.ClaimReward(ctx, f.hh, lego.ID, f.kid.ID, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -96,14 +92,12 @@ func TestGoalLifecycle(t *testing.T) {
 	if g := f.summary(f.kid).Goal; !g.Waiting || g.Reached || g.Percent != 100 {
 		t.Errorf("after claiming, goal = %+v, want waiting at 100%%", g)
 	}
-	// Declined: back to reached.
 	if err := f.svc.DeclineRedemption(ctx, f.hh, red.ID, f.adult.ID); err != nil {
 		t.Fatal(err)
 	}
 	if g := f.summary(f.kid).Goal; g.Waiting || !g.Reached {
 		t.Errorf("after declining, goal = %+v, want reached", g)
 	}
-	// Approved: the goal is done.
 	red, err = f.svc.ClaimReward(ctx, f.hh, lego.ID, f.kid.ID, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -156,7 +150,6 @@ func TestSetGoalRefused(t *testing.T) {
 		t.Errorf("archived person: err = %v, want ErrNotFound", err)
 	}
 
-	// Replacing and clearing.
 	other := f.reward("Comic", 5, 0)
 	for _, id := range []int64{lego.ID, other.ID} {
 		if _, err := f.svc.SetGoal(ctx, f.hh, f.kid.ID, id); err != nil {
@@ -174,7 +167,6 @@ func TestSetGoalRefused(t *testing.T) {
 	}
 }
 
-// An archived reward never shows as a goal, even if nothing cleared it.
 func TestGoalHidesArchivedReward(t *testing.T) {
 	f := newFixture(t)
 	ctx := t.Context()

@@ -1,11 +1,4 @@
 -- +goose Up
--- Locking the household displays when the house is empty: a shared unlock
--- code, an optional weekly schedule and idle timeout, and the current state.
-
--- unlock_code_hash is an argon2id hash of the household's 4–6 digit code
--- (adult PINs also unlock). lock_days is a weekday bitmask (bit 0 = Sunday);
--- 0 turns the schedule off. A window with lock_from > lock_until runs
--- overnight. lock_idle_hours 0 turns the idle lock off.
 ALTER TABLE household_settings ADD COLUMN unlock_code_hash TEXT;
 ALTER TABLE household_settings
     ADD COLUMN lock_days INTEGER NOT NULL DEFAULT 0 CHECK (lock_days BETWEEN 0 AND 127);
@@ -16,9 +9,6 @@ ALTER TABLE household_settings
 ALTER TABLE household_settings
     ADD COLUMN lock_idle_hours INTEGER NOT NULL DEFAULT 0 CHECK (lock_idle_hours BETWEEN 0 AND 72);
 
--- Whether the displays are locked. schedule_applied is the start (unix) of
--- the last schedule window acted on, so an early unlock holds until the
--- next window and a restart doesn't re-lock.
 CREATE TABLE household_lock (
     household_id     INTEGER PRIMARY KEY REFERENCES households (id) ON DELETE CASCADE,
     locked           INTEGER NOT NULL DEFAULT 0 CHECK (locked IN (0, 1)),

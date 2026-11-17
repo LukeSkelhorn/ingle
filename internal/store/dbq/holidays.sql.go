@@ -36,7 +36,6 @@ type DeleteOpenOccurrenceParams struct {
 	ID          int64 `json:"id"`
 }
 
-// Drops a not-yet-started occurrence that a holiday has paused.
 func (q *Queries) DeleteOpenOccurrence(ctx context.Context, arg DeleteOpenOccurrenceParams) error {
 	_, err := q.db.ExecContext(ctx, deleteOpenOccurrence, arg.HouseholdID, arg.ID)
 	return err
@@ -103,8 +102,6 @@ type ListHolidaysParams struct {
 	FromDate    string `json:"from_date"`
 }
 
-// Holidays that haven't ended before from_date, soonest first (the whole
-// household's before one person's on the same day).
 func (q *Queries) ListHolidays(ctx context.Context, arg ListHolidaysParams) ([]Holiday, error) {
 	rows, err := q.db.QueryContext(ctx, listHolidays, arg.HouseholdID, arg.FromDate)
 	if err != nil {

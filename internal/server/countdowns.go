@@ -18,13 +18,8 @@ import (
 
 const modCountdowns = "countdowns"
 
-// stripCountdowns is how many countdowns the board's strip shows.
 const stripCountdowns = 3
 
-// Countdowns: days to go until birthdays, holidays and big days, on the
-// board, its Countdowns view and the screensaver. Grown-ups add them in
-// admin; a child with "Can add countdowns" can add their own on a display
-// after their PIN.
 type countdownsModule struct{ s *Server }
 
 func (countdownsModule) ID() string   { return modCountdowns }
@@ -59,16 +54,12 @@ func (m countdownsModule) Routes(r module.Router) {
 	r.Admin("POST /admin/countdowns/{id}/delete", s.handleCountdownDelete)
 }
 
-// countdowns is the household's upcoming countdowns and birthdays, soonest
-// first, or none while the module is off.
 func (s *Server) countdowns(r *http.Request) ([]chores.Countdown, error) {
 	if !s.moduleOn(r.Context(), modCountdowns) {
 		return nil, nil
 	}
 	return s.Chores.Countdowns(r.Context(), hhOf(r), s.boardDay(r), false)
 }
-
-// Admin › Countdowns.
 
 type countdownsAdminView struct {
 	Upcoming, Passed []chores.Countdown
@@ -94,17 +85,15 @@ func (s *Server) handleCountdowns(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, http.StatusOK, "admin_countdowns", page)
 }
 
-// countdownForm is the countdown form, in admin or (for a child) in the
-// board's sheet.
 type countdownForm struct {
 	ID        int64
 	Title     string
 	Emoji     emojiField
 	OnDate    string
 	Yearly    bool
-	PeopleIDs []int64      // who it's for, if anyone
-	People    []dbq.Person // to choose from (admin only)
-	Min       string       // the earliest day a one-off can be, YYYY-MM-DD
+	PeopleIDs []int64
+	People    []dbq.Person
+	Min       string
 }
 
 func newCountdownForm() countdownForm {
@@ -119,8 +108,6 @@ func (s *Server) countdownFormFor(r *http.Request, c dbq.Countdown) (countdownFo
 	}, err
 }
 
-// readCountdownForm reads the form; withPerson takes "For" too (admin).
-// Without it, who it's for stays as in f.
 func (s *Server) readCountdownForm(w http.ResponseWriter, r *http.Request, f *countdownForm, withPerson bool) (chores.CountdownInput, error) {
 	if err := parseForm(w, r); err != nil {
 		return chores.CountdownInput{}, err
@@ -134,7 +121,7 @@ func (s *Server) readCountdownForm(w http.ResponseWriter, r *http.Request, f *co
 	if withPerson {
 		f.PeopleIDs = fm.ids("people_ids")
 	}
-	in.PeopleIDs = f.PeopleIDs // a child keeps who it's for as it was
+	in.PeopleIDs = f.PeopleIDs
 	return in, nil
 }
 
@@ -161,7 +148,6 @@ func (s *Server) handleCountdownNew(w http.ResponseWriter, r *http.Request) {
 	s.renderCountdown(w, r, http.StatusOK, newCountdownForm(), nil, "")
 }
 
-// loadCountdown is the countdown in the path (wildcard name).
 func (s *Server) loadCountdown(w http.ResponseWriter, r *http.Request, name string) (dbq.Countdown, bool) {
 	id, err := strconv.ParseInt(r.PathValue(name), 10, 64)
 	if err != nil || id <= 0 {
@@ -254,12 +240,10 @@ func (s *Server) handleCountdownDelete(w http.ResponseWriter, r *http.Request) {
 	redirect(w, r, "/admin/countdowns?"+url.Values{"flash": {"Deleted " + c.Title + "."}}.Encode())
 }
 
-// The board's Countdowns view.
-
 type countdownsBoardView struct {
 	Countdowns []chores.Countdown
-	CanAdd     bool // someone can add one here: a child with the tick
-	Adult      bool // a signed-in adult, who adds them in admin
+	CanAdd     bool
+	Adult      bool
 }
 
 func (s *Server) handleCountdownsView(w http.ResponseWriter, r *http.Request) {
@@ -278,7 +262,6 @@ func (s *Server) handleCountdownsView(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// countdownKids is the children who may add countdowns.
 func (s *Server) countdownKids(r *http.Request) ([]dbq.Person, error) {
 	people, err := s.Household.People(r.Context(), hhOf(r))
 	if err != nil {
@@ -293,7 +276,6 @@ func (s *Server) countdownKids(r *http.Request) ([]dbq.Person, error) {
 	return out, nil
 }
 
-// handleCountdownWho is the "Who's adding one?" sheet.
 func (s *Server) handleCountdownWho(w http.ResponseWriter, r *http.Request) {
 	kids, err := s.countdownKids(r)
 	if err != nil {
@@ -306,7 +288,6 @@ func (s *Server) handleCountdownWho(w http.ResponseWriter, r *http.Request) {
 	}{kids, identityFrom(r.Context()).Session != nil})
 }
 
-// countdownKid is the child in the path, if they may add countdowns.
 func (s *Server) countdownKid(w http.ResponseWriter, r *http.Request) (dbq.Person, bool) {
 	p, ok := s.moneyPerson(w, r)
 	if !ok {
@@ -319,9 +300,6 @@ func (s *Server) countdownKid(w http.ResponseWriter, r *http.Request) (dbq.Perso
 	return p, true
 }
 
-// countdownKidAccess is the child in the path with a good PIN check (or a
-// signed-in adult off the displays). Without one it shows the PIN pad
-// again.
 func (s *Server) countdownKidAccess(w http.ResponseWriter, r *http.Request) (dbq.Person, string, bool) {
 	p, ok := s.countdownKid(w, r)
 	if !ok {
@@ -354,8 +332,6 @@ func (s *Server) handleCountdownPin(w http.ResponseWriter, r *http.Request) {
 	s.renderCountdownPin(w, r, p, false)
 }
 
-// handleCountdownCheck checks the PIN typed on the pad, as for My money.
-// Errors are JSON for the pad.
 func (s *Server) handleCountdownCheck(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.countdownKid(w, r)
 	if !ok {
@@ -383,21 +359,17 @@ func (s *Server) handleCountdownCheck(w http.ResponseWriter, r *http.Request) {
 	s.renderCountdownMine(w, r, http.StatusOK, p, token, newCountdownForm(), nil, "")
 }
 
-// countdownMineView is a child's sheet after their PIN: the form to add a
-// countdown (or change one of theirs), and the ones they've added.
 type countdownMineView struct {
 	Person dbq.Person
 	Token  string
 	Form   countdownForm
 	Errors valid.Errors
 	Mine   []chores.Countdown
-	Done   string // what was just saved, for the message
+	Done   string
 }
 
-// Base is where the sheet's forms go.
 func (v countdownMineView) Base() string { return "/board/countdowns/by/" + itoa(v.Person.ID) }
 
-// Q is the token as a query string, "" for a signed-in adult.
 func (v countdownMineView) Q() string {
 	if v.Token == "" {
 		return ""
@@ -430,8 +402,6 @@ func (s *Server) handleCountdownMine(w http.ResponseWriter, r *http.Request) {
 	s.renderCountdownMine(w, r, http.StatusOK, p, token, newCountdownForm(), nil, "")
 }
 
-// countdownsChanged tells this board (the toast and its Countdowns view)
-// and the others that the countdowns changed.
 func (s *Server) countdownsChanged(w http.ResponseWriter, r *http.Request, message string) {
 	b, err := json.Marshal(map[string]any{"toast": toast{Message: message}, "ingle:countdowns": true})
 	if err == nil {
@@ -463,7 +433,6 @@ func (s *Server) handleKidCountdownAdd(w http.ResponseWriter, r *http.Request) {
 	s.renderCountdownMine(w, r, http.StatusOK, p, token, newCountdownForm(), nil, "Added "+in.Title+".")
 }
 
-// kidCountdown is the countdown in the path, if p added it.
 func (s *Server) kidCountdown(w http.ResponseWriter, r *http.Request, p dbq.Person) (dbq.Countdown, bool) {
 	c, ok := s.loadCountdown(w, r, "cid")
 	if !ok {

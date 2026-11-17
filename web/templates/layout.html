@@ -13,8 +13,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Ingle">
   <link rel="stylesheet" href="{{asset "app.css"}}">
-  <!-- Swap 409/422 responses too: the board answers a stale tap with the
-       current board and an error toast. -->
+  <!-- Swap 409/422 too: a stale tap gets the current board and an error toast. -->
   <meta name="htmx-config" content='{"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"409","swap":true},{"code":"422","swap":true},{"code":"[45]..","swap":false,"error":true}]}'>
   <script src="{{asset "htmx.min.js"}}" defer></script>
 </head>
@@ -22,9 +21,6 @@
   {{block "content" .}}{{end}}
   {{if .Viewer.OnDisplayAdmin}}
   <script>
-    // Auto-lock admin on a household display after {{.Viewer.IdleSeconds}}s
-    // without a tap, so it isn't left open on the wall. The server enforces
-    // the same timeout.
     (function () {
       var idleMs = {{.Viewer.IdleSeconds}} * 1000, timer;
       function lock() {
@@ -40,11 +36,9 @@
   </script>
   {{end}}
   <script>
-    // Forms marked data-confirm="question?" ask first.
     document.addEventListener("submit", function (e) {
       var q = e.target.dataset && e.target.dataset.confirm;
       if (q && !confirm(q)) e.preventDefault();
-      // A Keep history choice shorter than the saved one asks first.
       var keep = e.target.querySelector && e.target.querySelector("select[data-keep-history]");
       if (!keep || e.defaultPrevented) return;
       var months = Number(keep.value), saved = Number(keep.dataset.keepHistory);
@@ -53,7 +47,6 @@
         e.preventDefault();
       }
     });
-    // "Another time" on the chore form adds a Done by input, up to data-max.
     document.addEventListener("click", function (e) {
       var btn = e.target.closest && e.target.closest("[data-add-time]");
       if (!btn) return;
@@ -70,8 +63,6 @@
     });
   </script>
   <script>
-    // Fields marked data-show-when="name=a,b" are shown only while the form
-    // control called name has one of those values.
     (function () {
       var els = document.querySelectorAll("[data-show-when]");
       if (!els.length) return;
@@ -89,9 +80,6 @@
       document.addEventListener("change", update);
       update();
     })();
-    // Emoji pickers on the chore and reward forms suggest an emoji from the
-    // title as it's typed ("Feed the dog" → 🐶), matching whole words the
-    // way the server does (emoji.Suggest).
     document.querySelectorAll("[data-emoji-picker]").forEach(function (p) {
       var form = p.closest("form"),
           title = form && form.querySelector('[name="title"]'),
@@ -101,7 +89,7 @@
           map = {};
       // The page offers suggestions itself, so saving shouldn't stop to.
       p.querySelector('[name="suggest_offered"]').value = "1";
-      try { map = JSON.parse(p.dataset.suggest || "{}"); } catch (err) { /* no suggestions */ }
+      try { map = JSON.parse(p.dataset.suggest || "{}"); } catch (err) {}
       function words(s) { return s.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean).join(" "); }
       function suggest(t) {
         var text = " " + words(t) + " ", best = "", at = -1, len = 0;

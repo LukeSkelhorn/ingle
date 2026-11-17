@@ -8,14 +8,7 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
-// DoFor records adultID doing childID's chore for them, when the child is
-// ill, away or busy. The adult earns it as an adult would (points, never
-// money) and the child gets nothing, but the chore counts as done on the
-// child's column. An adult did it, so it never waits for approval. It can be
-// undone like any other completion.
-//
-// childID must be the chore's person: its assignee or claimant, or one of a
-// shared chore's people. An unclaimed pool chore has no one to do it for.
+// DoFor records adultID doing childID's chore for them, when the child is ill, away or busy.
 func (s *Service) DoFor(ctx context.Context, householdID, occurrenceID, childID, adultID int64) (dbq.Completion, error) {
 	var out dbq.Completion
 	err := s.st.WithTx(ctx, func(q *dbq.Queries) error {
@@ -55,8 +48,6 @@ func (s *Service) DoFor(ctx context.Context, householdID, occurrenceID, childID,
 	return out, err
 }
 
-// isTheirs checks occ is personID's to do: assigned to or claimed by them,
-// or a shared chore they're one of the people for.
 func isTheirs(ctx context.Context, q *dbq.Queries, chore dbq.Chore, occ dbq.ChoreOccurrence, personID int64) error {
 	owner := occ.AssigneeID
 	if owner == nil {

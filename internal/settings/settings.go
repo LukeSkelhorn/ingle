@@ -1,6 +1,4 @@
-// Package settings stores per-household preferences (name, timezone, when
-// the board day rolls over, admin, screensaver and calendar idle timeouts) and caches them so hot paths
-// such as session checks and board rendering don't hit the database.
+// Package settings stores and caches per-household preferences.
 package settings
 
 import (
@@ -20,36 +18,21 @@ const DateLayout = "2006-01-02"
 
 // Settings is the resolved settings for one household.
 type Settings struct {
-	HouseholdID      int64
-	HouseholdName    string
-	Location         *time.Location
-	DayStartsAt      string // "HH:MM"
-	AdminIdleMinutes int64
-	// ScreensaverIdleMinutes is how long a household display waits before
-	// showing the screensaver; 0 means never.
+	HouseholdID            int64
+	HouseholdName          string
+	Location               *time.Location
+	DayStartsAt            string
+	AdminIdleMinutes       int64
 	ScreensaverIdleMinutes int64
-	// CalendarIdleMinutes is how long a display shows the board calendar,
-	// untouched, before going back to the chores; 0 means never.
-	CalendarIdleMinutes int64
-	// CalendarChores is whether the board calendar shows chores as well as
-	// events by default; the board's Chores button overrides it for a while.
-	CalendarChores bool
-	// Lock schedule: on the weekdays in LockDays (bit 0 = Sunday) the
-	// displays lock at LockFrom and unlock at LockUntil (local "HH:MM"; the
-	// window runs overnight when LockFrom > LockUntil). LockDays 0 is off.
-	LockDays  int64
-	LockFrom  string
-	LockUntil string
-	// LockIdleHours locks the displays after that long untouched; 0 is off.
-	LockIdleHours int64
-	// UnlockCodeHash is the household unlock code's argon2id hash, or "".
-	UnlockCodeHash string
-	// UnlockCodeLength is how many digits the code has, or 0 if not known
-	// (a code set before lengths were stored, until it next unlocks).
-	UnlockCodeLength int
-	// KeepHistoryMonths is how much history the nightly clear-out keeps:
-	// 12 or 24 months, or 0 for everything.
-	KeepHistoryMonths int
+	CalendarIdleMinutes    int64
+	CalendarChores         bool
+	LockDays               int64
+	LockFrom               string
+	LockUntil              string
+	LockIdleHours          int64
+	UnlockCodeHash         string
+	UnlockCodeLength       int
+	KeepHistoryMonths      int
 
 	dayStart, lockFrom, lockUntil time.Duration
 }
@@ -57,22 +40,16 @@ type Settings struct {
 // HasUnlockCode reports whether a household unlock code is set.
 func (s Settings) HasUnlockCode() bool { return s.UnlockCodeHash != "" }
 
-// LockIdle is how long the displays may go untouched before locking; zero
-// means never.
+// LockIdle is how long the displays may go untouched before locking; zero means never.
 func (s Settings) LockIdle() time.Duration { return time.Duration(s.LockIdleHours) * time.Hour }
 
-// LockWindow returns the lock-schedule window containing now, or the most
-// recent one that started before it, and whether now is inside it. ok is
-// false when the schedule is off. Windows start on a LockDays weekday at
-// LockFrom (local) and end at the next LockUntil.
+// LockWindow returns the lock-schedule window containing or before now, and whether now is in it.
 func (s Settings) LockWindow(now time.Time) (start, end time.Time, in, ok bool) {
 	if s.LockDays == 0 || s.lockFrom == s.lockUntil {
 		return time.Time{}, time.Time{}, false, false
 	}
 	local := now.In(s.Location)
 	y, m, d := local.Date()
-	// The latest start at or before now is at most 7 days back (8 covers an
-	// overnight window that began the day before a full week ago).
 	for back := 0; back <= 7; back++ {
 		day := time.Date(y, m, d-back, 0, 0, 0, 0, s.Location)
 		if s.LockDays&(1<<int(day.Weekday())) == 0 {
@@ -92,37 +69,28 @@ func (s Settings) LockWindow(now time.Time) (start, end time.Time, in, ok bool) 
 	return time.Time{}, time.Time{}, false, true
 }
 
-// atClock is the wall-clock time off (from midnight) on day, built from
-// hours and minutes so days with a clock change land on the right time.
 func atClock(day time.Time, off time.Duration, loc *time.Location) time.Time {
 	return time.Date(day.Year(), day.Month(), day.Day(), int(off/time.Hour), int(off%time.Hour/time.Minute), 0, 0, loc)
 }
 
-// AdminIdle is how long an admin unlock on a household display lasts
-// without activity.
+// AdminIdle is how long an admin unlock on a household display lasts without activity.
 func (s Settings) AdminIdle() time.Duration {
 	return time.Duration(s.AdminIdleMinutes) * time.Minute
 }
 
-// ScreensaverIdle is how long a household display waits, untouched, before
-// showing the screensaver. Zero means never.
+// ScreensaverIdle is how long a household display waits before showing the screensaver.
 func (s Settings) ScreensaverIdle() time.Duration {
 	return time.Duration(s.ScreensaverIdleMinutes) * time.Minute
 }
 
-// CalendarIdle is how long a household display shows the board calendar,
-// untouched, before going back to the chores. Zero means never.
+// CalendarIdle is how long a display shows the board calendar before going back to chores.
 func (s Settings) CalendarIdle() time.Duration {
 	return time.Duration(s.CalendarIdleMinutes) * time.Minute
 }
 
-// BoardDay returns midnight (local) of the board's current day. Before
-// DayStartsAt the board still shows the previous day, so e.g. with a 04:00
-// reset 01:30 on Tuesday is still Monday.
+// BoardDay returns midnight (local) of the board's current day.
 func (s Settings) BoardDay(now time.Time) time.Time {
-	// Compare wall-clock time of day rather than subtracting a duration, so
-	// days when the clocks change (23 or 25 hours long) roll over at the
-	// right local time.
+	// Compare wall-clock time, not durations, so clock-change days roll over correctly.
 	local := now.In(s.Location)
 	y, m, d := local.Date()
 	sinceMidnight := time.Duration(local.Hour())*time.Hour + time.Duration(local.Minute())*time.Minute +
@@ -154,8 +122,7 @@ type Input struct {
 	KeepHistoryMonths      int
 }
 
-// KeepHistoryChoices are the Keep history options, in months; 0 keeps
-// everything.
+// KeepHistoryChoices are the Keep history options, in months; 0 keeps everything.
 var KeepHistoryChoices = []int{0, 24, 12}
 
 // Service loads, caches and updates settings.
@@ -172,8 +139,7 @@ func New(st *store.Store) *Service {
 	return &Service{st: st, now: time.Now, cache: map[int64]Settings{}}
 }
 
-// Ensure creates the settings row for householdID with defaultTZ if it
-// doesn't exist yet. Once created, the stored timezone wins over defaultTZ.
+// Ensure creates the settings row for householdID with defaultTZ if it doesn't exist yet.
 func (s *Service) Ensure(ctx context.Context, householdID int64, defaultTZ *time.Location) error {
 	if err := s.st.Q.InsertDefaultSettings(ctx, dbq.InsertDefaultSettingsParams{
 		HouseholdID: householdID,
@@ -213,8 +179,7 @@ func (s *Service) Get(ctx context.Context, householdID int64) (Settings, error) 
 	return out, nil
 }
 
-// Location returns the household timezone for callers with no way to report
-// an error; it falls back to UTC if settings can't be loaded.
+// Location returns the household timezone, falling back to UTC on error.
 func (s *Service) Location(ctx context.Context, householdID int64) *time.Location {
 	set, err := s.Get(ctx, householdID)
 	if err != nil {
@@ -223,8 +188,7 @@ func (s *Service) Location(ctx context.Context, householdID int64) *time.Locatio
 	return set.Location
 }
 
-// DayStart is when the household's board day rolls over, as time since
-// local midnight (0 if settings can't be loaded).
+// DayStart is when the household's board day rolls over, as time since local midnight.
 func (s *Service) DayStart(ctx context.Context, householdID int64) time.Duration {
 	set, err := s.Get(ctx, householdID)
 	if err != nil {
@@ -233,8 +197,7 @@ func (s *Service) DayStart(ctx context.Context, householdID int64) time.Duration
 	return set.dayStart
 }
 
-// Update validates and saves in, logging a settings.updated activity row as
-// actorID. Validation problems are returned as valid.Errors.
+// Update validates and saves in, logging a settings.updated activity row as actorID.
 func (s *Service) Update(ctx context.Context, householdID, actorID int64, in Input) error {
 	errs := valid.Errors{}
 	name := strings.TrimSpace(in.HouseholdName)
@@ -311,8 +274,7 @@ func (s *Service) Update(ctx context.Context, householdID, actorID int64, in Inp
 	return err
 }
 
-// Invalidate drops cached settings for householdID (e.g. after first-run
-// setup renames the household).
+// Invalidate drops cached settings for householdID (e.g. after first-run setup renames the household).
 func (s *Service) Invalidate(householdID int64) {
 	s.mu.Lock()
 	delete(s.cache, householdID)
@@ -365,8 +327,7 @@ func resolve(name string, row dbq.HouseholdSetting) (Settings, error) {
 	}, nil
 }
 
-// LoadTimezone loads an IANA zone, refusing "" and "Local" (which would
-// silently mean the server's zone).
+// LoadTimezone loads an IANA zone, refusing "" and "Local".
 func LoadTimezone(name string) (*time.Location, error) {
 	if name == "" || name == "Local" {
 		return nil, fmt.Errorf("timezone %q: not an IANA zone name", name)

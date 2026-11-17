@@ -31,7 +31,7 @@ type fixture struct {
 	kid   dbq.Person
 	kid2  dbq.Person
 
-	chores int // doChore's count, for unique titles
+	chores int
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -74,9 +74,9 @@ type choreOpts struct {
 	points     int64
 	pence      int64
 	approval   bool
-	anyDay     bool // a flexible-day chore
+	anyDay     bool
 	dueTime    *string
-	onTheDay   bool // Only on the day
+	onTheDay   bool
 }
 
 func (f *fixture) chore(title string, o choreOpts) dbq.Chore {
@@ -122,7 +122,6 @@ func (f *fixture) board(from, to string) []dbq.ListBoardRow {
 	return rows
 }
 
-// onlyOccurrence materialises today and returns the single occurrence.
 func (f *fixture) onlyOccurrence() dbq.ListBoardRow {
 	f.t.Helper()
 	if _, err := f.svc.Materialise(f.t.Context(), f.hh, f.svc.now(), 1); err != nil {
@@ -300,7 +299,6 @@ func TestApprovalFlow(t *testing.T) {
 		t.Errorf("child approve err = %v, want ErrNotAdult", err)
 	}
 
-	// Reject: no credit, occurrence reopens and can be completed again.
 	if err := f.svc.Reject(ctx, f.hh, c.ID, f.adult.ID); err != nil {
 		t.Fatalf("Reject: %v", err)
 	}

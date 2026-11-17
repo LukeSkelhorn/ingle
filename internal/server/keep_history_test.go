@@ -16,7 +16,6 @@ func TestKeepHistorySetting(t *testing.T) {
 		"lock_idle_hours": {"0"}, "lock_from": {"09:00"}, "lock_until": {"15:00"},
 	}
 
-	// Everything to start with; the page knows what's saved, to ask first.
 	expect(t, phone.get("/admin/settings"), http.StatusOK, "Keep history",
 		`<select name="keep_history_months" data-keep-history="0">`, `<option value="0" selected>Everything</option>`,
 		"cleared out each night, after the backup")
@@ -28,14 +27,12 @@ func TestKeepHistorySetting(t *testing.T) {
 		t.Fatalf("saved %d, %v; want 12", set.KeepHistoryMonths, err)
 	}
 
-	// Only Everything, 24 or 12 months; a bad one keeps what's saved.
 	form.Set("keep_history_months", "6")
 	expect(t, phone.post("/admin/settings", form), http.StatusUnprocessableEntity,
 		"Choose how much history to keep.", `data-keep-history="12"`)
 	form.Set("keep_history_months", "lots")
 	expect(t, phone.post("/admin/settings", form), http.StatusUnprocessableEntity, "Choose how much history to keep.")
 
-	// With backups off (SQLite), nothing is cleared, so it doesn't ask.
 	h.srv.NoClearOut = true
 	expect(t, phone.get("/admin/settings"), http.StatusOK, "Backups are off, so nothing is cleared out.",
 		`<select name="keep_history_months">`)

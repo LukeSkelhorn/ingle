@@ -27,9 +27,6 @@
     </div>
   </header>
 
-  {{/* Chores and, unless locked, the calendar and countdowns: swipe or tap
-       the dots to switch. The calendar loads the first time it's shown,
-       the countdowns each time. */}}
   <div class="views" data-view="chores">
     <div class="views__panel" data-panel="chores">{{template "board" .Data.Board}}</div>
     {{if not .Data.Lock.Locked}}<section id="calendar" class="views__panel cal" data-panel="calendar" aria-label="Calendar" hidden></section>{{end}}
@@ -54,18 +51,13 @@
   {{end}}
 </main>
 
-{{/* Screensaver: photos, the clock, what's on and chore progress. It
-     covers the board (which stays live underneath) and any tap brings the
-     board back; that tap is swallowed so it can't tick a chore. */}}
 <div id="screensaver" class="saver" hidden role="button" aria-label="Screensaver. Tap anywhere to return to the board.">
   <div class="saver__photos"></div>
   <div class="saver__scrim"></div>
   <div id="saver-info" class="saver__info"></div>
 </div>
 <script>
-  // Live board: a server-sent event says "something changed" and the board
-  // re-fetches itself. Each page has a random id so it isn't told about its
-  // own taps (their response already carries the fresh board).
+  // Each page has a random id so it isn't told about its own taps.
   (function () {
     var page = document.getElementById("board-page"),
         sheet = document.getElementById("sheet"),
@@ -78,12 +70,10 @@
     function refresh() {
       var b = document.getElementById("board");
       if (b && window.htmx) htmx.trigger(b, "refresh");
-      // An open person sheet shows balances too, so it re-fetches itself.
       var live = sheet.open && sheetBody.querySelector("[data-refresh]");
       if (live && window.htmx) htmx.ajax("GET", live.dataset.refresh, { target: sheetBody, swap: "innerHTML" });
     }
 
-    // Picker sheet: open when its content arrives, close after an action.
     document.addEventListener("htmx:afterSwap", function (e) {
       if (e.detail.target === sheetBody && !sheet.open) sheet.showModal();
     });
@@ -96,9 +86,7 @@
     });
     sheet.addEventListener("close", function () { sheetBody.innerHTML = ""; });
 
-    // Long press on a child's chore ([data-hold]) opens "I did it" for an
-    // adult, instead of ticking it. The click that ends the press is
-    // swallowed so the chore isn't ticked as well.
+    // The click that ends a long press is swallowed so the chore isn't ticked too.
     var hold = null, held = false;
     function cancelHold() { if (hold) { clearTimeout(hold.timer); hold = null; } }
     function openHold(el) {
@@ -132,8 +120,6 @@
       held = false;
     }, true);
 
-    // My money (and its Move to my bank panel) closes itself after a minute
-    // without a tap, which also drops its PIN check. Only taps count: the live refresh doesn't keep it open.
     var moneyTimer = null;
     function moneyIdle(tapped) {
       var open = sheet.open && sheetBody.querySelector("[data-my-money], [data-bank-stepper]");
@@ -148,8 +134,6 @@
     });
     sheet.addEventListener("close", function () { moneyIdle(false); });
 
-    // Ask to move to my bank: − and + move the amount a step at a time
-    // between one step and all they have, then Next asks them to check it.
     sheetBody.addEventListener("click", function (e) {
       var root = e.target.closest("[data-bank-stepper]");
       if (!root) return;
@@ -170,7 +154,6 @@
       root.querySelectorAll("[data-bank-amount]").forEach(function (el) { el.textContent = text; });
     });
 
-    // Toasts come from the HX-Trigger response header.
     document.body.addEventListener("toast", function (e) {
       var t = e.detail || {};
       clearTimeout(toastTimer);
@@ -201,20 +184,12 @@
         refresh();
         document.dispatchEvent(new Event("ingle:board"));
       });
-      // Locking or unlocking reloads the page: a display shows the locked
-      // screen, a phone shows or hides the banner.
       es.addEventListener("lock", function (e) {
         if (e.data !== (page.dataset.locked === "1" ? "locked" : "unlocked")) location.replace("/");
       });
-      // After a reconnect (server restart, network blip) we may have missed
-      // events, so refresh once.
       es.addEventListener("open", function () { if (connected) refresh(); connected = true; });
     }
-    // A goal just reached celebrates once on each display. Seen keys are
-    // kept in this browser; without storage we skip it rather than repeat
-    // it on every refresh.
-    // Kept from when Ingle was called Domus, so displays remember what
-    // they have already celebrated.
+    // Key kept from when Ingle was Domus, so displays remember past celebrations.
     var CELEBRATED = "domus.celebrated";
     function celebrate() {
       var goals = document.querySelectorAll("#board [data-celebrate]");
@@ -232,20 +207,15 @@
         setTimeout(function () { g.classList.remove("goal--celebrate"); }, 2400);
       });
       if (!fresh) return;
-      try { localStorage.setItem(CELEBRATED, JSON.stringify(seen.slice(-50))); } catch (err) { /* celebrated anyway */ }
+      try { localStorage.setItem(CELEBRATED, JSON.stringify(seen.slice(-50))); } catch (err) {}
     }
-    // Any swap may bring a fresh #board (a tap's response or a refresh).
     document.addEventListener("htmx:afterSettle", celebrate);
     celebrate();
 
-    // The iPad waking from sleep may have missed events too.
     document.addEventListener("visibilitychange", function () { if (!document.hidden) refresh(); });
   })();
 </script>
 <script>
-  // Chores, Calendar and Countdowns views. Swipe across the board or tap
-  // the dots; on a display the calendar and countdowns go back to the
-  // chores after {{.Viewer.CalendarSeconds}}s untouched (0 = never).
   (function () {
     var views = document.querySelector(".views"),
         cal = document.getElementById("calendar"),
@@ -275,7 +245,7 @@
         p.hidden = !on;
         p.classList.remove("views__panel--in-left", "views__panel--in-right");
         if (on && !still.matches) {
-          void p.offsetWidth; // restart the animation
+          void p.offsetWidth; // reflow restarts the animation
           p.classList.add(forward ? "views__panel--in-right" : "views__panel--in-left");
         }
       });
@@ -283,8 +253,7 @@
         b.setAttribute("aria-pressed", b.dataset.viewTo === view ? "true" : "false");
       });
       if (view === "calendar") {
-        // This display doesn't get its own board events, so re-fetch on
-        // the way in: a chore just ticked here shows on the calendar.
+        // This display doesn't get its own board events, so re-fetch on the way in.
         if (!loaded) { loaded = true; load("/board/calendar"); } else reload();
         resetIdle();
       } else if (view === "countdowns") {
@@ -301,7 +270,6 @@
     window.IngleViews = { show: show };
     if (!cal) return;
 
-    // Delegated: the board's countdown strip is re-rendered with the board.
     document.addEventListener("click", function (e) {
       var b = e.target.closest && e.target.closest("[data-view-to]");
       if (b) show(b.dataset.viewTo);
@@ -311,8 +279,6 @@
       clearTimeout(idleTimer);
       if (calIdleMs > 0 && current() !== "chores") idleTimer = setTimeout(goneIdle, calIdleMs);
     }
-    // Back to the chores, with the Chores button back to the household's
-    // setting and no filters: the next look at the calendar leaves them out.
     function goneIdle() {
       var w = cal.querySelector("[data-src]");
       if (w) {
@@ -326,26 +292,19 @@
       document.addEventListener(e, resetIdle, { passive: true, capture: true });
     });
 
-    // Live: the calendar re-fetches what it's showing when the board
-    // changes, and every 15 minutes for new events.
     document.addEventListener("ingle:board", reload);
-    // Countdowns re-fetch when they change here (a child's sheet) or on
-    // another board.
     function countdownsChanged() { if (current() === "countdowns") loadCountdowns(); }
     document.addEventListener("ingle:board", countdownsChanged);
     document.body.addEventListener("ingle:countdowns", countdownsChanged);
     setInterval(function () { if (current() === "calendar") reload(); }, 15 * 60 * 1000);
     document.addEventListener("visibilitychange", function () { if (!document.hidden && current() === "calendar") reload(); });
 
-    // On phones the week is a list: bring today into view.
     document.addEventListener("htmx:afterSettle", function (e) {
       if (e.detail.target !== cal) return;
       var today = cal.querySelector(".cal__week .cal__day--today");
       if (today && window.matchMedia("(max-width: 700px)").matches) today.scrollIntoView({ block: "start" });
     });
 
-    // Swipe: a mostly-sideways move of 60px or more, not starting on a
-    // chore or a field, nor inside something that scrolls sideways itself.
     function scrollsSideways(el, dx) {
       for (; el && el !== views; el = el.parentElement) {
         if (el.scrollWidth > el.clientWidth + 1 && /auto|scroll/.test(getComputedStyle(el).overflowX)) {
@@ -372,8 +331,7 @@
       show(to);
     }
     window.addEventListener("pointerup", function (e) { end(e.clientX, e.clientY); });
-    // A touch the browser took over for panning ends in pointercancel, so
-    // touchend finishes the swipe instead.
+    // A touch taken over for panning ends in pointercancel, so touchend finishes the swipe.
     window.addEventListener("touchend", function (e) {
       var t = e.changedTouches[0];
       if (t) end(t.clientX, t.clientY);
@@ -385,10 +343,6 @@
   })();
 </script>
 <script>
-  // Columns that scroll on their own (tablets and wall displays): a fade at
-  // the bottom while there's more below, and each column's scroll position
-  // kept when the board refreshes (every tick and live update replaces it),
-  // unless the day has rolled over.
   (function () {
     function lists() { return document.querySelectorAll("#board .column > .chores"); }
     function updateMore(ul) {
@@ -437,12 +391,8 @@
   })();
 </script>
 <script>
-  // Only on the day chores come off the board at their time, so refresh
-  // then even if nothing else happens (data-next-in is seconds from when
-  // the board was rendered).
   (function () {
-    // Only a new #board re-arms: other swaps (the clock, every 30s) would
-    // otherwise keep restarting the countdown.
+    // Only a new #board re-arms: the clock's 30s swaps would keep restarting it.
     var timer = 0, armedFor = null;
     function arm() {
       var b = document.getElementById("board");
@@ -464,9 +414,6 @@
 {{if moduleOn "money"}}<script src="{{asset "pinpad.js"}}"></script>{{end}}
 <script src="{{asset "saver.js"}}"></script>
 <script>
-  // Screensaver. On a household display it starts after
-  // {{.Viewer.ScreensaverSeconds}}s without a tap (0 = never); the moon
-  // button starts it anywhere.
   (function () {
     var el = document.getElementById("screensaver"),
         sheet = document.getElementById("sheet"),
@@ -487,8 +434,6 @@
     ["pointerdown", "keydown", "input", "scroll", "wheel"].forEach(function (e) {
       document.addEventListener(e, function () { if (!saver.showing()) resetIdle(); }, { passive: true, capture: true });
     });
-    // A tap on a display holds off the household's idle lock; tell the
-    // server at most every five minutes.
     if (isDisplay) {
       document.addEventListener("pointerdown", function () {
         if (Date.now() - lastPing < 300000) return;
@@ -500,8 +445,7 @@
     function start() {
       if (saver.showing()) return;
       if (adminOnDisplay) {
-        // Never leave admin unlocked behind the photos: lock, then come
-        // back to a locked board with the screensaver already on.
+        // Never leave admin unlocked behind the photos: lock first.
         fetch("/admin/lock", { method: "POST", credentials: "same-origin" })
           .finally(function () { location.replace("/?screensaver=1"); });
         return;
@@ -520,8 +464,7 @@
       resetIdle();
     }
 
-    // Wake on any tap, and swallow it: the click that follows would
-    // otherwise land on whatever chore is under the finger.
+    // Swallow the waking tap so it doesn't land on the chore under the finger.
     function swallow(e) { swallowUntil = Date.now() + 700; e.preventDefault(); }
     el.addEventListener("touchstart", swallow, { passive: false });
     el.addEventListener("pointerdown", swallow);

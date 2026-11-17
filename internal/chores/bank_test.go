@@ -48,7 +48,6 @@ func TestSetBank(t *testing.T) {
 		t.Errorf("kid2's bank = %+v", b)
 	}
 
-	// Fresh: no nudge. A fortnight and a day on, there is.
 	if s, _ := f.svc.StaleBanks(ctx, f.hh); len(s) != 0 {
 		t.Errorf("stale when fresh = %+v", s)
 	}
@@ -57,7 +56,6 @@ func TestSetBank(t *testing.T) {
 	if err != nil || len(s) != 1 || s[0].PersonID != f.kid.ID || s[0].Name != f.kid.Name {
 		t.Errorf("stale = %+v, %v", s, err)
 	}
-	// Updating, even to the same amount, clears it.
 	if err := f.svc.SetBank(ctx, f.hh, f.kid.ID, "Monzo", 2340, f.adult.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +63,6 @@ func TestSetBank(t *testing.T) {
 		t.Errorf("stale after update = %+v", s)
 	}
 
-	// Archived: no nudge, and it can't be changed.
 	f.svc.now = func() time.Time { return set.Add(2*BankStale + 24*time.Hour) }
 	at := f.svc.now().Unix()
 	if err := f.st.Q.ArchivePerson(ctx, dbq.ArchivePersonParams{ArchivedAt: &at, HouseholdID: f.hh, ID: f.kid.ID}); err != nil {
@@ -114,11 +111,9 @@ func TestPayoutAddsToBank(t *testing.T) {
 	if _, err := f.svc.PayOut(ctx, f.hh, f.kid.ID, 200, f.adult.ID); err != nil {
 		t.Fatal(err)
 	}
-	// It's added on, but nobody has checked the real bank since.
 	if b := f.bank(f.kid); b.Pence != 2500 || !b.UpdatedAt.Equal(checked) {
 		t.Errorf("bank after payouts = %+v", b)
 	}
-	// No bank set up: payouts still work, and none appears.
 	if _, err := f.svc.PayOut(ctx, f.hh, f.kid2.ID, 200, f.adult.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +122,6 @@ func TestPayoutAddsToBank(t *testing.T) {
 	}
 }
 
-// wantVerbs checks the bank activity logged, oldest first.
 func (f *fixture) wantVerbs(want ...string) {
 	f.t.Helper()
 	var got []string

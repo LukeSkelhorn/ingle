@@ -8,13 +8,13 @@ import (
 func TestValid(t *testing.T) {
 	for _, s := range []string{
 		"🐶", "🛏️", "♻️", "⭐", "🦕",
-		"👍🏽",         // skin tone
-		"👨‍👩‍👧‍👦",    // ZWJ family
-		"🧑🏽‍🚀",       // skin tone and ZWJ
-		"🏳️‍🌈",       // flag with ZWJ
-		"🇬🇧",         // regional indicators
-		"1️⃣", "#️⃣", // keycaps
-		"🏴󠁧󠁢󠁳󠁣󠁴󠁿", // subdivision flag (tags)
+		"👍🏽",
+		"👨‍👩‍👧‍👦",
+		"🧑🏽‍🚀",
+		"🏳️‍🌈",
+		"🇬🇧",
+		"1️⃣", "#️⃣",
+		"🏴󠁧󠁢󠁳󠁣󠁴󠁿",
 		"©️",
 	} {
 		if !Valid(s) {
@@ -23,7 +23,7 @@ func TestValid(t *testing.T) {
 	}
 	for _, s := range []string{
 		"", "a", "ab", "1", "🐶🐱", "🐶 ", " 🐶", "dog🐶", "🇬", "🏽", "🐶\u200d", "\u200d🐶", "🇬🇧🇫🇷",
-		"👨‍👩‍👧‍👦👨‍👩‍👧‍👦👨‍👩‍👧‍👦", // too long
+		"👨‍👩‍👧‍👦👨‍👩‍👧‍👦👨‍👩‍👧‍👦",
 	} {
 		if Valid(s) {
 			t.Errorf("Valid(%q) = true", s)
@@ -51,7 +51,7 @@ func TestSuggest(t *testing.T) {
 		{"Lay the table", Chore, "🍽️"},
 		{"Wipe the table", Chore, "🧽"},
 		{"Bins out", Chore, "🗑️"},
-		{"Hotdog stand", Chore, ""}, // whole words only
+		{"Hotdog stand", Chore, ""},
 		{"Practise the trumpet", Chore, ""},
 		{"Lego set", Reward, "🧱"},
 		{"Extra 30 min screen time", Reward, "📱"},

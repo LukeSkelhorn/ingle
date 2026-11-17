@@ -1,7 +1,3 @@
-{{/* The live part of the main board. It re-fetches itself on "refresh"
-     (fired by the page when a server-sent event arrives, or when an Only on
-     the day chore runs out: data-next-in) and every five minutes, which
-     also catches the board day rolling over. */}}
 {{define "board"}}
 <div id="board" class="board__body" data-day="{{.Day}}"{{with .NextIn}} data-next-in="{{.}}"{{end}} hx-get="/board" hx-trigger="refresh, every 5m" hx-swap="outerHTML">
   {{if not .Columns}}
@@ -16,7 +12,6 @@
   <div class="columns">
     {{range $col := .Columns}}
     <section class="column" style="--person: {{.Person.Colour}}" aria-label="{{.Person.Name}}" data-person="{{.Person.ID}}">
-      {{/* Tapping the avatar or name opens their sheet: balance and rewards. */}}
       <h2 class="column__heading">
         <button class="column__head" type="button"
                 hx-get="/board/people/{{.Person.ID}}" hx-target="#sheet-body" hx-swap="innerHTML">
@@ -53,9 +48,6 @@
 {{if .OOB}}{{template "pool_button" .}}{{end}}
 {{end}}
 
-{{/* The header's Up for grabs button: the count of chores in the pool,
-     red when one is overdue. Hidden (but kept, for the out-of-band swap)
-     when there are none. */}}
 {{define "pool_button"}}
 {{- if .Pool}}
 <button id="pool-btn" class="grabs-btn{{if .PoolLate}} grabs-btn--late{{end}}" type="button"
@@ -67,8 +59,6 @@
 {{- end}}
 {{end}}
 
-{{/* The Up for grabs sheet: the pool chores, each opening the picker.
-     data-refresh keeps it live while it's open. */}}
 {{define "pool_sheet"}}
 <div class="grabs" data-refresh="/board/pool">
   <h2 class="picker__title" tabindex="-1" autofocus>Up for grabs</h2>
@@ -83,12 +73,6 @@
 </div>
 {{end}}
 
-{{/* One chore: dict "Card" chores.Card "Adult" bool "Pictures" (picture
-     cards: a big emoji tile, never without an emoji). Pool chores open the
-     picker; assigned and claimed chores are completed with one tap; done
-     chores open the review sheet for an adult, and are inert otherwise. On a
-     child's column, a long press (data-hold) opens the sheet where an adult
-     can say they did it instead. */}}
 {{define "card"}}
 {{- $adult := .Adult}}{{$hold := ""}}{{if .Child}}{{$hold = printf "/board/occurrences/%d/do-for?person=%d" .Card.OccurrenceID .Col}}{{end}}{{$e := .Card.Emoji}}{{if .Pictures}}{{$e = .Card.PictureEmoji}}{{end}}{{with .Card}}
 <li class="chore{{if .Done}} chore--done{{if .JustDone}} chore--just{{end}}{{end}}{{if .Overdue}} chore--overdue{{end}}{{if .Claimed}} chore--claimed{{end}}">
@@ -150,10 +134,9 @@
 </span>
 {{end}}
 
-{{/* The "who's doing this?" sheet for a pool chore. */}}
 {{define "picker"}}
 <form class="picker" hx-target="#board" hx-swap="outerHTML" onsubmit="return false">
-  {{/* Focus the title, not the first avatar, so nobody looks pre-chosen. */}}
+  {{/* Focus the title, not an avatar, so nobody looks pre-chosen. */}}
   <h2 class="picker__title" tabindex="-1" autofocus>{{with .Card.Emoji}}<span class="picker__emoji" aria-hidden="true">{{.}}</span> {{end}}{{.Card.Title}}</h2>
   <p class="picker__ask">Who's doing this?</p>
   <div class="picker__people">
@@ -177,10 +160,6 @@
 </form>
 {{end}}
 
-{{/* "I did it" (doForView): an adult did a child's chore for them and gets
-     the points instead. Opened by a long press on the child's chore. With
-     more than one adult it asks which of them did it, starting on the one
-     who unlocked the board. */}}
 {{define "do_for"}}{{$v := .}}
 <form class="picker" hx-target="#board" hx-swap="outerHTML" onsubmit="return false">
   <h2 class="picker__title" tabindex="-1" autofocus>{{with .Emoji}}<span class="picker__emoji" aria-hidden="true">{{.}}</span> {{end}}{{.Title}}</h2>
@@ -213,8 +192,6 @@
 </form>
 {{end}}
 
-{{/* An adult's sheet for a done chore: approve or reject if it's waiting,
-     reverse if it counted. */}}
 {{define "review"}}
 {{with .C}}
 <div class="picker" hx-target="#board" hx-swap="outerHTML">
@@ -244,10 +221,6 @@
 {{end}}
 {{end}}
 
-{{/* A person's sheet, opened from their column: what they can spend (and
-     what waiting claims hold), what they've earned this week, their waiting
-     claims, and the rewards in cost order, with Claim on the affordable ones.
-     data-refresh lets the page re-fetch it when the board changes. */}}
 {{define "person"}}
 <div class="person" style="--person: {{.Person.Colour}}" data-refresh="/board/people/{{.Person.ID}}">
   {{$money := and .MoneyHere (moduleOn "money")}}
@@ -257,7 +230,6 @@
     {{if $money}}<button class="btn person__my-money" type="button"
             hx-get="/board/money/{{.Person.ID}}" hx-target="#sheet-body" hx-swap="innerHTML">🔒 My money</button>{{end}}
   </div>
-  {{/* With My money here, tapping the balance opens it too. */}}
   {{if $money}}<button class="person__balance person__balance--open" type="button" title="Open My money"
           hx-get="/board/money/{{.Person.ID}}" hx-target="#sheet-body" hx-swap="innerHTML">
   {{- else}}<p class="person__balance">{{end}}
@@ -344,8 +316,6 @@
 </div>
 {{end}}
 
-{{/* An adult's sheet for a waiting reward claim: approve spends the held
-     points, decline lets them go. */}}
 {{define "claim_review"}}
 {{with .D}}
 <div class="picker" hx-target="#board" hx-swap="outerHTML">
@@ -366,9 +336,6 @@
 {{end}}
 {{end}}
 
-{{/* What a person is saving for: dict "Goal" chores.Goal "PersonID" int64.
-     Once it's reached the page script celebrates it, once per display per
-     goal (data-celebrate is the key). */}}
 {{define "goal"}}{{$pid := .PersonID}}{{with .Goal}}
 <div class="goal{{if .Reached}} goal--reached{{end}}{{if .Waiting}} goal--waiting{{end}}"
      hx-target="#board" hx-swap="outerHTML"
@@ -388,8 +355,6 @@
 </div>
 {{end}}{{end}}
 
-{{/* A goal's progress bar (chores.Goal): what they saved, then the part an
-     adult matched in a lighter shade. */}}
 {{define "goal_bar"}}
 <div class="goal__bar" role="img" aria-label="Saving for {{.Title}}: {{.Percent}}%
   {{- with worth .MatchedPoints .MatchedPence}}, including {{.}} matched{{end}}
@@ -399,8 +364,6 @@
 </div>
 {{end}}
 
-{{/* What an adult adds while a child saves for this goal (chores.Goal's
-     Offer): "Mum adds 10p for every £1 you earn (£3.80 left to match)". */}}
 {{define "goal_offer"}}{{with .Offer}}
 <p class="goal__offer"><span aria-hidden="true">🤝</span>
   {{- if .Spent}} {{.SetByName}}'s matching has reached its limit.

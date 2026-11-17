@@ -12,7 +12,7 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/store"
 )
 
-// Module IDs. They are stored in the database, so never change one.
+// Module IDs are stored in the database, so never change one.
 const (
 	modCalendar = "calendar"
 	modPhotos   = "photos"
@@ -20,11 +20,8 @@ const (
 	modMoney    = "money"
 )
 
-// photoRescanEvery is how often the photos folder is re-indexed.
 const photoRescanEvery = 10 * time.Minute
 
-// registerModules adds Ingle's modules. The order is the order in Admin ›
-// Modules and in the admin bar, and a module's requirements come first.
 func (s *Server) registerModules(reg *module.Registry) {
 	reg.Register(rewardsModule{s})
 	reg.Register(moneyModule{s})
@@ -33,19 +30,14 @@ func (s *Server) registerModules(reg *module.Registry) {
 	reg.Register(countdownsModule{s})
 }
 
-// moduleOn reports whether the module id is on for the household.
 func (s *Server) moduleOn(ctx context.Context, id string) bool {
 	return s.Modules.Enabled(ctx, householdIn(ctx), id)
 }
 
-// adminNav is the admin bar's links: the everyday pages in the bar, and
-// the occasional ones in its ⚙ Settings menu.
 type adminNav struct {
 	Bar, Menu []module.NavItem
 }
 
-// MenuHas reports whether the page key is in the ⚙ Settings menu, so the
-// menu's button can show as the current section.
 func (n adminNav) MenuHas(key string) bool {
 	for _, it := range n.Menu {
 		if it.Key == key {
@@ -55,8 +47,6 @@ func (n adminNav) MenuHas(key string) bool {
 	return false
 }
 
-// adminNav builds the admin bar for the modules that are on. Core pages come
-// first in each part; extra links (s.AdminLinks) go at the end of the menu.
 func (s *Server) adminNav(ctx context.Context) adminNav {
 	nav := adminNav{
 		Bar: []module.NavItem{
@@ -86,7 +76,6 @@ func (s *Server) adminNav(ctx context.Context) adminNav {
 	return nav
 }
 
-// requireModule answers 404 while the module id is off.
 func (s *Server) requireModule(id string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !s.moduleOn(r.Context(), id) {
@@ -97,8 +86,6 @@ func (s *Server) requireModule(id string, next http.Handler) http.Handler {
 	})
 }
 
-// moduleRouter mounts a module's routes behind the usual guards and its
-// on/off switch.
 type moduleRouter struct {
 	s   *Server
 	mux *http.ServeMux
@@ -113,10 +100,7 @@ func (r moduleRouter) Admin(pattern string, h http.HandlerFunc) {
 	r.mux.Handle(pattern, r.s.requireAdmin(r.s.requireModule(r.id, r.s.publishAfterWrite(h))))
 }
 
-// RunModuleLoops runs every module's background loops until ctx ends. Each
-// loop runs at startup and then on its interval, and skips the household
-// while its module is off. Switching a module on runs its loops straight
-// away, so its data is fresh.
+// RunModuleLoops runs every module's background loops until ctx ends.
 func (s *Server) RunModuleLoops(ctx context.Context) {
 	var wg sync.WaitGroup
 	for _, m := range s.Modules.Registry().All() {
@@ -134,7 +118,6 @@ func (s *Server) RunModuleLoops(ctx context.Context) {
 	wg.Wait()
 }
 
-// kickLoops tells the module loops the modules changed.
 func (s *Server) kickLoops() {
 	if !s.loopsStarted.Load() {
 		return
@@ -147,7 +130,6 @@ func (s *Server) kickLoops() {
 	}
 }
 
-// households lists the households the module loops run for.
 func (s *Server) households(ctx context.Context) ([]int64, error) {
 	if s.Households != nil {
 		return s.Households(store.AsSystem(ctx))
@@ -159,8 +141,6 @@ func (s *Server) households(ctx context.Context) ([]int64, error) {
 }
 
 func (s *Server) runLoop(ctx context.Context, id string, l module.Loop, kick <-chan struct{}) {
-	// ran holds the households the loop last ran for; one missing from it
-	// (new, or its module was off) runs on the next kick too.
 	ran := map[int64]bool{}
 	run := func(force bool) {
 		hhs, err := s.households(ctx)
@@ -196,15 +176,11 @@ func (s *Server) runLoop(ctx context.Context, id string, l module.Loop, kick <-c
 		case <-t.C:
 			run(true)
 		case <-kick:
-			// Only a module that was off runs early.
 			run(false)
 		}
 	}
 }
 
-// Money: My money, a person's own balance opened on the wall with their own
-// PIN. A child's PIN opens only their money; it never opens admin or
-// unlocks the displays.
 type moneyModule struct{ s *Server }
 
 func (moneyModule) ID() string   { return modMoney }
@@ -238,8 +214,6 @@ func (m moneyModule) Routes(r module.Router) {
 	r.Admin("POST /admin/bank/{id}/decline", s.handleBankDecline)
 }
 
-// Rewards: rewards, claiming them and savings goals. Points themselves are
-// part of chores and stay when Rewards is off.
 type rewardsModule struct{ s *Server }
 
 func (rewardsModule) ID() string   { return modRewards }
@@ -277,9 +251,6 @@ func (m rewardsModule) Routes(r module.Router) {
 	r.Admin("POST /admin/rewards/claims/{id}/decline", s.adminReview(s.Chores.DeclineRedemption, "Reward declined; the points are free again."))
 }
 
-// Photos: uploaded photos and the photos folder, shown as the screensaver
-// and locked-screen slideshow. The screensaver itself (clock, events,
-// chores) stays when Photos is off.
 type photosModule struct{ s *Server }
 
 func (photosModule) ID() string   { return modPhotos }
@@ -313,9 +284,6 @@ func (m photosModule) Routes(r module.Router) {
 	r.Admin("POST /admin/photos/{id}/delete", s.handlePhotoDelete)
 }
 
-// Calendar: ICS feeds, their events on the screensaver and in the board
-// calendar. The board calendar stays when Calendar is off, with chores
-// only.
 type calendarModule struct{ s *Server }
 
 func (calendarModule) ID() string   { return modCalendar }

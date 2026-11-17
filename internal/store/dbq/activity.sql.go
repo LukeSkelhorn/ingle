@@ -116,10 +116,6 @@ type ListRecentActivityWithActorRow struct {
 	SubjectPerson *string `json:"subject_person"`
 }
 
-// subject_title names the reward for reward claims ("claimed Lego set");
-// for bank transfers, subject_pence is the amount and subject_person who
-// it was for; for bank balances, interest and matching, subject_person is
-// whose.
 func (q *Queries) ListRecentActivityWithActor(ctx context.Context, arg ListRecentActivityWithActorParams) ([]ListRecentActivityWithActorRow, error) {
 	rows, err := q.db.QueryContext(ctx, listRecentActivityWithActor, arg.HouseholdID, arg.Limit)
 	if err != nil {

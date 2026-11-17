@@ -7,9 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-// IsUnique reports whether err is a UNIQUE violation on table.column, on
-// either engine. On Postgres it matches the constraint or index name, which
-// contains the column (e.g. people_household_id_name_key, people_email_idx).
+// IsUnique reports whether err is a UNIQUE violation on table.column, on either engine.
 func IsUnique(err error, table, column string) bool {
 	if err == nil {
 		return false

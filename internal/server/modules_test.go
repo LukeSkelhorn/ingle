@@ -13,7 +13,6 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
-// setModules saves Admin › Modules with just ids ticked.
 func setModules(t *testing.T, phone *device, ids ...string) resp {
 	t.Helper()
 	r := phone.post("/admin/modules", url.Values{"module": ids})
@@ -35,14 +34,12 @@ func TestModulesPage(t *testing.T) {
 	h.setUp()
 	phone := h.phone()
 
-	// A new household starts with its defaults and isn't asked.
 	r := phone.get("/admin")
 	expect(t, r, http.StatusOK, `href="/admin/modules"`, `href="/admin/rewards"`, `href="/admin/photos"`, `href="/admin/calendars"`)
 	notContains(t, r, "Choose modules")
 	expect(t, phone.get("/admin/modules"), http.StatusOK,
 		`value="rewards" checked`, `value="photos" checked`, `value="calendar" checked`, "its data is kept")
 
-	// A household from before modules: everything on, and it's asked.
 	if _, err := h.st.SQL().ExecContext(h.ctx(), "DELETE FROM household_modules"); err != nil {
 		t.Fatal(err)
 	}
@@ -51,13 +48,11 @@ func TestModulesPage(t *testing.T) {
 	expect(t, r, http.StatusOK, "Choose modules", "switch whole features off: Rewards, My money, Photos, Calendar and Countdowns.", `href="/admin/rewards"`, `href="/admin/calendars"`)
 	expect(t, phone.get("/admin/modules"), http.StatusOK, "Everything is on until you save this page", `value="photos" checked`)
 
-	// Saving once answers it.
 	expect(t, setModules(t, phone, "rewards", "photos"), http.StatusOK, "Saved.", `value="rewards" checked`)
 	r = phone.get("/admin")
 	notContains(t, r, "Choose modules", `href="/admin/calendars"`)
 	expect(t, r, http.StatusOK, "changed the modules")
 
-	// Only adults.
 	expectRedirect(t, h.device().get("/admin/modules"), "/signin")
 }
 
@@ -79,7 +74,6 @@ func TestRewardsModuleOff(t *testing.T) {
 
 	setModules(t, phone, "photos", "calendar")
 
-	// Its pages are gone…
 	for _, p := range []string{"/admin/rewards", "/admin/rewards/new", "/admin/rewards/" + itoa(reward.ID)} {
 		expect(t, phone.get(p), http.StatusNotFound)
 	}
@@ -89,7 +83,6 @@ func TestRewardsModuleOff(t *testing.T) {
 	expect(t, wall.get("/board/redemptions/"+claim+"/review"), http.StatusNotFound)
 	expect(t, wall.post("/board/redemptions/"+claim+"/cancel", nil), http.StatusNotFound)
 
-	// …and so are its links and board pieces. Points stay.
 	r := phone.get("/admin")
 	expect(t, r, http.StatusOK, `href="/admin/photos"`)
 	notContains(t, r, `href="/admin/rewards"`)
@@ -100,7 +93,6 @@ func TestRewardsModuleOff(t *testing.T) {
 	expect(t, r, http.StatusOK, "40 pts")
 	notContains(t, r, "Waiting for a grown-up", `<h3 class="person__sub">Rewards</h3>`, "/claim")
 
-	// Turning it back on brings the waiting claim back.
 	setModules(t, phone, "rewards", "photos", "calendar")
 	expect(t, wall.get("/board"), http.StatusOK, "🎁 1 waiting")
 	expect(t, phone.get("/admin/completions"), http.StatusOK, "Rewards waiting", "Screen time")
@@ -116,7 +108,6 @@ func TestPhotosModuleOff(t *testing.T) {
 	expect(t, wall.get("/photos/u/abc.jpg"), http.StatusNotFound)
 	expect(t, phone.get("/admin/photos"), http.StatusNotFound)
 	notContains(t, phone.get("/admin"), `href="/admin/photos"`)
-	// The screensaver itself stays: clock and chores.
 	expect(t, wall.get("/screensaver"), http.StatusOK, "saver__time", "1 left")
 }
 
@@ -137,7 +128,6 @@ func TestCalendarModuleOff(t *testing.T) {
 	r := wall.get("/screensaver")
 	expect(t, r, http.StatusOK, "saver__time")
 	notContains(t, r, "Swimming", "Nothing else on today")
-	// The board calendar stays, with chores only and no nudge to add feeds.
 	r = wall.get("/board/calendar?chores=1")
 	expect(t, r, http.StatusOK, "Feed the cat")
 	notContains(t, r, "Swimming", "Add calendar feeds")
@@ -146,7 +136,6 @@ func TestCalendarModuleOff(t *testing.T) {
 	expect(t, wall.get("/board/calendar"), http.StatusOK, "Swimming")
 }
 
-// testModule is a module for tests: it needs others, has a page and a loop.
 type testModule struct {
 	id       string
 	requires []string
@@ -177,11 +166,9 @@ func TestModuleRequirements(t *testing.T) {
 	phone := h.phone()
 	wall := h.setUpDisplayLocked()
 
-	// It starts off: its route is hidden.
 	expect(t, wall.get("/test/pocket"), http.StatusNotFound)
 	expect(t, phone.get("/admin/modules"), http.StatusOK, "Pocket money", "Needs Rewards.")
 
-	// Its loop doesn't run while it's off, and runs as soon as it's on.
 	ctx, cancel := context.WithCancel(h.ctx())
 	done := make(chan struct{})
 	go func() { h.srv.RunModuleLoops(ctx); close(done) }()
@@ -192,14 +179,12 @@ func TestModuleRequirements(t *testing.T) {
 		t.Fatalf("loop ran %d times while off", n)
 	}
 
-	// Turning it on with Rewards off turns Rewards on too.
 	setModules(t, phone, "photos", "calendar")
 	r := setModules(t, phone, "pocket", "photos", "calendar")
 	expect(t, r, http.StatusOK, "Rewards is on too", `value="rewards" checked`, `value="pocket" checked`)
 	expect(t, wall.get("/test/pocket"), http.StatusOK, "hello")
 	waitFor(t, func() bool { return runs.Load() == 1 })
 
-	// Turning Rewards off asks first, and changes nothing until confirmed.
 	r = setModules(t, phone, "pocket", "photos", "calendar")
 	expect(t, r, http.StatusOK, "Pocket money needs a module you're turning off", `name="confirm"`)
 	expect(t, phone.get("/admin/rewards"), http.StatusOK)

@@ -10,8 +10,6 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/valid"
 )
 
-// maxFormBytes caps url-encoded form bodies; multipart (photo) uploads get
-// avatar.MaxUpload on top.
 const maxFormBytes = 64 << 10
 
 func parseForm(w http.ResponseWriter, r *http.Request) error {
@@ -19,7 +17,6 @@ func parseForm(w http.ResponseWriter, r *http.Request) error {
 	return r.ParseForm()
 }
 
-// form wraps submitted values with helpers that collect field errors.
 type form struct {
 	r    *http.Request
 	errs valid.Errors
@@ -29,7 +26,6 @@ func newForm(r *http.Request) *form { return &form{r: r, errs: valid.Errors{}} }
 
 func (f *form) str(name string) string { return strings.TrimSpace(f.r.FormValue(name)) }
 
-// raw returns the value untrimmed (passwords).
 func (f *form) raw(name string) string { return f.r.FormValue(name) }
 
 func (f *form) checked(name string) bool { return f.r.FormValue(name) != "" }
@@ -54,8 +50,6 @@ func (f *form) optID(name string) *int64 {
 	return &n
 }
 
-// ids is the people (or other rows) ticked in a people_pick, ignoring
-// anything that isn't an id.
 func (f *form) ids(name string) []int64 {
 	var out []int64
 	for _, v := range f.r.Form[name] {
@@ -66,12 +60,8 @@ func (f *form) ids(name string) []int64 {
 	return out
 }
 
-// ok reports whether the form parsed without field errors. Handlers check it
-// before calling the domain, so a value that failed to parse (and read as
-// zero) is never saved.
 func (f *form) ok() bool { return len(f.errs) == 0 }
 
-// validationErrors returns err's field errors if it is a validation error.
 func validationErrors(err error) (valid.Errors, bool) {
 	var ve valid.Errors
 	if errors.As(err, &ve) {

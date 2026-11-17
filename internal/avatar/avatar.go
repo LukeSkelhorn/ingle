@@ -1,6 +1,4 @@
-// Package avatar handles how people are pictured on the board: an emoji
-// from a curated set, or an uploaded photo that is auto-oriented, centre
-// cropped and stored as a small JPEG next to the database.
+// Package avatar handles people's pictures: a picker emoji or an uploaded photo.
 package avatar
 
 import (
@@ -26,7 +24,6 @@ const Size = 256
 // MaxUpload is the largest accepted upload, in bytes.
 const MaxUpload = 8 << 20
 
-// Value prefixes stored in people.avatar.
 const (
 	emojiPrefix = "emoji:"
 	photoPrefix = "photo:"
@@ -38,8 +35,7 @@ var (
 	ErrNotAnImage = errors.New("that file isn't a JPEG, PNG or GIF image")
 )
 
-// Emojis is the curated picker. Big, friendly and easy to tell apart from
-// across a room.
+// Emojis is the curated avatar picker.
 var Emojis = []string{
 	"🐶", "🐱", "🐭", "🐹", "🐰", "🦊", "🐻", "🐼", "🐨", "🐯",
 	"🦁", "🐮", "🐷", "🐸", "🐵", "🐔", "🐧", "🐦", "🦄", "🐝",
@@ -74,8 +70,7 @@ func Parse(v *string) (Kind, string) {
 	return None, ""
 }
 
-// EmojiValue returns the stored value for emoji e, or false if e isn't in
-// the picker.
+// EmojiValue returns the stored value for emoji e, or false if it isn't in the picker.
 func EmojiValue(e string) (string, bool) {
 	if !slices.Contains(Emojis, e) {
 		return "", false
@@ -99,8 +94,7 @@ func NewStore(dir string) (*Store, error) {
 	return &Store{dir: dir}, nil
 }
 
-// SavePhoto reads an uploaded image, auto-orients it from EXIF, centre crops
-// it to Size×Size and stores it as JPEG. It returns the stored file name.
+// SavePhoto stores an uploaded image as a Size×Size JPEG and returns its file name.
 func (s *Store) SavePhoto(r io.Reader) (string, error) {
 	img, err := picture.Decode(r, MaxUpload)
 	switch {
@@ -131,8 +125,7 @@ func (s *Store) Remove(name string) error {
 	return err
 }
 
-// Open opens a stored photo for serving. Names that aren't ones SavePhoto
-// produced return os.ErrNotExist, so paths can't escape the directory.
+// Open opens a stored photo; names SavePhoto didn't produce return os.ErrNotExist.
 func (s *Store) Open(name string) (*os.File, error) {
 	if !nameRe.MatchString(name) {
 		return nil, os.ErrNotExist

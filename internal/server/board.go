@@ -15,23 +15,12 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
-// boardView is what the "board" partial renders.
 type boardView struct {
 	chores.Board
-	// Adult is set when an adult is signed in (or unlocked on a display): it
-	// shows the admin link on an empty board and makes done chores tappable
-	// for review.
 	Adult bool
-	// NextIn is how many seconds until an Only on the day chore runs out
-	// and the board should refresh (0 for none). Relative, so a display
-	// whose clock is off still refreshes on time.
-	NextIn int64
-	// OOB is set on #board fragment responses: they also carry the header's
-	// Up for grabs button as an out-of-band swap, since it lives outside
-	// #board.
-	OOB bool
-	// Countdowns is the strip's next few countdowns (none while the module
-	// is off).
+	// Relative seconds, so a display with a wrong clock still refreshes on time.
+	NextIn     int64
+	OOB        bool
 	Countdowns []chores.Countdown
 }
 
@@ -45,20 +34,17 @@ func (v boardView) PoolLate() bool {
 	return false
 }
 
-// boardPage is the full board page: clock plus the board.
 type boardPage struct {
 	Clock clockView
 	Board boardView
 	Lock  lockView
 }
 
-// pickerView is the "who's doing this?" sheet for a pool chore.
 type pickerView struct {
 	Card   chores.Card
 	People []pickerPerson
 }
 
-// pickerPerson is someone in the picker with what they'd earn for the chore.
 type pickerPerson struct {
 	Person        dbq.Person
 	Points, Pence int64
@@ -112,8 +98,6 @@ func (s *Server) handleBoard(w http.ResponseWriter, r *http.Request) {
 	s.renderBoard(w, r, http.StatusOK)
 }
 
-// renderBoard re-renders the #board fragment, the response to every board
-// action so the tapping screen updates without waiting for its own event.
 func (s *Server) renderBoard(w http.ResponseWriter, r *http.Request, status int) {
 	b, err := s.loadBoard(r)
 	if err != nil {
@@ -124,7 +108,6 @@ func (s *Server) renderBoard(w http.ResponseWriter, r *http.Request, status int)
 	s.renderPartialStatus(w, r, status, "board", b)
 }
 
-// handlePoolSheet is the Up for grabs sheet, opened from the header button.
 func (s *Server) handlePoolSheet(w http.ResponseWriter, r *http.Request) {
 	b, err := s.loadBoard(r)
 	if err != nil {
@@ -151,8 +134,6 @@ func (s *Server) handlePick(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	// Claimed or done elsewhere since this screen last refreshed: back to
-	// the (fresh) Up for grabs list, since the picker opens in its sheet.
 	setToast(w, toast{Message: "Someone's already on that one.", Error: true})
 	s.renderPartialStatus(w, r, http.StatusConflict, "pool_sheet", b)
 }
@@ -179,7 +160,6 @@ func (s *Server) handleComplete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if person == nil {
-		// Assigned and claimed chores already know whose they are.
 		occ, err := s.Store.Q.GetOccurrence(r.Context(), dbq.GetOccurrenceParams{HouseholdID: hhOf(r), ID: id})
 		if err != nil {
 			s.boardError(w, r, chores.ErrNotFound)
@@ -241,12 +221,10 @@ func (s *Server) handleUndo(w http.ResponseWriter, r *http.Request) {
 	s.boardDone(w, r, toast{Message: "Undone."})
 }
 
-// reviewView is the adult's sheet for a done chore.
 type reviewView struct {
 	C chores.CompletionDetail
 }
 
-// boardAdult is the adult on this request's session, if any.
 func boardAdult(r *http.Request) *dbq.Person {
 	if sess := identityFrom(r.Context()).Session; sess != nil {
 		return &sess.Person
@@ -274,7 +252,6 @@ func (s *Server) handleReviewSheet(w http.ResponseWriter, r *http.Request) {
 
 const needAdult = "Ask a grown-up to unlock admin."
 
-// boardReview runs an adult action (approve, reject, reverse) from the board.
 func (s *Server) boardReview(fn func(ctx context.Context, hh, id, reviewerID int64) error, msg string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, _, ok := s.boardAction(w, r)
@@ -295,7 +272,6 @@ func (s *Server) boardReview(fn func(ctx context.Context, hh, id, reviewerID int
 	}
 }
 
-// boardAction parses a board POST: the {id} path value and optional person.
 func (s *Server) boardAction(w http.ResponseWriter, r *http.Request) (int64, *int64, bool) {
 	id, ok := pathID(r)
 	if !ok {
@@ -309,8 +285,6 @@ func (s *Server) boardAction(w http.ResponseWriter, r *http.Request) (int64, *in
 	return id, newForm(r).optID("person"), true
 }
 
-// toast is a short message shown at the bottom of the board, optionally with
-// an Undo button that POSTs to Undo.
 type toast struct {
 	Message string `json:"message"`
 	Undo    string `json:"undo,omitempty"`
@@ -325,10 +299,7 @@ func setToast(w http.ResponseWriter, t toast) {
 	w.Header().Set("HX-Trigger", asciiJSON(b))
 }
 
-// asciiJSON escapes non-ASCII characters in JSON as \uXXXX. Browsers read
-// header values as Latin-1, so "Zoë" or an emoji sent as UTF-8 in a header
-// comes out garbled. Non-ASCII can only be inside JSON strings, so escaping
-// it there is safe.
+// asciiJSON escapes non-ASCII as \uXXXX because browsers read header values as Latin-1.
 func asciiJSON(b []byte) string {
 	var sb strings.Builder
 	for _, r := range string(b) {
@@ -343,16 +314,12 @@ func asciiJSON(b []byte) string {
 	return sb.String()
 }
 
-// boardDone finishes a successful board action: tell every other screen and
-// return the fresh board with a toast.
 func (s *Server) boardDone(w http.ResponseWriter, r *http.Request, t toast) {
 	s.events.publish(hhOf(r), boardClient(r.Header.Get(boardClientHeader)))
 	setToast(w, t)
 	s.renderBoard(w, r, http.StatusOK)
 }
 
-// boardFailed returns the current board with an error toast, so a stale
-// screen corrects itself.
 func (s *Server) boardFailed(w http.ResponseWriter, r *http.Request, msg string) {
 	setToast(w, toast{Message: msg, Error: true})
 	s.renderBoard(w, r, http.StatusConflict)
@@ -412,20 +379,15 @@ func (s *Server) personName(r *http.Request, id int64) string {
 	return p.Name
 }
 
-// personSheetView is a person's sheet: balance, this week, their waiting
-// reward claims and the rewards. Adult makes waiting claims tappable for
-// review.
 type personSheetView struct {
 	chores.Summary
 	Waiting     []chores.RedemptionDetail
 	Rewards     []rewardRow
-	Adjustments []chores.Adjustment // recent bonuses and points taken away
+	Adjustments []chores.Adjustment
 	Adult       bool
-	MoneyHere   bool // My money opens here: on a display, or for a signed-in adult
+	MoneyHere   bool
 }
 
-// rewardRow is one reward on a person's sheet. NeedPoints and NeedPence are
-// how much more they need; a reward is affordable when both are zero.
 type rewardRow struct {
 	dbq.Reward
 	NeedPoints, NeedPence int64
@@ -444,7 +406,6 @@ func (s *Server) handlePersonSheet(w http.ResponseWriter, r *http.Request) {
 	loc.Location = s.Settings.Location(ctx, hhOf(r))
 	sum, err := s.Chores.PersonSummary(ctx, hhOf(r), id, loc.StartOfWeek(s.now()))
 	if errors.Is(err, chores.ErrNotFound) {
-		// Archived since this screen last refreshed.
 		s.boardFailed(w, r, "They're not on the board any more.")
 		return
 	}
@@ -482,8 +443,6 @@ func (s *Server) handlePersonSheet(w http.ResponseWriter, r *http.Request) {
 	s.renderPartial(w, r, "person", v)
 }
 
-// handleRewardClaim is a child asking for a reward from their sheet. With an
-// adult there (signed in or unlocked) it's approved at once.
 func (s *Server) handleRewardClaim(w http.ResponseWriter, r *http.Request) {
 	id, person, ok := s.boardAction(w, r)
 	if !ok {
@@ -509,8 +468,6 @@ func (s *Server) handleRewardClaim(w http.ResponseWriter, r *http.Request) {
 	s.boardDone(w, r, toast{Message: msg})
 }
 
-// handleGoalSet has a person save for a reward. Like completing a chore,
-// anyone at the board can do it.
 func (s *Server) handleGoalSet(w http.ResponseWriter, r *http.Request) {
 	id, _, ok := s.boardAction(w, r)
 	if !ok {
@@ -533,7 +490,6 @@ func (s *Server) handleGoalSet(w http.ResponseWriter, r *http.Request) {
 	s.boardDone(w, r, toast{Message: "Saving for " + rw.Title + " " + emoji})
 }
 
-// handleGoalClear stops a person saving for anything.
 func (s *Server) handleGoalClear(w http.ResponseWriter, r *http.Request) {
 	id, _, ok := s.boardAction(w, r)
 	if !ok {
@@ -546,7 +502,6 @@ func (s *Server) handleGoalClear(w http.ResponseWriter, r *http.Request) {
 	s.boardDone(w, r, toast{Message: "Goal removed"})
 }
 
-// claimReviewView is an adult's sheet for a waiting reward claim.
 type claimReviewView struct {
 	D chores.RedemptionDetail
 }
@@ -573,8 +528,6 @@ func (s *Server) handleClaimReviewSheet(w http.ResponseWriter, r *http.Request) 
 	s.renderPartial(w, r, "claim_review", claimReviewView{D: d})
 }
 
-// handleClaimCancel is a child changing their mind about a waiting claim.
-// Like completing a chore, anyone at the board can do it.
 func (s *Server) handleClaimCancel(w http.ResponseWriter, r *http.Request) {
 	id, _, ok := s.boardAction(w, r)
 	if !ok {

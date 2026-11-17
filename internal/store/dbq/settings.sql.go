@@ -69,7 +69,6 @@ type LearnUnlockCodeLengthParams struct {
 	HouseholdID      int64  `json:"household_id"`
 }
 
-// Records an older household code's length the first time it unlocks.
 func (q *Queries) LearnUnlockCodeLength(ctx context.Context, arg LearnUnlockCodeLengthParams) error {
 	_, err := q.db.ExecContext(ctx, learnUnlockCodeLength, arg.UnlockCodeLength, arg.HouseholdID)
 	return err

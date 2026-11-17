@@ -1,9 +1,5 @@
 -- +goose NO TRANSACTION
 -- +goose Up
--- Parents match savings towards a goal: an adult offers a child, say, 10p
--- for every £1 they earn from chores while they're saving for a goal. A
--- match is its own ledger kind, 'match'. SQLite can't change a CHECK
--- constraint in place, so ledger_entries is rebuilt, as in 00027.
 PRAGMA foreign_keys = OFF;
 BEGIN;
 CREATE TABLE ledger_entries_new (
@@ -25,11 +21,6 @@ DROP TABLE ledger_entries;
 ALTER TABLE ledger_entries_new RENAME TO ledger_entries;
 CREATE INDEX ledger_entries_person_idx ON ledger_entries (person_id);
 
--- A child's match offer; no row means no match. add_* for every per_*
--- earned from chores: add_pence 10, per_pence 100 is 10p for every £1. An
--- add of 0 leaves that half off. A cap of 0 means no limit; it counts what
--- the child still holds from matching. set_by is the adult who set it up,
--- named on each match.
 CREATE TABLE match_offers (
     person_id    INTEGER PRIMARY KEY REFERENCES people (id) ON DELETE CASCADE,
     household_id INTEGER NOT NULL REFERENCES households (id) ON DELETE CASCADE,
@@ -44,10 +35,6 @@ CREATE TABLE match_offers (
 ) STRICT;
 CREATE INDEX match_offers_household_idx ON match_offers (household_id);
 
--- One row per match ledger entry, paid (positive) or taken back
--- (negative). reward_id and goal_set_at say which goal it was towards, so
--- changing a goal takes back only that goal's match. completion_id is the
--- chore it matched, or that a reversal took back.
 CREATE TABLE match_entries (
     id              INTEGER PRIMARY KEY,
     household_id    INTEGER NOT NULL REFERENCES households (id) ON DELETE CASCADE,

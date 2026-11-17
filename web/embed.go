@@ -1,5 +1,4 @@
-// Package web holds the embedded HTML templates and static assets
-// (htmx, PWA manifest, service worker, icons).
+// Package web holds the embedded HTML templates and static assets.
 package web
 
 import (
@@ -20,9 +19,7 @@ var Templates embed.FS
 //go:embed static
 var Static embed.FS
 
-// StaticVersion is a short hash of every static asset. Asset URLs carry it
-// (/static/app.css?v=…) and the service worker names its cache after it, so
-// a new build is never served old CSS or JS from a cache.
+// StaticVersion is a short hash of every static asset, used to bust caches.
 var StaticVersion = sync.OnceValue(func() string {
 	h := sha256.New()
 	_ = fs.WalkDir(Static, "static", func(path string, d fs.DirEntry, err error) error {

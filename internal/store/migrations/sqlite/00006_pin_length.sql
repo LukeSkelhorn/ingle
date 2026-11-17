@@ -1,8 +1,4 @@
 -- +goose Up
--- How many digits each PIN and the household unlock code have, so the
--- keypad shows that many dots and tries the code once they're all typed.
--- NULL means not known yet: set with the PIN or code, and filled in the
--- first time an older one unlocks successfully.
 ALTER TABLE people
     ADD COLUMN pin_length INTEGER CHECK (pin_length IS NULL OR pin_length BETWEEN 4 AND 6);
 ALTER TABLE household_settings

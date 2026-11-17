@@ -6,12 +6,9 @@ import (
 	"time"
 )
 
-// hub fans "the board changed" notifications out to every open board in a
-// household. Each subscriber has a one-slot channel, so bursts of changes
-// coalesce into a single refresh and a slow client never blocks a publisher.
 type hub struct {
 	mu     sync.Mutex
-	subs   map[int64]map[chan struct{}]string // channel → client id
+	subs   map[int64]map[chan struct{}]string
 	closed chan struct{}
 	once   sync.Once
 }
@@ -20,9 +17,6 @@ func newHub() *hub {
 	return &hub{subs: map[int64]map[chan struct{}]string{}, closed: make(chan struct{})}
 }
 
-// subscribe registers a listener for householdID. client identifies the
-// page (see publish); it may be empty. Call the returned func to
-// unsubscribe.
 func (h *hub) subscribe(householdID int64, client string) (<-chan struct{}, func()) {
 	ch := make(chan struct{}, 1)
 	h.mu.Lock()
@@ -38,8 +32,6 @@ func (h *hub) subscribe(householdID int64, client string) (<-chan struct{}, func
 	}
 }
 
-// publish tells every board in householdID to refresh, except the page
-// whose client id is from (it already has the fresh board in its response).
 func (h *hub) publish(householdID int64, from string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -49,23 +41,17 @@ func (h *hub) publish(householdID int64, from string) {
 		}
 		select {
 		case ch <- struct{}{}:
-		default: // a refresh is already queued
+		default:
 		}
 	}
 }
 
-// close ends every open stream (on server shutdown).
 func (h *hub) close() { h.once.Do(func() { close(h.closed) }) }
 
-// pingInterval keeps idle streams alive through proxies and lets the server
-// notice clients that have gone away.
 const pingInterval = 25 * time.Second
 
-// boardClientHeader carries the page's random client id on board actions so
-// the page isn't sent an event for its own change.
 const boardClientHeader = "X-Board-Client"
 
-// boardClient sanitises a client id: short and alphanumeric, or "".
 func boardClient(v string) string {
 	if len(v) == 0 || len(v) > 64 {
 		return ""
@@ -78,14 +64,9 @@ func boardClient(v string) string {
 	return v
 }
 
-// CloseStreams ends all open board event streams so a graceful shutdown
-// isn't held up by them. Register it with http.Server.RegisterOnShutdown.
+// CloseStreams ends all open board event streams.
 func (s *Server) CloseStreams() { s.events.close() }
 
-// handleBoardEvents streams server-sent events: "board" whenever the board
-// may have changed (the page re-fetches /board), and "lock" with "locked"
-// or "unlocked", first on connect and then whenever the displays lock or
-// unlock.
 func (s *Server) handleBoardEvents(w http.ResponseWriter, r *http.Request) {
 	rc := http.NewResponseController(w)
 	// The stream is long-lived; don't let a server write timeout cut it.
@@ -100,9 +81,6 @@ func (s *Server) handleBoardEvents(w http.ResponseWriter, r *http.Request) {
 	defer unsubscribe()
 	lockCh, unsubscribeLock := s.lockEvents.subscribe(hhOf(r), "")
 	defer unsubscribeLock()
-	// lockEvent says whether the displays are locked; the page compares it
-	// with what it shows and reloads if they differ (so a reconnect catches
-	// a missed change).
 	lockEvent := func() string {
 		st, err := s.locked(r)
 		if err != nil {
@@ -114,8 +92,6 @@ func (s *Server) handleBoardEvents(w http.ResponseWriter, r *http.Request) {
 		return "event: lock\ndata: unlocked\n\n"
 	}
 
-	// Tell the client how long to wait before reconnecting, and flush the
-	// headers so EventSource fires "open" straight away.
 	if _, err := w.Write([]byte("retry: 3000\n\n" + lockEvent())); err != nil {
 		return
 	}

@@ -50,7 +50,6 @@ type ClearGoalIfParams struct {
 	RewardID    *int64 `json:"reward_id"`
 }
 
-// Clear a person's goal only if it's still this reward (it was just claimed).
 func (q *Queries) ClearGoalIf(ctx context.Context, arg ClearGoalIfParams) error {
 	_, err := q.db.ExecContext(ctx, clearGoalIf, arg.HouseholdID, arg.ID, arg.RewardID)
 	return err
@@ -66,7 +65,6 @@ type ClearGoalsForRewardParams struct {
 	GoalRewardID *int64 `json:"goal_reward_id"`
 }
 
-// An archived reward stops being anyone's goal.
 func (q *Queries) ClearGoalsForReward(ctx context.Context, arg ClearGoalsForRewardParams) error {
 	_, err := q.db.ExecContext(ctx, clearGoalsForReward, arg.HouseholdID, arg.GoalRewardID)
 	return err
@@ -275,7 +273,6 @@ type LearnPINLengthParams struct {
 	ID          int64  `json:"id"`
 }
 
-// Records an older PIN's length the first time it unlocks.
 func (q *Queries) LearnPINLength(ctx context.Context, arg LearnPINLengthParams) error {
 	_, err := q.db.ExecContext(ctx, learnPINLength, arg.PinLength, arg.HouseholdID, arg.ID)
 	return err
@@ -393,7 +390,6 @@ type SetGoalParams struct {
 	ID          int64  `json:"id"`
 }
 
-// Save for a reward. Only an active person can have a goal.
 func (q *Queries) SetGoal(ctx context.Context, arg SetGoalParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, setGoal,
 		arg.RewardID,

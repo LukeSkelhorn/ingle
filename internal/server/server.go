@@ -30,79 +30,48 @@ import (
 
 // Deps are the services the server is built from.
 type Deps struct {
-	Store *store.Store
-	// HouseholdID is the one household of a self-hosted server. It's used
-	// when ResolveHousehold is nil, and for the module loops when
-	// Households is nil.
-	HouseholdID int64
-	// ResolveHousehold names the household a request is for, before its
-	// display or session is known (sign-in, setup). ok is false when it
-	// can't tell; a display or session cookie then decides. Nil means
-	// HouseholdID for every request.
+	Store            *store.Store
+	HouseholdID      int64
 	ResolveHousehold func(r *http.Request) (id int64, ok bool, err error)
-	// Households lists the households the module loops run for. Nil means
-	// just HouseholdID.
-	Households func(ctx context.Context) ([]int64, error)
-	// Routes adds a program's own routes (e.g. Hosted's sign-up and
-	// billing) behind the same cross-origin check and identity as Ingle's.
-	// Wrap them with RequireAdmin or RequireViewer as needed.
-	Routes func(s *Server, mux *http.ServeMux)
-	// AdminLinks are extra links in the Admin bar, after the modules'.
-	AdminLinks []module.NavItem
-	// NoClearOut says the nightly history clear-out doesn't run (SQLite
-	// with backups off), so Admin › Settings says Keep history does nothing.
-	NoClearOut bool
-	Auth       *auth.Service
-	Settings   *settings.Service
-	Chores     *chores.Service
-	Household  *household.Service
-	Avatars    *avatar.Store
-	Photos     *photos.Library
-	Calendars  *calendar.Service
-	Lock       *lock.Service
-	// Modules is which features each household has on. New fills in an
-	// empty one if it is nil, and registers Ingle's modules in it.
-	Modules *module.Service
-	// Takeout exports and deletes the household (Admin › Settings). Nil
-	// hides both.
-	Takeout *takeout.Service
-	Locale  locale.Locale
-	Log     *slog.Logger
-	// TrustedProxies are reverse proxies whose X-Forwarded-For is believed.
-	TrustedProxies []netip.Prefix
-	// Version is the build's version ("dev" when not built for a release).
-	Version string
-	// SignIn hands adults' sign-in to another service (Hosted's). Nil
-	// keeps Ingle's own email and password sign-in and first-run setup.
-	SignIn *SignIn
+	Households       func(ctx context.Context) ([]int64, error)
+	Routes           func(s *Server, mux *http.ServeMux)
+	AdminLinks       []module.NavItem
+	NoClearOut       bool
+	Auth             *auth.Service
+	Settings         *settings.Service
+	Chores           *chores.Service
+	Household        *household.Service
+	Avatars          *avatar.Store
+	Photos           *photos.Library
+	Calendars        *calendar.Service
+	Lock             *lock.Service
+	Modules          *module.Service
+	Takeout          *takeout.Service
+	Locale           locale.Locale
+	Log              *slog.Logger
+	TrustedProxies   []netip.Prefix
+	Version          string
+	SignIn           *SignIn
 }
 
 // SignIn is another service that signs adults in.
 type SignIn struct {
-	// URL is where /signin sends people, e.g. "/auth/signin".
-	URL string
-	// OnSignOut runs after Ingle ends a personal session, e.g. to end the
-	// other service's session too. A non-empty URL is where the browser
-	// goes next, instead of URL. Locking admin on a display doesn't call
-	// it.
+	URL       string
 	OnSignOut func(r *http.Request) string
 }
 
 // Server serves the Ingle web UI.
 type Server struct {
 	Deps
-	db     *sql.DB
-	pages  *pagePool
-	now    func() time.Time
-	events *hub
-	// lockEvents tells every open page the displays locked or unlocked.
+	db         *sql.DB
+	pages      *pagePool
+	now        func() time.Time
+	events     *hub
 	lockEvents *hub
 
-	// loopKicks wake the module loops when the modules change.
 	loopKicks    []chan struct{}
 	loopsStarted atomic.Bool
 
-	// setupDone holds the households known to be set up (see markSetUp).
 	setupDone sync.Map
 }
 
@@ -110,7 +79,6 @@ type Server struct {
 func New(d Deps) (*Server, error) {
 	s := &Server{Deps: d, now: time.Now, events: newHub(), lockEvents: newHub()}
 	if d.Lock != nil {
-		// Every open page hears about a lock or unlock; displays reload.
 		d.Lock.OnChange(func(householdID int64) { s.lockEvents.publish(householdID, "") })
 	}
 	if d.Store != nil {
@@ -121,10 +89,8 @@ func New(d Deps) (*Server, error) {
 	}
 	s.registerModules(s.Modules.Registry())
 	if d.Chores != nil {
-		// Matching savings checks the rewards and money modules.
 		d.Chores.SetModules(s.Modules.EnabledWith)
 	}
-	// Switching a module on or off changes every page; displays reload.
 	s.Modules.OnChange(func(householdID int64) {
 		s.lockEvents.publish(householdID, "")
 		s.kickLoops()
@@ -144,17 +110,15 @@ func (s *Server) SetClock(now func() time.Time) { s.now = now }
 func (s *Server) Handler() http.Handler {
 	static, err := fs.Sub(web.Static, "static")
 	if err != nil {
-		panic(err) // "static" is embedded at compile time
+		panic(err)
 	}
 	files := http.FileServerFS(static)
 
 	mux := http.NewServeMux()
 
-	// Open routes: no household data.
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 	mux.Handle("GET /static/", http.StripPrefix("/static/", staticCache(files)))
-	// The manifest and service worker must live at the root so the SW can
-	// control the whole origin.
+	// The service worker must be served from the root to control the whole origin.
 	mux.HandleFunc("GET /manifest.webmanifest", serveFile(static, "manifest.webmanifest", "application/manifest+json"))
 	mux.HandleFunc("GET /sw.js", serveServiceWorker(static))
 	mux.HandleFunc("GET /setup", s.handleSetupForm)
@@ -166,7 +130,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /admin/unlock", s.notWhileLocked(s.handleAdminUnlock))
 	mux.HandleFunc("POST /admin/lock", s.handleSignOut)
 
-	// Viewer routes: a household display or a signed-in adult.
 	viewer := func(h http.HandlerFunc) http.Handler { return s.requireViewer(s.lockGate(h)) }
 	mux.Handle("GET /{$}", viewer(s.handleIndex))
 	mux.Handle("GET /clock", viewer(s.handleClock))
@@ -196,9 +159,6 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /board/completions/{id}/reject", viewer(s.boardReview(s.Chores.Reject, "Not counted. It's back on the board.")))
 	mux.Handle("POST /board/completions/{id}/reverse", viewer(s.boardReview(s.Chores.Reverse, "Reversed. Points taken back.")))
 
-	// Admin routes: a signed-in adult (PIN on a display, password elsewhere).
-	// Any admin write may change what the board shows, so open boards are
-	// told to refresh afterwards.
 	admin := func(h http.HandlerFunc) http.Handler { return s.requireAdmin(s.publishAfterWrite(h)) }
 	mux.Handle("GET /admin", admin(s.handleAdminHome))
 
@@ -254,7 +214,6 @@ func (s *Server) Handler() http.Handler {
 		mux.Handle("POST /admin/household/delete", admin(s.handleHouseholdDelete))
 	}
 
-	// Modules mount their own routes, hidden while they're off.
 	for _, m := range s.Modules.Registry().All() {
 		m.Routes(moduleRouter{s: s, mux: mux, id: m.ID()})
 	}
@@ -263,8 +222,7 @@ func (s *Server) Handler() http.Handler {
 		s.Routes(s, mux)
 	}
 
-	// Outermost first: reject cross-origin writes, identify the caller, then
-	// send everything to /setup until the household is set up.
+	// Order matters: reject cross-origin writes, then identify, then require setup.
 	csrf := http.NewCrossOriginProtection()
 	return csrf.Handler(s.identify(s.requireSetup(mux)))
 }
@@ -321,13 +279,11 @@ func (s *Server) handleAvatar(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	// Names are random and never reused, so the content never changes.
 	w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
 	w.Header().Set("Content-Type", "image/jpeg")
 	http.ServeContent(w, r, "", info.ModTime(), f)
 }
 
-// withPages runs fn with templates bound to r's household.
 func (s *Server) withPages(r *http.Request, fn func(*pages) error) error {
 	p, err := s.pages.get()
 	if err != nil {
@@ -368,7 +324,6 @@ func (s *Server) renderPartialStatus(w http.ResponseWriter, r *http.Request, sta
 	_, _ = buf.WriteTo(w)
 }
 
-// publishAfterWrite tells open boards to refresh after a non-GET request.
 func (s *Server) publishAfterWrite(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		next(w, r)
@@ -378,7 +333,6 @@ func (s *Server) publishAfterWrite(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// serverError logs err and shows a generic error page.
 func (s *Server) serverError(w http.ResponseWriter, r *http.Request, err error) {
 	s.Log.ErrorContext(r.Context(), "request failed", slog.String("path", r.URL.Path), slog.Any("err", err))
 	http.Error(w, "Something went wrong. Please try again.", http.StatusInternalServerError)
@@ -397,8 +351,6 @@ func serveFile(fsys fs.FS, name, contentType string) http.HandlerFunc {
 	}
 }
 
-// staticCache lets browsers keep versioned asset URLs (?v=, from the asset
-// template function) for good, and makes them check anything else.
 func staticCache(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("v") != "" {
@@ -410,8 +362,6 @@ func staticCache(next http.Handler) http.Handler {
 	})
 }
 
-// serveServiceWorker serves sw.js with its cache named after the static
-// files' hash, so a build with new CSS or JS replaces the cached copies.
 func serveServiceWorker(fsys fs.FS) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		b, err := fs.ReadFile(fsys, "sw.js")

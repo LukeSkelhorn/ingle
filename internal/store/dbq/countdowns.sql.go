@@ -121,7 +121,6 @@ type ListCountdownPeopleRow struct {
 	PersonID    int64 `json:"person_id"`
 }
 
-// Every countdown's people who are still active, in board order.
 func (q *Queries) ListCountdownPeople(ctx context.Context, householdID int64) ([]ListCountdownPeopleRow, error) {
 	rows, err := q.db.QueryContext(ctx, listCountdownPeople, householdID)
 	if err != nil {

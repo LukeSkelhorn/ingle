@@ -1,12 +1,5 @@
 -- +goose NO TRANSACTION
 -- +goose Up
--- Several times a day, and showing a timed chore shortly before its time.
--- A chore's times move to chores.due_times (sorted HH:MM, comma-separated)
--- and each occurrence carries its own due_time, '' for none ('' rather than
--- NULL, so the unique key catches untimed duplicates). chore_occurrences is
--- rebuilt for the new key; ids are kept so completions still point at them.
--- show_before is how many minutes before its time an occurrence appears on
--- the board; NULL shows it all day, as before.
 PRAGMA foreign_keys = OFF;
 BEGIN;
 CREATE TABLE chore_occurrences_new (
@@ -22,6 +15,7 @@ CREATE TABLE chore_occurrences_new (
         available_from IS NULL OR (date(available_from) IS available_from AND available_from <= due_on)
     ),
     due_time       TEXT    NOT NULL DEFAULT '' CHECK (due_time = '' OR time(due_time) IS due_time || ':00'),
+    -- due_time is '' not NULL so this key catches untimed duplicates.
     UNIQUE (chore_id, due_on, due_time),
     CHECK (assignee_id IS NULL OR claimed_by IS NULL)
 ) STRICT;
@@ -41,9 +35,6 @@ COMMIT;
 PRAGMA foreign_keys = ON;
 
 -- +goose Down
--- Going back to one time a day keeps each chore's first occurrence per day
--- (the lowest id) and deletes the rest with their completions. Their points
--- stay in the ledger, unlinked from the deleted completions.
 PRAGMA foreign_keys = OFF;
 BEGIN;
 ALTER TABLE chores ADD COLUMN due_time TEXT CHECK (due_time IS NULL OR time(due_time) IS due_time || ':00');

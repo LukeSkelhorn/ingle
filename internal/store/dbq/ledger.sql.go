@@ -29,7 +29,6 @@ type BalanceBeforeForPersonRow struct {
 	Pence  int64 `json:"pence"`
 }
 
-// A person's balance from every entry made before before_unix.
 func (q *Queries) BalanceBeforeForPerson(ctx context.Context, arg BalanceBeforeForPersonParams) (BalanceBeforeForPersonRow, error) {
 	row := q.db.QueryRowContext(ctx, balanceBeforeForPerson, arg.HouseholdID, arg.PersonID, arg.BeforeUnix)
 	var i BalanceBeforeForPersonRow
@@ -129,7 +128,6 @@ type DeleteManualEntryParams struct {
 	SinceUnix   int64 `json:"since_unix"`
 }
 
-// Undoes a manual adjustment made since since_unix.
 func (q *Queries) DeleteManualEntry(ctx context.Context, arg DeleteManualEntryParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, deleteManualEntry, arg.HouseholdID, arg.ID, arg.SinceUnix)
 	if err != nil {
@@ -159,9 +157,6 @@ type EarnedSinceForPersonRow struct {
 	Pence  int64 `json:"pence"`
 }
 
-// What a person has earned since since_unix, net: completions, reversals and
-// manual adjustments (bonuses and points taken away). Spending (redemptions,
-// payouts) isn't counted.
 func (q *Queries) EarnedSinceForPerson(ctx context.Context, arg EarnedSinceForPersonParams) (EarnedSinceForPersonRow, error) {
 	row := q.db.QueryRowContext(ctx, earnedSinceForPerson, arg.HouseholdID, arg.PersonID, arg.SinceUnix)
 	var i EarnedSinceForPersonRow
@@ -238,7 +233,6 @@ type ListLedgerChangesBetweenRow struct {
 	Pence  int64 `json:"pence"`
 }
 
-// A person's entries made in [from_unix, to_unix), oldest first.
 func (q *Queries) ListLedgerChangesBetween(ctx context.Context, arg ListLedgerChangesBetweenParams) ([]ListLedgerChangesBetweenRow, error) {
 	rows, err := q.db.QueryContext(ctx, listLedgerChangesBetween,
 		arg.HouseholdID,
@@ -309,10 +303,6 @@ type ListLedgerHistoryRow struct {
 	ForName   string `json:"for_name"`
 }
 
-// A person's ledger, newest first, for My money: entries since since_unix
-// (0 for any) and older than before_id (math.MaxInt64 for any), with the
-// chore or reward each one was for, the chore's time (” for none), and
-// whose chore it was when someone did it for them (” otherwise).
 func (q *Queries) ListLedgerHistory(ctx context.Context, arg ListLedgerHistoryParams) ([]ListLedgerHistoryRow, error) {
 	rows, err := q.db.QueryContext(ctx, listLedgerHistory,
 		arg.HouseholdID,
@@ -378,8 +368,6 @@ type ListManualAdjustmentsRow struct {
 	ByName    string `json:"by_name"`
 }
 
-// A person's manual adjustments (bonuses and points taken away) since
-// since_unix, newest first, with who made each one.
 func (q *Queries) ListManualAdjustments(ctx context.Context, arg ListManualAdjustmentsParams) ([]ListManualAdjustmentsRow, error) {
 	rows, err := q.db.QueryContext(ctx, listManualAdjustments,
 		arg.HouseholdID,
@@ -422,7 +410,6 @@ ORDER BY MAX(created_at) DESC
 LIMIT 10
 `
 
-// The last few distinct reasons used, to suggest on the form.
 func (q *Queries) RecentManualNotes(ctx context.Context, householdID int64) ([]string, error) {
 	rows, err := q.db.QueryContext(ctx, recentManualNotes, householdID)
 	if err != nil {

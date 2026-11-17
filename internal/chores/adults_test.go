@@ -4,8 +4,6 @@ import (
 	"testing"
 )
 
-// adultChore creates a daily chore worth 5 points and 50p to kids and 3
-// points to adults through the admin path.
 func (f *fixture) adultChore(title string, in Input) {
 	f.t.Helper()
 	in.Title, in.Repeat, in.StartsOn = title, Recurrence{Kind: RepeatDaily}, "2026-11-02"
@@ -24,13 +22,11 @@ func TestEarns(t *testing.T) {
 	}
 }
 
-// Adults get a chore's adults' points and no money however it's given out;
-// children still get its points and money.
 func TestAdultsEarnPointsOnly(t *testing.T) {
 	cases := []struct {
 		name  string
 		input func(f *fixture) Input
-		claim bool // claim it first (an Up for grabs chore)
+		claim bool
 	}{
 		{"someone specific", func(f *fixture) Input { return Input{Mode: ModeAssigned, AssigneeID: &f.adult.ID} }, false},
 		{"up for grabs, done straight away", func(f *fixture) Input { return Input{Mode: ModePool} }, false},
@@ -77,8 +73,6 @@ func TestAdultsEarnPointsOnly(t *testing.T) {
 	})
 }
 
-// On the board, a shared chore shows each column what that person would
-// earn, and adults' columns show no money.
 func TestAdultsOnTheBoard(t *testing.T) {
 	f := newFixture(t)
 	f.adultChore("Bins", Input{Mode: ModeShared, PeopleIDs: []int64{f.adult.ID, f.kid.ID}})
@@ -97,7 +91,6 @@ func TestAdultsOnTheBoard(t *testing.T) {
 	}
 }
 
-// Money an adult had before stays in the ledger but isn't shown as theirs.
 func TestAdultsHaveNoMoneyBalance(t *testing.T) {
 	f := newFixture(t)
 	f.chore("Old", choreOpts{assignee: &f.kid.ID, points: 1, pence: 75})
@@ -105,7 +98,6 @@ func TestAdultsHaveNoMoneyBalance(t *testing.T) {
 	if _, err := f.svc.Complete(t.Context(), f.hh, occ.ID, f.kid.ID); err != nil {
 		t.Fatal(err)
 	}
-	// Alfie grows up: his money stays in the ledger.
 	if _, err := f.st.SQL().ExecContext(t.Context(), "UPDATE people SET kind = 'adult' WHERE id = ?", f.kid.ID); err != nil {
 		t.Fatal(err)
 	}

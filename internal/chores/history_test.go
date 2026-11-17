@@ -20,7 +20,6 @@ func TestHistory(t *testing.T) {
 	f := newFixture(t)
 	ctx := t.Context()
 
-	// A chore earned, a reward claimed (waiting), then bought.
 	f.chore("Fed the cat", choreOpts{assignee: &f.kid.ID, startsOn: "2026-11-02", points: 10, pence: 20})
 	if _, err := f.svc.Complete(ctx, f.hh, f.onlyOccurrence().ID, f.kid.ID); err != nil {
 		t.Fatal(err)
@@ -28,7 +27,7 @@ func TestHistory(t *testing.T) {
 	if _, err := f.svc.AdjustPoints(ctx, f.hh, f.adult.ID, f.kid.ID, -2, "Shouted at Isla"); err != nil {
 		t.Fatal(err)
 	}
-	f.earn(f.kid2, 50, 0) // someone else's
+	f.earn(f.kid2, 50, 0)
 
 	cinema := f.reward("Cinema trip", 5, 10)
 	d, err := f.svc.ClaimReward(ctx, f.hh, cinema.ID, f.kid.ID, nil)
@@ -91,7 +90,6 @@ func TestHistoryPaging(t *testing.T) {
 		}
 	}
 
-	// Nothing in the last 30 days, but there's older history to show.
 	items, next := f.history(f.kid, 0)
 	if len(items) != 0 || next == 0 {
 		t.Fatalf("first page = %d items, next %d", len(items), next)
@@ -105,7 +103,6 @@ func TestHistoryPaging(t *testing.T) {
 		t.Errorf("page 3 = %d items, next %d", len(rest), next)
 	}
 
-	// Recent entries come first, then older ones on Show more.
 	f.earn(f.kid, 7, 0)
 	items, next = f.history(f.kid, 0)
 	if len(items) != 1 || items[0].Points != 7 || next != items[0].ID {
@@ -116,7 +113,6 @@ func TestHistoryPaging(t *testing.T) {
 	}
 }
 
-// A timed chore's history line carries its time; others don't.
 func TestHistoryDueTime(t *testing.T) {
 	f := newFixture(t)
 	ctx := t.Context()

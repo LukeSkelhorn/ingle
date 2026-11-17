@@ -1,20 +1,6 @@
 -- +goose NO TRANSACTION
 -- +goose Up
--- "Each of these people": mode 'each' puts a copy of a chore on each chosen
--- person's column, and each of them does their own. The people are in
--- chore_people, or, with for_everyone, every active person (so people added
--- later get it too). adult_points is what an adult earns for it; adults get
--- no money for these.
---
--- Each person's copy is its own occurrence, so the occurrence key gains
--- for_person: the person for an 'each' chore, 0 otherwise. (Not assignee_id:
--- it's NULL for pool chores, and reassigning a one-person chore shouldn't
--- give the new person a second copy of a day that's already done.)
---
--- SQLite can't change a CHECK or a UNIQUE constraint in place, so both
--- tables are rebuilt, keeping ids. Foreign keys are off for the swap so
--- dropping the old tables doesn't cascade (the database has one connection,
--- so the pragma applies to these statements).
+-- FKs off so dropping the old tables doesn't cascade (one connection, so the pragma applies).
 PRAGMA foreign_keys = OFF;
 BEGIN;
 CREATE TABLE chores_new (
@@ -80,11 +66,6 @@ COMMIT;
 PRAGMA foreign_keys = ON;
 
 -- +goose Down
--- Going back, an 'each' chore becomes a shared one (done once by any of its
--- people; Everyone becomes today's active people). Each chore keeps one
--- occurrence per day and time (the lowest id), unassigned; the other
--- people's copies are deleted with their completions. Their points stay in
--- the ledger, unlinked from the deleted completions.
 PRAGMA foreign_keys = OFF;
 BEGIN;
 INSERT OR IGNORE INTO chore_people (household_id, chore_id, person_id)

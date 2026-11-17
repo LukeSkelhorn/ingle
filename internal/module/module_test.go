@@ -29,7 +29,6 @@ func newFake(id string, on bool, requires ...string) fake {
 	return fake{id: id, on: on, requires: requires}
 }
 
-// reg is rewards ← money ← bank, and photos on its own.
 func reg() *Registry {
 	r := NewRegistry()
 	r.Register(newFake("rewards", true))
@@ -77,7 +76,6 @@ func TestPlan(t *testing.T) {
 	r := reg()
 	all := map[string]bool{"rewards": true, "photos": true, "money": true, "bank": true}
 
-	// Turning rewards off takes money and bank with it.
 	c := r.Plan(all, map[string]bool{"rewards": false, "photos": true, "money": true, "bank": true})
 	if c.Final["rewards"] || c.Final["money"] || c.Final["bank"] || !c.Final["photos"] {
 		t.Errorf("Final = %v", c.Final)
@@ -86,13 +84,11 @@ func TestPlan(t *testing.T) {
 		t.Errorf("AlsoOff = %v", c.AlsoOff)
 	}
 
-	// Unticking them too needs no warning.
 	c = r.Plan(all, map[string]bool{"rewards": false, "photos": true, "money": false, "bank": false})
 	if len(c.AlsoOff) != 0 {
 		t.Errorf("AlsoOff = %v", c.AlsoOff)
 	}
 
-	// Turning bank on turns on what it needs.
 	none := map[string]bool{"photos": true}
 	c = r.Plan(none, map[string]bool{"photos": true, "bank": true})
 	if !c.Final["bank"] || !c.Final["money"] || !c.Final["rewards"] {
@@ -102,13 +98,11 @@ func TestPlan(t *testing.T) {
 		t.Errorf("AlsoOn = %v", c.AlsoOn)
 	}
 
-	// Missing from want: unchanged.
 	c = r.Plan(all, map[string]bool{"photos": false})
 	if c.Final["photos"] || !c.Final["bank"] {
 		t.Errorf("Final = %v", c.Final)
 	}
 
-	// An inconsistent current state is put right.
 	c = r.Plan(map[string]bool{"money": true}, map[string]bool{"money": true})
 	if c.Final["money"] {
 		t.Errorf("money on without rewards: %v", c.Final)
@@ -128,7 +122,6 @@ func TestService(t *testing.T) {
 	changes := 0
 	svc.OnChange(func(int64) { changes++ })
 
-	// Not chosen yet: everything is on.
 	s, err := svc.State(ctx, hh.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -140,7 +133,6 @@ func TestService(t *testing.T) {
 		t.Error("unknown module is on")
 	}
 
-	// Defaults: rewards and photos.
 	if err := svc.SetDefaults(ctx, hh.ID, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +143,6 @@ func TestService(t *testing.T) {
 		t.Error("not chosen after SetDefaults")
 	}
 
-	// Set clears the cache and tells listeners; the activity is logged.
 	if err := svc.Set(ctx, hh.ID, nil, map[string]bool{"rewards": false, "photos": true}); err != nil {
 		t.Fatal(err)
 	}
@@ -163,14 +154,12 @@ func TestService(t *testing.T) {
 		t.Errorf("activity rows = %d, %v", n, err)
 	}
 
-	// A module added in a later version gets its default.
 	r.Register(newFake("later", true))
 	svc.Invalidate(hh.ID)
 	if !svc.Enabled(ctx, hh.ID, "later") {
 		t.Error("new module isn't on by default")
 	}
 
-	// Data is kept: the rows stay, switching back on restores.
 	if err := svc.Set(ctx, hh.ID, nil, map[string]bool{"rewards": true, "photos": true, "later": true}); err != nil {
 		t.Fatal(err)
 	}

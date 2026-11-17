@@ -49,8 +49,8 @@ linters:
 
 formatters:
   enable:
-    - gofmt # go fmt, plus -s simplifications
-    - gofumpt # stricter superset of gofmt
+    - gofmt
+    - gofumpt
     - goimports
   settings:
     gofmt:

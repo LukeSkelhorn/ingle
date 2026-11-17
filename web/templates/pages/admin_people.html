@@ -66,10 +66,8 @@
 </main>
 <script>
   (function () {
-    // The Adjust points pop-up: open when the page comes with it; closing
-    // it (Escape or a tap outside) goes back to the plain list.
     var d = document.querySelector("dialog[data-open]");
-    if (!d || !d.showModal) return; // no JS or support: it shows inline, open
+    if (!d || !d.showModal) return;
     d.close();
     d.showModal();
     function back() { location.replace("/admin/people"); }

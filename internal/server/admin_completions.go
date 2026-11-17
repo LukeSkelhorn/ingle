@@ -9,16 +9,12 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/chores"
 )
 
-// completionsPage is Admin › Completions: chores and reward claims waiting
-// for a grown-up, and the last week of completions that can still be
-// reversed.
 type completionsPage struct {
 	Pending []chores.CompletionDetail
 	Claims  []chores.RedemptionDetail
 	Missed  []chores.MissedDetail
 	Recent  []chores.CompletionDetail
-	// Undo lists the missed chores just dismissed, for the flash's Undo.
-	Undo []int64
+	Undo    []int64
 }
 
 func (s *Server) handleCompletions(w http.ResponseWriter, r *http.Request) {
@@ -29,8 +25,6 @@ func (s *Server) renderCompletions(w http.ResponseWriter, r *http.Request, statu
 	s.renderCompletionsUndo(w, r, status, flash, nil)
 }
 
-// renderCompletionsUndo renders Admin › Completions with a flash that can
-// undo dismissing the missed chores in undo.
 func (s *Server) renderCompletionsUndo(w http.ResponseWriter, r *http.Request, status int, flash string, undo []int64) {
 	all, err := s.Chores.Completions(r.Context(), hhOf(r))
 	if err != nil {
@@ -48,7 +42,7 @@ func (s *Server) renderCompletionsUndo(w http.ResponseWriter, r *http.Request, s
 		return
 	}
 	if !s.moduleOn(r.Context(), modRewards) {
-		claims = nil // they wait, unseen, until Rewards is back on
+		claims = nil
 	}
 	p := completionsPage{Claims: claims, Missed: missed, Undo: undo}
 	for _, c := range all {
@@ -64,8 +58,6 @@ func (s *Server) renderCompletionsUndo(w http.ResponseWriter, r *http.Request, s
 	s.render(w, r, status, "admin_completions", v)
 }
 
-// adminReview runs approve, reject or reverse (of a completion, or a reward
-// claim) as the signed-in adult.
 func (s *Server) adminReview(fn func(ctx context.Context, hh, id, reviewerID int64) error, msg string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, ok := pathID(r)
@@ -74,7 +66,7 @@ func (s *Server) adminReview(fn func(ctx context.Context, hh, id, reviewerID int
 			return
 		}
 		adult := boardAdult(r)
-		if adult == nil { // requireAdmin guarantees a session; belt and braces
+		if adult == nil {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
@@ -91,8 +83,6 @@ func (s *Server) adminReview(fn func(ctx context.Context, hh, id, reviewerID int
 	}
 }
 
-// handleMarkDone marks a missed Only on the day chore done, as the person
-// chosen (or whose it was), approved by the signed-in adult.
 func (s *Server) handleMarkDone(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(r)
 	if !ok {
@@ -121,9 +111,6 @@ func (s *Server) handleMarkDone(w http.ResponseWriter, r *http.Request) {
 	s.renderCompletions(w, r, http.StatusOK, "Marked done. Points added.")
 }
 
-// handleDismissMissed takes missed Only on the day chores off the list: the
-// one in the path, or (with no id) every id posted, which is what the page
-// listed when Dismiss all was pressed.
 func (s *Server) handleDismissMissed(w http.ResponseWriter, r *http.Request) {
 	var ids []int64
 	if r.PathValue("id") != "" {
@@ -157,8 +144,6 @@ func (s *Server) handleDismissMissed(w http.ResponseWriter, r *http.Request) {
 	s.renderCompletionsUndo(w, r, http.StatusOK, msg, done)
 }
 
-// handleRestoreMissed undoes a dismiss, putting the posted ids back on the
-// Missed list.
 func (s *Server) handleRestoreMissed(w http.ResponseWriter, r *http.Request) {
 	ids, ok := formIDs(r)
 	if !ok {
@@ -186,7 +171,6 @@ func (s *Server) missedError(w http.ResponseWriter, r *http.Request, err error) 
 	s.renderCompletions(w, r, http.StatusConflict, text)
 }
 
-// formIDs is the positive "id" values posted, at most 100; false if none.
 func formIDs(r *http.Request) ([]int64, bool) {
 	if err := r.ParseForm(); err != nil {
 		return nil, false

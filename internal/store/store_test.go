@@ -35,7 +35,6 @@ func TestOpenRunsMigrations(t *testing.T) {
 		t.Errorf("foreign_keys = %d (err %v), want 1", fk, err)
 	}
 
-	// Re-running migrations is a no-op.
 	if err := Migrate(ctx, db); err != nil {
 		t.Errorf("second Migrate: %v", err)
 	}
@@ -143,8 +142,6 @@ func TestMigrationsRoundTrip(t *testing.T) {
 	}
 }
 
-// The shared chores migration rebuilds chores; occurrences and completions
-// must survive it both ways, and foreign keys must be back on afterwards.
 func TestSharedChoresMigrationKeepsData(t *testing.T) {
 	st := openTest(t)
 	ctx := t.Context()
@@ -215,8 +212,6 @@ func TestSharedChoresMigrationKeepsData(t *testing.T) {
 	}
 }
 
-// The manual points migration rebuilds ledger_entries; balances must survive
-// it both ways, and 'manual' entries become plain adjustments on the way down.
 func TestManualPointsMigrationKeepsLedger(t *testing.T) {
 	st := openTest(t)
 	ctx := t.Context()
@@ -277,9 +272,6 @@ func TestManualPointsMigrationKeepsLedger(t *testing.T) {
 	}
 }
 
-// The chore times migration rebuilds chore_occurrences and moves a chore's
-// time to due_times. Occurrences keep their ids (completions point at them)
-// and take their chore's time; going back keeps one occurrence a day.
 func TestChoreTimesMigration(t *testing.T) {
 	st := openTest(t)
 	ctx := t.Context()
@@ -325,7 +317,6 @@ func TestChoreTimesMigration(t *testing.T) {
 		t.Errorf("after up: occurrences %q, chores %q", occs, times)
 	}
 
-	// A second time the same day, done; then back down.
 	exec(
 		`INSERT INTO chore_occurrences (id, household_id, chore_id, due_on, due_time, assignee_id, status) VALUES (9, 1, 1, '2026-11-02', '19:30', 1, 'done')`,
 		`INSERT INTO completions (id, household_id, occurrence_id, person_id, completed_at, status, points, pence) VALUES (2, 1, 9, 1, 2, 'approved', 5, 0)`,
@@ -401,8 +392,6 @@ func TestEachPersonMigration(t *testing.T) {
 		t.Errorf("after up: %q", kept)
 	}
 
-	// An Everyone chore with a copy each; a second copy for the same person
-	// is refused.
 	exec(
 		`INSERT INTO chores (id, household_id, title, mode, starts_on, for_everyone, adult_points, points, created_at, updated_at) VALUES (2, 1, 'Bed', 'each', '2026-11-02', 1, 1, 2, 1, 1)`,
 		`INSERT INTO chore_occurrences (id, household_id, chore_id, due_on, assignee_id, for_person, status) VALUES (8, 1, 2, '2026-11-02', 1, 1, 'done'), (9, 1, 2, '2026-11-02', 2, 2, 'done')`,
@@ -437,8 +426,6 @@ func TestEachPersonMigration(t *testing.T) {
 	}
 }
 
-// 00024 starts every chore that isn't "each" with adults' points equal to
-// its points, so adults keep earning the same points (now without money).
 func TestAdultPointsMigration(t *testing.T) {
 	st := openTest(t)
 	ctx := t.Context()
@@ -475,7 +462,6 @@ func TestAdultPointsMigration(t *testing.T) {
 	}
 }
 
-// Rewards from before 00025 stay for everyone.
 func TestRewardPeopleMigration(t *testing.T) {
 	st := openTest(t)
 	ctx := t.Context()
@@ -511,8 +497,6 @@ func TestRewardPeopleMigration(t *testing.T) {
 	}
 }
 
-// completions.for_person_id goes on and comes off cleanly (SQLite has to
-// drop a column with a foreign key).
 func TestCompletionForPersonMigration(t *testing.T) {
 	st := openTest(t)
 	ctx := t.Context()
@@ -549,8 +533,6 @@ func TestCompletionForPersonMigration(t *testing.T) {
 	}
 }
 
-// 00027 rebuilds ledger_entries to allow 'interest': existing entries and
-// the bank transfers pointing at them survive, both ways.
 func TestInterestMigration(t *testing.T) {
 	st := openTest(t)
 	ctx := t.Context()
@@ -613,8 +595,6 @@ func TestInterestMigration(t *testing.T) {
 	}
 }
 
-// v0.3's migrations (modules, bank requests, bank balances) come after
-// v0.2.4's 14 and 15, so a database upgraded from v0.2.4 runs just them.
 func TestV03MigrationsAfterV024(t *testing.T) {
 	st := openTest(t)
 	ctx := t.Context()
@@ -635,7 +615,6 @@ func TestV03MigrationsAfterV024(t *testing.T) {
 		return n == 1
 	}
 
-	// Back to where v0.2.4 leaves a database.
 	if _, err := p.DownTo(ctx, 15); err != nil {
 		t.Fatalf("DownTo(15): %v", err)
 	}
@@ -644,7 +623,7 @@ func TestV03MigrationsAfterV024(t *testing.T) {
 			t.Errorf("%s exists at v0.2.4", name)
 		}
 	}
-	results, err := p.UpTo(ctx, 18) // v0.3's last; later ones are tested on their own
+	results, err := p.UpTo(ctx, 18)
 	if err != nil {
 		t.Fatalf("Up from v0.2.4: %v", err)
 	}
@@ -663,7 +642,6 @@ func TestV03MigrationsAfterV024(t *testing.T) {
 			t.Errorf("%s missing after upgrade", name)
 		}
 	}
-	// main's columns are still there alongside.
 	for _, q := range []string{
 		`SELECT for_everyone, adult_points, due_times, show_before FROM chores LIMIT 0`,
 		`SELECT due_time FROM chore_occurrences LIMIT 0`,
@@ -719,7 +697,6 @@ func TestGoalMatchMigration(t *testing.T) {
 			t.Fatalf("%s: %v", q, err)
 		}
 	}
-	// An add needs a per.
 	if err := exec(`INSERT INTO match_offers (person_id, household_id, add_pence, per_pence, add_points, per_points, set_by, updated_at) VALUES (2, 1, 10, 0, 0, 0, 2, 3)`); err == nil {
 		t.Error("an offer with nothing to earn for it was allowed")
 	}
@@ -736,7 +713,6 @@ func TestGoalMatchMigration(t *testing.T) {
 	if n := count(`SELECT COUNT(*) FROM pragma_foreign_key_check`); n != 0 {
 		t.Errorf("%d broken foreign keys", n)
 	}
-	// A match_entries row goes with its ledger entry.
 	if err := exec(`DELETE FROM ledger_entries WHERE id = 3`); err != nil {
 		t.Fatal(err)
 	}

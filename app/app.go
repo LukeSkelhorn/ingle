@@ -1,9 +1,4 @@
-// Package app runs an Ingle server. It is the core's public entry point:
-// cmd/ingle is a thin wrapper around it, and other programs (such as Ingle
-// Hosted) import the core as a Go module and start it the same way.
-//
-// Everything else in the core stays under internal/. Settings come from the
-// INGLE_* environment variables, as for cmd/ingle.
+// Package app runs an Ingle server and is the core's public entry point.
 package app
 
 import (
@@ -39,101 +34,59 @@ import (
 
 // Options are what a program passes to [Run].
 type Options struct {
-	// Version is the build's version, shown in the UI and logs; empty
-	// means "dev".
 	Version string
-	// Log is where the server logs; nil means slog.Default().
-	Log *slog.Logger
+	Log     *slog.Logger
 
-	// ResolveHousehold names the household a request is for, before its
-	// display or session is known (e.g. from the address it came to). ok
-	// is false when it can't tell; the request's display or session then
-	// decides. Setting it serves many households: no household is made at
-	// startup, and the background jobs run for every household in the
-	// database. Nil serves the single household of a self-hosted server.
 	ResolveHousehold func(r *http.Request) (id int64, ok bool, err error)
-	// Routes adds a program's own routes, such as sign-up or billing.
-	// They sit behind the same cross-origin check and identity as Ingle's
-	// own; use [Helpers] to require a signed-in adult.
-	Routes func(mux *http.ServeMux, h Helpers)
-	// AdminLinks are extra links in the Admin bar, after the modules'.
-	AdminLinks []AdminLink
-	// PhotoBlobs stores uploaded photos' files; nil keeps them on disk
-	// beside the database.
-	PhotoBlobs PhotoBlobs
-	// Jobs is where the background jobs run: here, beside the web server
-	// (the default), or elsewhere, in a process that calls [RunJobs].
-	Jobs JobMode
-	// SignIn hands adults' sign-in to another service, which starts their
-	// Ingle session with [Helpers.StartSession]. Nil keeps Ingle's own
-	// email and password sign-in and first-run setup.
-	SignIn *SignIn
+	Routes           func(mux *http.ServeMux, h Helpers)
+	AdminLinks       []AdminLink
+	PhotoBlobs       PhotoBlobs
+	Jobs             JobMode
+	SignIn           *SignIn
 }
 
-// SignIn is another service that signs adults in. With it, Ingle's email
-// and password sign-in, first-run setup and adults' email and password in
-// Admin › People are all off. PINs and household displays are unchanged.
+// SignIn is another service that signs adults in instead of Ingle's own sign-in.
 type SignIn struct {
-	// URL is where /signin, and anyone who needs to sign in, is sent.
-	URL string
-	// OnSignOut runs after Ingle ends an adult's session on sign-out, e.g.
-	// to end the other service's session too. A non-empty URL is where the
-	// browser goes next, instead of URL. Locking admin on a display doesn't
-	// call it. Nil does nothing more.
-	OnSignOut func(r *http.Request) string
-	// SessionIdle is how long an adult's session lasts without use, and
-	// its cookie's lifetime. 0 means 30 days, as for a password sign-in.
+	URL         string
+	OnSignOut   func(r *http.Request) string
 	SessionIdle time.Duration
 }
 
 // AdminLink is a link in the Admin bar.
 type AdminLink struct {
-	// Label is the link text and Path where it goes, e.g. "Billing" and
-	// "/admin/billing". Path also marks the link current on its own page.
 	Label, Path string
 }
 
-// PhotoBlobs stores the files of uploaded photos by name. Its methods use
-// only standard library types, so another module can implement it.
+// PhotoBlobs stores the files of uploaded photos by name.
 type PhotoBlobs = photos.Blobs
 
 // JobMode is where the background jobs run.
 type JobMode int
 
+// Job modes.
 const (
-	// JobsHere runs the background jobs in the same process as the web
-	// server.
 	JobsHere JobMode = iota
-	// JobsElsewhere leaves them to another process running [RunJobs].
 	JobsElsewhere
 )
 
 // Helpers are for handlers added through Options.Routes.
 type Helpers struct{ srv *server.Server }
 
-// RequireAdmin lets only a signed-in adult of the request's household
-// reach h; anyone else is sent to sign in.
+// RequireAdmin lets only a signed-in adult of the request's household reach h.
 func (h Helpers) RequireAdmin(next http.Handler) http.Handler { return h.srv.RequireAdmin(next) }
 
-// RequireViewer lets only a household display or a signed-in adult reach
-// h.
+// RequireViewer lets only a household display or a signed-in adult reach h.
 func (h Helpers) RequireViewer(next http.Handler) http.Handler { return h.srv.RequireViewer(next) }
 
-// StartSession signs person personID of household hh in, once the
-// [SignIn] service has confirmed who they are: it starts an Ingle session,
-// the same as a password sign-in, and sets its cookie on w. Redirect to
-// "/admin" (or anywhere) afterwards. It fails unless they are an active
-// adult of hh and the request isn't for another household.
+// StartSession starts an Ingle session for an adult the SignIn service has confirmed.
 func (h Helpers) StartSession(w http.ResponseWriter, r *http.Request, hh, personID int64) error {
 	return h.srv.StartSession(w, r, hh, personID)
 }
 
-// HouseholdOf returns the household a request is for, or 0 when none is
-// known yet (nobody signed in and the resolver couldn't tell).
+// HouseholdOf returns the household a request is for, or 0 if not yet known.
 func HouseholdOf(r *http.Request) int64 { return server.HouseholdOf(r) }
 
-// Run starts the server on INGLE_ADDR and serves until ctx is cancelled, then
-// shuts down gracefully.
+// Run serves on INGLE_ADDR until ctx is cancelled, then shuts down gracefully.
 func Run(ctx context.Context, opts Options) error {
 	c, err := build(ctx, opts)
 	if err != nil {
@@ -176,10 +129,7 @@ func Run(ctx context.Context, opts Options) error {
 	return httpSrv.Shutdown(shutdownCtx)
 }
 
-// RunJobs runs only the background jobs (chores, the lock schedule,
-// backups and the modules' jobs) until ctx is cancelled, for a worker
-// beside web servers started with JobsElsewhere. Its Options should match
-// theirs.
+// RunJobs runs only the background jobs until ctx is cancelled.
 func RunJobs(ctx context.Context, opts Options) error {
 	c, err := build(ctx, opts)
 	if err != nil {
@@ -191,7 +141,6 @@ func RunJobs(ctx context.Context, opts Options) error {
 	return nil
 }
 
-// core is a built server and its services, not yet serving.
 type core struct {
 	cfg        config.Config
 	log        *slog.Logger
@@ -203,8 +152,7 @@ type core struct {
 	lock       *lock.Service
 	srv        *server.Server
 	households func(context.Context) ([]int64, error)
-	// backupLoc is the timezone nightly backups follow.
-	backupLoc func() *time.Location
+	backupLoc  func() *time.Location
 }
 
 func build(ctx context.Context, opts Options) (*core, error) {
@@ -253,8 +201,6 @@ func build(ctx context.Context, opts Options) (*core, error) {
 			return nil, err
 		}
 		ctx := store.WithHousehold(ctx, household.ID)
-		// INGLE_TZ seeds the timezone for a new household; after that it
-		// is changed under Admin › Settings.
 		if err := c.set.Ensure(ctx, household.ID, cfg.Location); err != nil {
 			return nil, err
 		}
@@ -326,8 +272,7 @@ func build(ctx context.Context, opts Options) (*core, error) {
 		Calendars:        cals,
 		Lock:             c.lock,
 		Takeout:          takeout.New(st, keys, library, avatars, log),
-		// Ingle's modules are registered in a fixed order by server.New.
-		Modules: module.NewService(st, module.NewRegistry()),
+		Modules:          module.NewService(st, module.NewRegistry()),
 		Locale: locale.Locale{
 			Location:   cfg.Location,
 			DateFormat: cfg.DateFormat,
@@ -338,8 +283,7 @@ func build(ctx context.Context, opts Options) (*core, error) {
 		TrustedProxies: cfg.TrustedProxies,
 		Version:        c.version,
 		SignIn:         signIn,
-		// On SQLite the clear-out follows the nightly backup, so with
-		// backups off there's none.
+		// On SQLite the clear-out follows the nightly backup, so none without backups.
 		NoClearOut: cfg.BackupKeep == 0 && store.EngineOf(db) == store.SQLite,
 	})
 	if err != nil {
@@ -349,7 +293,6 @@ func build(ctx context.Context, opts Options) (*core, error) {
 	return c, nil
 }
 
-// runJobs runs the background jobs until ctx ends.
 func (c *core) runJobs(ctx context.Context) {
 	var wg sync.WaitGroup
 	wg.Go(func() { maintenanceLoop(ctx, c.log, c.set, c.chores, c.auth, c.households) })
@@ -360,17 +303,12 @@ func (c *core) runJobs(ctx context.Context) {
 		}
 		wg.Go(func() { backupLoop(ctx, c.log, c.db, filepath.Dir(c.cfg.DBPath), c.cfg, c.backupLoc, c.clearHistory) })
 	} else if store.EngineOf(c.db) == store.Postgres {
-		// Postgres has its own backups, so the clear-out runs at backup
-		// time without one.
 		wg.Go(func() { nightlyLoop(ctx, c.cfg.BackupAt, c.backupLoc, c.clearHistory) })
 	}
-	// The modules' background jobs: calendar feeds and the photos folder.
 	wg.Go(func() { c.srv.RunModuleLoops(ctx) })
 	wg.Wait()
 }
 
-// clearHistory clears out each household's history older than its Keep
-// history setting, then, on SQLite, VACUUMs so the file shrinks.
 func (c *core) clearHistory(ctx context.Context) {
 	cleared := false
 	eachHousehold(ctx, c.log, c.households, func(ctx context.Context, householdID int64) {
@@ -397,8 +335,6 @@ func (c *core) clearHistory(ctx context.Context) {
 	}
 }
 
-// eachHousehold runs fn for every household, logging a failure to list
-// them.
 func eachHousehold(ctx context.Context, log *slog.Logger, households func(context.Context) ([]int64, error), fn func(ctx context.Context, householdID int64)) {
 	ids, err := households(store.AsSystem(ctx))
 	if err != nil {
@@ -411,13 +347,11 @@ func eachHousehold(ctx context.Context, log *slog.Logger, households func(contex
 		if ctx.Err() != nil {
 			return
 		}
-		// On Postgres, fn sees this household's rows only.
 		fn(store.WithHousehold(ctx, id), id)
 	}
 }
 
-// Healthcheck asks the server running on INGLE_ADDR for /healthz, e.g. for
-// Docker's HEALTHCHECK.
+// Healthcheck asks the server running on INGLE_ADDR for /healthz.
 func Healthcheck(ctx context.Context) error {
 	cfg, err := config.Load()
 	if err != nil {
@@ -444,7 +378,6 @@ func Healthcheck(ctx context.Context) error {
 	return nil
 }
 
-// openDB opens the database cfg names and runs pending migrations.
 func openDB(ctx context.Context, cfg config.Config) (*sql.DB, error) {
 	if cfg.DatabaseURL != "" {
 		return store.OpenPostgres(ctx, store.PostgresOptions{URL: cfg.DatabaseURL, MigrateURL: cfg.DatabaseMigrateURL})
@@ -452,8 +385,7 @@ func openDB(ctx context.Context, cfg config.Config) (*sql.DB, error) {
 	return store.Open(ctx, cfg.DBPath)
 }
 
-// Backup writes one backup of the database and returns its path, e.g.
-// before an upgrade.
+// Backup writes one backup of the database and returns its path.
 func Backup(ctx context.Context) (string, error) {
 	cfg, err := config.Load()
 	if err != nil {
@@ -474,10 +406,6 @@ func Backup(ctx context.Context) (string, error) {
 	return path, nil
 }
 
-// maintenanceLoop runs once at startup and then hourly: it keeps the rolling
-// window of chore occurrences filled (so new days and newly added chores
-// appear) from the household's current board day, pays any interest due
-// for last month, and sweeps expired sessions.
 func maintenanceLoop(ctx context.Context, log *slog.Logger, set *settings.Service, svc *chores.Service, authSvc *auth.Service, households func(context.Context) ([]int64, error)) {
 	one := func(ctx context.Context, householdID int64) {
 		log := log.With(slog.Int64("household", householdID))
@@ -521,7 +449,6 @@ func maintenanceLoop(ctx context.Context, log *slog.Logger, set *settings.Servic
 	}
 }
 
-// lockLoop applies the displays' lock schedule and idle lock every minute.
 func lockLoop(ctx context.Context, log *slog.Logger, svc *lock.Service, households func(context.Context) ([]int64, error)) {
 	t := time.NewTicker(time.Minute)
 	defer t.Stop()
@@ -539,10 +466,9 @@ func lockLoop(ctx context.Context, log *slog.Logger, svc *lock.Service, househol
 	}
 }
 
-// nightlyLoop runs job every day at clock (HH:MM) in loc's time zone.
 func nightlyLoop(ctx context.Context, clock string, loc func() *time.Location, job func(context.Context)) {
 	for {
-		// Re-read the timezone each night: it can change in Admin › Settings.
+		// Re-read each night: the timezone can change in Admin › Settings.
 		next := backup.Next(time.Now(), loc(), clock)
 		t := time.NewTimer(time.Until(next))
 		select {
@@ -555,9 +481,6 @@ func nightlyLoop(ctx context.Context, clock string, loc func() *time.Location, j
 	}
 }
 
-// backupLoop writes a backup every day at cfg.BackupAt household time,
-// keeping the newest cfg.BackupKeep. After each good backup it runs after
-// (the history clear-out), so that never runs without a fresh backup.
 func backupLoop(ctx context.Context, log *slog.Logger, db *sql.DB, dataDir string, cfg config.Config, loc func() *time.Location, after func(context.Context)) {
 	nightlyLoop(ctx, cfg.BackupAt, loc, func(ctx context.Context) {
 		start := time.Now()

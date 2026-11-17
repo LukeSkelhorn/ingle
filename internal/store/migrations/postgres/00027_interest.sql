@@ -1,5 +1,4 @@
 -- +goose Up
--- See migrations/sqlite/00027_interest.sql.
 ALTER TABLE ledger_entries DROP CONSTRAINT ledger_entries_kind_check;
 ALTER TABLE ledger_entries ADD CONSTRAINT ledger_entries_kind_check
     CHECK (kind IN ('completion', 'redemption', 'adjustment', 'payout', 'manual', 'interest'));

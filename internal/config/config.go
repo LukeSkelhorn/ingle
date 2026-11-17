@@ -1,9 +1,4 @@
-// Package config loads Ingle runtime configuration from the environment,
-// falling back to UK-centric defaults.
-//
-// Settings are INGLE_* variables. Ingle used to be called Domus, so the
-// old DOMUS_* names are still read when the INGLE_* one isn't set, and an
-// existing domus.db is still used.
+// Package config loads Ingle runtime configuration from the environment, falling back to UK-centric defaults.
 package config
 
 import (
@@ -18,20 +13,17 @@ import (
 
 	"github.com/lukeskelhorn/ingle/internal/secrets"
 
-	// Embed the IANA timezone database so Europe/London resolves even in
-	// minimal container images without /usr/share/zoneinfo.
+	// Minimal container images have no /usr/share/zoneinfo.
 	_ "time/tzdata"
 )
 
-// Variable prefixes: settings are INGLE_*, and the DOMUS_* names from
-// before the rename are read as a fallback.
+// Variable prefixes: INGLE_*, with the pre-rename DOMUS_* names as a fallback.
 const (
 	Prefix       = "INGLE_"
 	LegacyPrefix = "DOMUS_"
 )
 
-// Database file names. A data directory from before the rename has a
-// domus.db, which is used as long as there's no ingle.db beside it.
+// Database file names.
 const (
 	DBName       = "ingle.db"
 	LegacyDBName = "domus.db"
@@ -42,7 +34,7 @@ const (
 	DefaultAddr       = ":8080"
 	DefaultDBPath     = "./data/" + DBName
 	DefaultTimezone   = "Europe/London"
-	DefaultDateFormat = "02/01/2006" // DD/MM/YYYY
+	DefaultDateFormat = "02/01/2006"
 	DefaultWeekStart  = "monday"
 	DefaultCurrency   = "GBP"
 	DefaultBackupKeep = 14
@@ -51,43 +43,23 @@ const (
 
 // Config is the resolved runtime configuration.
 type Config struct {
-	Addr   string
-	DBPath string
-	// DatabaseURL, when set, is a postgres:// URL used instead of the
-	// SQLite file at DBPath (Hosted). DBPath's folder still holds avatars.
-	DatabaseURL string
-	// DatabaseMigrateURL is the tables' owner, which runs migrations, when
-	// DatabaseURL is a role that only reads and writes rows. Empty means
-	// DatabaseURL runs them.
+	Addr               string
+	DBPath             string
+	DatabaseURL        string
 	DatabaseMigrateURL string
-	// MasterKey (INGLE_MASTER_KEY, base64) encrypts each household's
-	// secrets, such as calendar links. Optional on SQLite; required with
-	// DatabaseURL. Nil means secrets are stored as they are.
-	MasterKey  []byte
-	Location   *time.Location
-	DateFormat string
-	WeekStart  time.Weekday
-	Currency   string
-	// PhotosDir is an optional read-only folder of photos (e.g. a NAS
-	// share) mixed into the screensaver slideshow. Empty means none.
-	PhotosDir string
-	// TrustedProxies are the reverse proxies (e.g. Caddy) whose
-	// X-Forwarded-For header is believed. Empty means none: the TCP peer
-	// is the client.
-	TrustedProxies []netip.Prefix
-	// BackupDir receives the nightly backups; BackupKeep is how many are
-	// kept (0 turns backups off) and BackupAt the household-time "HH:MM"
-	// they run.
-	BackupDir  string
-	BackupKeep int
-	BackupAt   string
-	// Legacy lists the old DOMUS_* variables that were used because the
-	// INGLE_* one wasn't set, so the server can suggest renaming them.
-	Legacy []string
+	MasterKey          []byte
+	Location           *time.Location
+	DateFormat         string
+	WeekStart          time.Weekday
+	Currency           string
+	PhotosDir          string
+	TrustedProxies     []netip.Prefix
+	BackupDir          string
+	BackupKeep         int
+	BackupAt           string
+	Legacy             []string
 }
 
-// fileExists reports whether path is an existing file. A variable so tests
-// can stand in for the filesystem.
 var fileExists = func(path string) bool {
 	fi, err := os.Stat(path)
 	return err == nil && fi.Mode().IsRegular()
@@ -100,7 +72,6 @@ func Load() (Config, error) {
 
 func load(getenv func(string) string) (Config, error) {
 	var legacy []string
-	// get reads INGLE_<name>, then DOMUS_<name>, then falls back to def.
 	get := func(name, def string) string {
 		if v := strings.TrimSpace(getenv(Prefix + name)); v != "" {
 			return v
@@ -149,8 +120,6 @@ func load(getenv func(string) string) (Config, error) {
 
 	defKeep := strconv.Itoa(DefaultBackupKeep)
 	if dbURL != "" {
-		// Backups copy the SQLite file. On Postgres, the database service
-		// backs up (point-in-time recovery).
 		defKeep = "0"
 	}
 	keepS := get("BACKUP_KEEP", defKeep)
@@ -186,8 +155,7 @@ func load(getenv func(string) string) (Config, error) {
 	}, nil
 }
 
-// DSN is what store.Open opens: the Postgres URL if set, else the SQLite
-// file.
+// DSN is what store.Open opens: the Postgres URL if set, else the SQLite file.
 func (c Config) DSN() string {
 	if c.DatabaseURL != "" {
 		return c.DatabaseURL
@@ -206,9 +174,6 @@ func (c Config) DBLabel() string {
 	return "postgres"
 }
 
-// legacyDB keeps an install from before the rename on its database: if
-// path is an ingle.db that doesn't exist yet but a domus.db does beside
-// it, that's the one to open. Otherwise path is used as given.
 func legacyDB(path string) string {
 	if filepath.Base(path) != DBName || fileExists(path) {
 		return path
@@ -219,8 +184,6 @@ func legacyDB(path string) string {
 	return path
 }
 
-// parsePrefixes reads a comma- or space-separated list of CIDRs; a bare IP
-// means just that address.
 func parsePrefixes(s string) ([]netip.Prefix, error) {
 	var out []netip.Prefix
 	for _, f := range strings.FieldsFunc(s, func(r rune) bool { return r == ',' || r == ' ' }) {

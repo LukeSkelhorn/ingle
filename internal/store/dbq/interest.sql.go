@@ -78,7 +78,6 @@ type InterestTotalsForPersonRow struct {
 	Pence  int64 `json:"pence"`
 }
 
-// What a person has earned in interest, all told.
 func (q *Queries) InterestTotalsForPerson(ctx context.Context, arg InterestTotalsForPersonParams) (InterestTotalsForPersonRow, error) {
 	row := q.db.QueryRowContext(ctx, interestTotalsForPerson, arg.HouseholdID, arg.PersonID)
 	var i InterestTotalsForPersonRow
@@ -98,7 +97,6 @@ type LastInterestPaymentParams struct {
 	PersonID    int64 `json:"person_id"`
 }
 
-// A person's latest month, for the fraction carried into the next.
 func (q *Queries) LastInterestPayment(ctx context.Context, arg LastInterestPaymentParams) (InterestPayment, error) {
 	row := q.db.QueryRowContext(ctx, lastInterestPayment, arg.HouseholdID, arg.PersonID)
 	var i InterestPayment

@@ -13,9 +13,6 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
-// outsideSignIn is two households whose adults sign in through another
-// service (as Hosted's WorkOS sign-in does): /auth/callback stands in for
-// it, starting a session for ?hh= and ?person= with StartSession.
 type outsideSignIn struct {
 	*twoHouseholds
 	mumID, dadID int64
@@ -50,13 +47,11 @@ func newOutsideSignIn(t *testing.T) *outsideSignIn {
 			http.Redirect(w, r, "/admin", http.StatusSeeOther)
 		})
 	}
-	// Routes are added when the handler is built.
 	x.h.ts = httptest.NewServer(srv.Handler())
 	t.Cleanup(x.h.ts.Close)
 	return x
 }
 
-// signIn is a new browser on host, signed in through the callback.
 func (x *outsideSignIn) signIn(host string, hh, personID int64) *device {
 	x.h.t.Helper()
 	d := x.on(host)
@@ -71,10 +66,8 @@ func TestOutsideSignInStartsASession(t *testing.T) {
 	expect(t, phone.get("/admin"), http.StatusOK, "The Smiths")
 	expect(t, phone.get("/admin/people"), http.StatusOK, "Alfie")
 	expectNot(t, phone.get("/admin/people"), "Bea", "· Sign-in")
-	// Another household's people are still out of reach.
 	expect(t, phone.get("/admin/people/"+itoa(x.beaID)), http.StatusNotFound)
 
-	// The same works with no household known from the address.
 	expect(t, x.signIn("", x.b, x.dadID).get("/admin"), http.StatusOK, "The Joneses")
 }
 
@@ -99,7 +92,6 @@ func TestOutsideSignInRefusesOthers(t *testing.T) {
 		})
 	}
 
-	// An archived adult can't either.
 	ctx := store.WithHousehold(t.Context(), x.b)
 	if err := x.h.st.Q.ArchivePerson(ctx, dbq.ArchivePersonParams{ArchivedAt: &[]int64{x.h.clock().Unix()}[0], HouseholdID: x.b, ID: x.dadID}); err != nil {
 		t.Fatal(err)
@@ -117,7 +109,6 @@ func TestOutsideSignInReplacesIngles(t *testing.T) {
 	expect(t, d.get("/setup"), http.StatusNotFound)
 	expect(t, d.post("/setup", setupValues), http.StatusNotFound)
 
-	// Adults' email and password aren't Ingle's to manage.
 	phone := x.signIn("a.test", x.a, x.mumID)
 	page := phone.get("/admin/people/" + itoa(x.mumID))
 	expect(t, page, http.StatusOK, "Remove Mum&#39;s PIN?")
@@ -125,8 +116,6 @@ func TestOutsideSignInReplacesIngles(t *testing.T) {
 	expect(t, phone.post("/admin/people/"+itoa(x.mumID)+"/login", url.Values{"email": {"m@example.com"}, "password": {"another long one"}, "password_confirm": {"another long one"}}), http.StatusNotFound)
 	expect(t, phone.post("/admin/people/"+itoa(x.mumID)+"/login/clear", url.Values{}), http.StatusNotFound)
 
-	// A household nobody has set up isn't sent to /setup: its program
-	// sets it up.
 	c, err := x.h.st.Q.CreateHousehold(store.AsSystem(t.Context()), dbq.CreateHouseholdParams{Name: "Home", CreatedAt: x.h.clock().Unix()})
 	if err != nil {
 		t.Fatal(err)
@@ -153,15 +142,12 @@ func TestOutsideSignInSignOut(t *testing.T) {
 	}
 	expectRedirect(t, phone.get("/admin"), "/auth/signin")
 
-	// Locking admin on a display isn't signing out of the other service.
 	expectRedirect(t, x.aW.post("/admin/lock", nil), "/")
 	if n := x.signOuts.Load(); n != 1 {
 		t.Errorf("locking a display ran OnSignOut: %d times", n)
 	}
 }
 
-// With an outside sign-in every adult can sign in, PIN or not: the last
-// adult's PIN can go, but they can't be archived.
 func TestOutsideSignInLastAdult(t *testing.T) {
 	x := newOutsideSignIn(t)
 	phone := x.signIn("a.test", x.a, x.mumID)
@@ -181,7 +167,7 @@ func TestOutsideSignInSessionIdle(t *testing.T) {
 	phone := x.signIn("a.test", x.a, x.mumID)
 
 	x.h.advance(50 * time.Minute)
-	expect(t, phone.get("/admin"), http.StatusOK) // and touched
+	expect(t, phone.get("/admin"), http.StatusOK)
 	x.h.advance(50 * time.Minute)
 	expect(t, phone.get("/admin"), http.StatusOK)
 	x.h.advance(61 * time.Minute)

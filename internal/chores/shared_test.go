@@ -9,7 +9,6 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/valid"
 )
 
-// sharedChore creates a daily chore through the admin path, for people.
 func (f *fixture) sharedChore(title string, people []int64, mut ...func(*Input)) int64 {
 	f.t.Helper()
 	in := Input{
@@ -59,7 +58,6 @@ func TestSharedChoreBoard(t *testing.T) {
 		t.Errorf("totals Mum %d, Isla %d; want 1 each", b.column("Mum").TotalToday, b.column("Isla").TotalToday)
 	}
 
-	// Isla does it: gone from Mum's column, ticked in Isla's, points to Isla.
 	comp, err := f.svc.Complete(ctx, f.hh, isla.OccurrenceID, f.kid2.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -81,7 +79,6 @@ func TestSharedChoreBoard(t *testing.T) {
 		t.Errorf("Mum points = %d, want 0", bal.Points)
 	}
 
-	// Undo puts it back for both of them.
 	if err := f.svc.Undo(ctx, f.hh, comp.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +148,7 @@ func TestSharedChoreCalendar(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, d := range []string{"2026-11-02", "2026-11-28"} { // materialised and projected
+	for _, d := range []string{"2026-11-02", "2026-11-28"} {
 		cs := cal[d]
 		if len(cs) != 1 || cs[0].PersonID != nil || cs[0].Pool || !slices.Equal(cs[0].People, []int64{f.adult.ID, f.kid2.ID}) {
 			t.Errorf("%s = %+v", d, cs)
@@ -176,7 +173,6 @@ func TestSharedChoreAdmin(t *testing.T) {
 		t.Errorf("people = %v", got)
 	}
 
-	// One person is just an assigned chore.
 	one := f.sharedChore("Bath", []int64{f.kid.ID, 9999})
 	c, _ := f.svc.Chore(ctx, f.hh, one)
 	if c.Mode != ModeAssigned || c.AssigneeID == nil || *c.AssigneeID != f.kid.ID {
@@ -186,7 +182,6 @@ func TestSharedChoreAdmin(t *testing.T) {
 		t.Errorf("assigned chore has people %v", got)
 	}
 
-	// Nobody is an error.
 	var ve valid.Errors
 	_, err := f.svc.CreateChore(ctx, f.hh, f.adult.ID, Input{
 		Title: "Nobody", Mode: ModeShared, Repeat: Recurrence{Kind: RepeatDaily}, StartsOn: "2026-11-02",
@@ -195,7 +190,6 @@ func TestSharedChoreAdmin(t *testing.T) {
 		t.Errorf("no people err = %v", err)
 	}
 
-	// Switching to the pool clears them.
 	if _, err := f.svc.UpdateChore(ctx, f.hh, f.adult.ID, id, Input{
 		Title: "School run", Mode: ModePool, PeopleIDs: []int64{f.adult.ID, f.kid2.ID},
 		Repeat: Recurrence{Kind: RepeatDaily}, StartsOn: "2026-11-02",

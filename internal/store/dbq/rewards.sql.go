@@ -55,8 +55,6 @@ type ClearGoalsNotAllowedParams struct {
 	RewardID    *int64 `json:"reward_id"`
 }
 
-// After a reward changes, anyone saving for it who may no longer have it
-// stops.
 func (q *Queries) ClearGoalsNotAllowed(ctx context.Context, arg ClearGoalsNotAllowedParams) error {
 	_, err := q.db.ExecContext(ctx, clearGoalsNotAllowed, arg.HouseholdID, arg.RewardID)
 	return err
@@ -288,7 +286,6 @@ type HeldForHouseholdRow struct {
 	Waiting  int64 `json:"waiting"`
 }
 
-// HeldForPerson for everyone.
 func (q *Queries) HeldForHousehold(ctx context.Context, householdID int64) ([]HeldForHouseholdRow, error) {
 	rows, err := q.db.QueryContext(ctx, heldForHousehold, householdID)
 	if err != nil {
@@ -342,8 +339,6 @@ type HeldForPersonRow struct {
 	Waiting int64 `json:"waiting"`
 }
 
-// What a person's waiting reward claims and bank requests hold back from
-// their balance. waiting counts the reward claims only.
 func (q *Queries) HeldForPerson(ctx context.Context, arg HeldForPersonParams) (HeldForPersonRow, error) {
 	row := q.db.QueryRowContext(ctx, heldForPerson, arg.HouseholdID, arg.PersonID)
 	var i HeldForPersonRow
@@ -419,8 +414,6 @@ type ListGoalsRow struct {
 	Waiting    int64  `json:"waiting"`
 }
 
-// What each active person is saving for (never an archived reward, or one
-// they may not have), and whether they've already asked for it.
 func (q *Queries) ListGoals(ctx context.Context, householdID int64) ([]ListGoalsRow, error) {
 	rows, err := q.db.QueryContext(ctx, listGoals, householdID)
 	if err != nil {
@@ -480,7 +473,6 @@ type ListPendingRedemptionDetailsRow struct {
 	Emoji        string  `json:"emoji"`
 }
 
-// Waiting claims with who and what, oldest first.
 func (q *Queries) ListPendingRedemptionDetails(ctx context.Context, householdID int64) ([]ListPendingRedemptionDetailsRow, error) {
 	rows, err := q.db.QueryContext(ctx, listPendingRedemptionDetails, householdID)
 	if err != nil {
@@ -579,7 +571,6 @@ type ListPendingRedemptionsForPersonRow struct {
 	Emoji       string `json:"emoji"`
 }
 
-// A person's waiting claims, newest first, with what they're for.
 func (q *Queries) ListPendingRedemptionsForPerson(ctx context.Context, arg ListPendingRedemptionsForPersonParams) ([]ListPendingRedemptionsForPersonRow, error) {
 	rows, err := q.db.QueryContext(ctx, listPendingRedemptionsForPerson, arg.HouseholdID, arg.PersonID)
 	if err != nil {
@@ -623,7 +614,6 @@ type ListPeopleForRewardParams struct {
 	RewardID    int64 `json:"reward_id"`
 }
 
-// A reward's chosen people who are still active, in board order.
 func (q *Queries) ListPeopleForReward(ctx context.Context, arg ListPeopleForRewardParams) ([]int64, error) {
 	rows, err := q.db.QueryContext(ctx, listPeopleForReward, arg.HouseholdID, arg.RewardID)
 	if err != nil {
@@ -660,7 +650,6 @@ type ListRewardPeopleRow struct {
 	PersonID int64 `json:"person_id"`
 }
 
-// Every reward's chosen people who are still active, in board order.
 func (q *Queries) ListRewardPeople(ctx context.Context, householdID int64) ([]ListRewardPeopleRow, error) {
 	rows, err := q.db.QueryContext(ctx, listRewardPeople, householdID)
 	if err != nil {
@@ -740,10 +729,6 @@ type ListRewardsForPersonParams struct {
 	PersonID    int64 `json:"person_id"`
 }
 
-// The active rewards a person may have, ordered like ListRewards. A person
-// may have a reward when it's for everyone or they're one of its people,
-// and (as adults have no money) it costs no money or they aren't an adult.
-// RewardAllowed, ClearGoalsNotAllowed and ListGoals apply the same rule.
 func (q *Queries) ListRewardsForPerson(ctx context.Context, arg ListRewardsForPersonParams) ([]Reward, error) {
 	rows, err := q.db.QueryContext(ctx, listRewardsForPerson, arg.HouseholdID, arg.PersonID)
 	if err != nil {
@@ -792,8 +777,6 @@ type ReviewRedemptionParams struct {
 	ID          int64  `json:"id"`
 }
 
-// Settle a waiting claim. Only a pending claim changes, so two adults
-// tapping at once can't both act on it.
 func (q *Queries) ReviewRedemption(ctx context.Context, arg ReviewRedemptionParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, reviewRedemption,
 		arg.Status,
@@ -824,7 +807,6 @@ type RewardAllowedParams struct {
 	PersonID    int64 `json:"person_id"`
 }
 
-// 1 if a person may have the reward, else 0.
 func (q *Queries) RewardAllowed(ctx context.Context, arg RewardAllowedParams) (int64, error) {
 	row := q.db.QueryRowContext(ctx, rewardAllowed, arg.HouseholdID, arg.RewardID, arg.PersonID)
 	var allowed int64

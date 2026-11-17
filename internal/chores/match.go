@@ -11,31 +11,21 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/valid"
 )
 
-// Matching: an adult offers a child, say, 10p for every £1 they earn from
-// chores while they're saving for a goal. Each chore's match is worked out
-// when the chore is credited, rounded down, and never takes the child past
-// the goal's cost or over the offer's cap. Changing or removing the goal
-// without claiming it takes that goal's match back.
-
-// Module IDs the chores service checks before matching.
 const (
 	moduleRewards = "rewards"
 	moduleMoney   = "money"
 )
 
-// ModulesFunc says whether a household has a module on, reading through q
-// (which may be a transaction's).
+// ModulesFunc says whether a household has a module on, reading through q.
 type ModulesFunc func(ctx context.Context, q *dbq.Queries, householdID int64, id string) bool
 
-// SetModules sets where module state comes from (every module on until
-// set).
+// SetModules sets where module state comes from (every module on until set).
 func (s *Service) SetModules(f ModulesFunc) { s.modules = f }
 
 func (s *Service) moduleOn(ctx context.Context, q *dbq.Queries, householdID int64, id string) bool {
 	return s.modules == nil || s.modules(ctx, q, householdID, id)
 }
 
-// Notes on match ledger entries.
 const (
 	matchTakenBackGoal   = "Match taken back: goal changed"
 	matchTakenBackChore  = "Match taken back: "
@@ -43,17 +33,13 @@ const (
 	matchTakenBackPrefix = "Match taken back"
 )
 
-// MatchOffer is a child's match offer: AddPence for every PerPence and
-// AddPoints for every PerPoints they earn from chores. An Add of 0 leaves
-// that half off. A cap of 0 means no limit.
+// MatchOffer is a child's match offer on what they earn from chores.
 type MatchOffer struct {
-	AddPence, PerPence   int64
-	AddPoints, PerPoints int64
-	CapPence, CapPoints  int64
-	SetBy                int64
-	SetByName            string // the adult named on each match
-	// HeldPence and HeldPoints are what the child still holds from
-	// matching, which the caps count.
+	AddPence, PerPence    int64
+	AddPoints, PerPoints  int64
+	CapPence, CapPoints   int64
+	SetBy                 int64
+	SetByName             string
 	HeldPence, HeldPoints int64
 }
 
@@ -74,8 +60,7 @@ func (o MatchOffer) Capped() bool {
 	return (o.Money() && o.CapPence > 0) || (o.Points() && o.CapPoints > 0)
 }
 
-// CapLeftPoints is how many more points the cap allows, if points are
-// matched and capped (0 otherwise), for "40 pts left to match".
+// CapLeftPoints is how many more points the cap allows (0 if not matched and capped).
 func (o MatchOffer) CapLeftPoints() int64 {
 	if !o.Points() {
 		return 0
@@ -83,8 +68,7 @@ func (o MatchOffer) CapLeftPoints() int64 {
 	return max(o.LeftPoints(), 0)
 }
 
-// CapLeftPence is how much more money the cap allows, if money is matched
-// and capped (0 otherwise), for "£3.80 left to match".
+// CapLeftPence is how much more money the cap allows (0 if not matched and capped).
 func (o MatchOffer) CapLeftPence() int64 {
 	if !o.Money() {
 		return 0
@@ -92,8 +76,7 @@ func (o MatchOffer) CapLeftPence() int64 {
 	return max(o.LeftPence(), 0)
 }
 
-// Spent says the caps have been reached in every half that's on: nothing
-// more will be matched until an adult raises them.
+// Spent says the caps have been reached in every half that's on.
 func (o MatchOffer) Spent() bool {
 	return (!o.Money() || o.LeftPence() == 0) && (!o.Points() || o.LeftPoints() == 0)
 }
@@ -105,8 +88,6 @@ func capLeft(limit, held int64) int64 {
 	return max(limit-held, 0)
 }
 
-// matchAmount is earned matched at add for every per, rounded down, and no
-// more than left (-1 for no limit).
 func matchAmount(earned, add, per, left int64) int64 {
 	if earned <= 0 || add <= 0 || per <= 0 {
 		return 0
@@ -126,7 +107,6 @@ func newMatchOffer(row dbq.MatchOffer, name string, held dbq.MatchHeldForPersonR
 	}
 }
 
-// loadOffer is personID's offer, or nil for none.
 func loadOffer(ctx context.Context, q *dbq.Queries, householdID, personID int64) (*MatchOffer, error) {
 	row, err := q.GetMatchOffer(ctx, dbq.GetMatchOfferParams{HouseholdID: householdID, PersonID: personID})
 	if errors.Is(err, sql.ErrNoRows) {
@@ -152,7 +132,6 @@ func (s *Service) MatchOffer(ctx context.Context, householdID, personID int64) (
 	return loadOffer(ctx, s.st.Q, householdID, personID)
 }
 
-// goalFor is personID's current goal row, or nil for none.
 func goalFor(ctx context.Context, q *dbq.Queries, householdID, personID int64) (*dbq.ListGoalsRow, error) {
 	goals, err := q.ListGoals(ctx, householdID)
 	if err != nil {
@@ -166,7 +145,6 @@ func goalFor(ctx context.Context, q *dbq.Queries, householdID, personID int64) (
 	return nil, nil
 }
 
-// spendable is what personID can spend: their balance less what's held.
 func spendable(ctx context.Context, q *dbq.Queries, householdID, personID int64) (points, pence int64, err error) {
 	bal, err := q.BalanceForPerson(ctx, dbq.BalanceForPersonParams{HouseholdID: householdID, PersonID: personID})
 	if err != nil {
@@ -179,7 +157,6 @@ func spendable(ctx context.Context, q *dbq.Queries, householdID, personID int64)
 	return bal.Points - held.Points, bal.Pence - held.Pence, nil
 }
 
-// matchEntry writes one match ledger entry and its match_entries row.
 func matchEntry(ctx context.Context, q *dbq.Queries, householdID, personID int64, completionID *int64, rewardID, goalSetAt, points, pence int64, note string, by *int64, now int64) error {
 	e, err := q.InsertLedgerEntry(ctx, dbq.InsertLedgerEntryParams{
 		HouseholdID: householdID, PersonID: personID, Points: points, Pence: pence,
@@ -197,9 +174,6 @@ func matchEntry(ctx context.Context, q *dbq.Queries, householdID, personID int64
 	return nil
 }
 
-// matchCompletion adds the match for a chore just credited, if the person
-// is a child with an offer and a goal they haven't reached. It's called in
-// the same transaction as the credit.
 func (s *Service) matchCompletion(ctx context.Context, q *dbq.Queries, c dbq.Completion, now int64) error {
 	if c.Points <= 0 && c.Pence <= 0 {
 		return nil
@@ -223,7 +197,6 @@ func (s *Service) matchCompletion(ctx context.Context, q *dbq.Queries, c dbq.Com
 	if err != nil {
 		return err
 	}
-	// Up to the goal's cost, never past it.
 	needPoints := max(goal.CostPoints-max(havePoints, 0), 0)
 	needPence := max(goal.CostPence-max(havePence, 0), 0)
 
@@ -240,9 +213,6 @@ func (s *Service) matchCompletion(ctx context.Context, q *dbq.Queries, c dbq.Com
 		max(points, 0), max(pence, 0), matchNotePrefix+offer.SetByName, &offer.SetBy, now)
 }
 
-// takeBack takes back up to points and pence of a match, as much as the
-// person's spendable balance allows (never below zero). It returns whether
-// anything was taken.
 func takeBack(ctx context.Context, q *dbq.Queries, householdID, personID int64, completionID *int64, rewardID, goalSetAt, points, pence int64, note string, now int64) (bool, error) {
 	if points <= 0 && pence <= 0 {
 		return false, nil
@@ -260,8 +230,6 @@ func takeBack(ctx context.Context, q *dbq.Queries, householdID, personID int64, 
 	return err == nil, err
 }
 
-// takeBackGoalMatch takes back what personID holds from matching towards
-// the goal they have now, before it's changed or removed.
 func (s *Service) takeBackGoalMatch(ctx context.Context, q *dbq.Queries, householdID int64, p dbq.Person) error {
 	if p.GoalRewardID == nil || p.GoalSetAt == nil {
 		return nil
@@ -282,7 +250,6 @@ func (s *Service) takeBackGoalMatch(ctx context.Context, q *dbq.Queries, househo
 	})
 }
 
-// takeBackCompletionMatch takes back the match a reversed chore earned.
 func takeBackCompletionMatch(ctx context.Context, q *dbq.Queries, c dbq.Completion, title string, now int64) error {
 	m, err := q.MatchForCompletion(ctx, dbq.MatchForCompletionParams{HouseholdID: c.HouseholdID, CompletionID: &c.ID})
 	if err != nil {
@@ -303,9 +270,7 @@ type MatchInput struct {
 	CapPence, CapPoints  int64
 }
 
-// SaveMatchOffer sets up or changes personID's match offer. actorID must be
-// an adult, and is named on the matches from now on; personID must be a
-// child. Nothing already matched changes.
+// SaveMatchOffer sets up or changes personID's match offer.
 func (s *Service) SaveMatchOffer(ctx context.Context, householdID, personID, actorID int64, in MatchInput) error {
 	errs := valid.Errors{}
 	for _, f := range []struct {
@@ -359,8 +324,7 @@ func (s *Service) SaveMatchOffer(ctx context.Context, householdID, personID, act
 	})
 }
 
-// RemoveMatchOffer stops matching for personID. What they were matched
-// stays theirs.
+// RemoveMatchOffer stops matching for personID.
 func (s *Service) RemoveMatchOffer(ctx context.Context, householdID, personID, actorID int64) error {
 	return s.st.WithTx(ctx, func(q *dbq.Queries) error {
 		if err := requireAdult(ctx, q, householdID, actorID); err != nil {
@@ -377,8 +341,6 @@ func (s *Service) RemoveMatchOffer(ctx context.Context, householdID, personID, a
 	})
 }
 
-// goalMatches loads the household's match offers and what each person
-// holds from matching towards their goal, for the board and My money.
 type goalMatches struct {
 	offers map[int64]MatchOffer
 	held   map[int64]dbq.ListGoalMatchesRow
@@ -410,8 +372,6 @@ func (s *Service) loadGoalMatches(ctx context.Context, q *dbq.Queries, household
 	return gm, nil
 }
 
-// apply fills in g's match: what's been matched towards it and the offer.
-// money says whether the money module is on.
 func (gm goalMatches) apply(g *Goal, p dbq.Person, money bool) {
 	if p.Kind == "adult" {
 		return
@@ -424,7 +384,6 @@ func (gm goalMatches) apply(g *Goal, p dbq.Person, money bool) {
 		if !money {
 			o.AddPence = 0
 		}
-		// Only what this goal can be matched in.
 		if g.CostPence == 0 {
 			o.AddPence = 0
 		}
@@ -438,8 +397,6 @@ func (gm goalMatches) apply(g *Goal, p dbq.Person, money bool) {
 	g.MatchPercent = matchPercent(*g)
 }
 
-// matchPercent is how much of the bar is matched: the matched share of
-// whichever of points and money sets the bar's length.
 func matchPercent(g Goal) int {
 	if g.Waiting || g.Percent == 0 {
 		return 0
@@ -452,7 +409,6 @@ func matchPercent(g Goal) int {
 	}
 	switch {
 	case g.CostPoints > 0 && g.CostPence > 0:
-		// The slower of the two sets the length.
 		if g.HavePoints*100/g.CostPoints <= g.HavePence*100/g.CostPence {
 			return share(g.MatchedPoints, g.HavePoints)
 		}

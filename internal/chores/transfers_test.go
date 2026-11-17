@@ -12,17 +12,15 @@ import (
 func TestTransferApproved(t *testing.T) {
 	f := newFixture(t)
 	ctx := t.Context()
-	f.earn(f.kid, 20, 800) // 20 pts, £8.00
+	f.earn(f.kid, 20, 800)
 
 	req, err := f.svc.RequestTransfer(ctx, f.hh, f.kid.ID, 500)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The £5.00 is held: £3.00 left to spend.
 	if s := f.summary(f.kid); s.Pence != 300 || s.HeldPence != 500 || s.Waiting != 0 || s.Points != 20 {
 		t.Errorf("summary while waiting = %+v", s)
 	}
-	// So a £4.00 reward can't be claimed, and nor can another request.
 	toy := f.reward("Toy", 0, 400)
 	if _, err := f.svc.ClaimReward(ctx, f.hh, toy.ID, f.kid.ID, nil); !errors.Is(err, ErrInsufficientBalance) {
 		t.Errorf("claim while held = %v, want ErrInsufficientBalance", err)
@@ -47,7 +45,6 @@ func TestTransferApproved(t *testing.T) {
 	if err := f.svc.ApproveTransfer(ctx, f.hh, req.ID, f.adult.ID); !errors.Is(err, ErrNotPending) {
 		t.Errorf("approved twice = %v, want ErrNotPending", err)
 	}
-	// One payout, linked, and the balance is £3.00 with nothing held.
 	if s := f.summary(f.kid); s.Pence != 300 || s.HeldPence != 0 {
 		t.Errorf("summary after approval = %+v", s)
 	}
@@ -95,7 +92,6 @@ func TestTransferDeclinedAndCancelled(t *testing.T) {
 		t.Errorf("bank status after decline = %+v, %v", b, err)
 	}
 
-	// Asking again hides the old reason; only they can cancel it.
 	req, err = f.svc.RequestTransfer(ctx, f.hh, f.kid.ID, 250)
 	if err != nil {
 		t.Fatal(err)
@@ -130,7 +126,6 @@ func TestTransferRefused(t *testing.T) {
 			t.Errorf("pay out %dp = %v, want ErrInsufficientBalance", pence, err)
 		}
 	}
-	// A waiting reward claim holds its pence too.
 	toy := f.reward("Toy", 0, 200)
 	if _, err := f.svc.ClaimReward(ctx, f.hh, toy.ID, f.kid.ID, nil); err != nil {
 		t.Fatal(err)
@@ -168,7 +163,6 @@ func TestPayOut(t *testing.T) {
 	f.wantActivity("transfer.paid")
 }
 
-// wantActivity checks the transfer activity logged, oldest first.
 func (f *fixture) wantActivity(want ...string) {
 	f.t.Helper()
 	acts, err := f.st.Q.ListRecentActivity(f.t.Context(), dbq.ListRecentActivityParams{HouseholdID: f.hh, Limit: 50})

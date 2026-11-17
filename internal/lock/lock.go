@@ -1,9 +1,4 @@
-// Package lock locks the household displays when the house is empty, so
-// names, chores and calendar events aren't on show. The state is
-// household-wide and kept in the database; a lock comes from the board's
-// lock button, an adult's phone, the weekly schedule or a long idle, and a
-// locked display shows only photos and the clock until someone enters the
-// household code or an adult PIN.
+// Package lock locks the household displays when the house is empty, so names, chores and calendar events aren't on show.
 package lock
 
 import (
@@ -21,30 +16,29 @@ import (
 
 // Why the displays were locked.
 const (
-	Manual   = "manual"   // the lock button on a display
-	Remote   = "remote"   // an adult on their phone
-	Schedule = "schedule" // the weekly schedule
-	Idle     = "idle"     // nobody touched a display for LockIdleHours
+	Manual   = "manual"
+	Remote   = "remote"
+	Schedule = "schedule"
+	Idle     = "idle"
 )
 
 // How the displays were unlocked.
 const (
-	ByCode     = "code"     // the household code on a display
-	ByPIN      = "pin"      // an adult's PIN on a display
-	ByPhone    = "phone"    // an adult on their phone
-	BySchedule = "schedule" // the schedule window ended
+	ByCode     = "code"
+	ByPIN      = "pin"
+	ByPhone    = "phone"
+	BySchedule = "schedule"
 )
 
 // State is whether a household's displays are locked.
 type State struct {
 	Locked bool
 	Reason string
-	By     *int64 // who locked it, if a person did
+	By     *int64
 	Since  time.Time
 }
 
-// EndSessions ends adult (PIN) sessions on every display, so admin can't be
-// left open behind the lock. auth.Service.EndDisplaySessions fits.
+// EndSessions ends adult (PIN) sessions on every display.
 type EndSessions func(ctx context.Context, householdID int64) error
 
 // Service reads and changes the lock state.
@@ -69,8 +63,7 @@ func New(st *store.Store, set *settings.Service, end EndSessions) *Service {
 	}
 }
 
-// SetClock replaces the clock (tests). Idle time counts from the first
-// reading of the new clock.
+// SetClock replaces the clock (tests).
 func (s *Service) SetClock(now func() time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -78,12 +71,10 @@ func (s *Service) SetClock(now func() time.Time) {
 	s.started = now()
 }
 
-// OnChange registers fn to be called after every lock and unlock (the
-// server uses it to tell open pages).
+// OnChange registers fn to be called after every lock and unlock.
 func (s *Service) OnChange(fn func(householdID int64)) { s.onChange = fn }
 
-// State returns the household's lock state. It is cached, since every
-// display request checks it.
+// State returns the household's lock state.
 func (s *Service) State(ctx context.Context, householdID int64) (State, error) {
 	s.mu.Lock()
 	st, ok := s.cache[householdID]
@@ -129,9 +120,7 @@ func (s *Service) idleSince(householdID int64) time.Time {
 	return s.started
 }
 
-// Lock locks the displays. by is the adult who locked it (nil for the
-// schedule, idle, or the lock button on a display). Locking an already
-// locked household does nothing.
+// Lock locks the displays.
 func (s *Service) Lock(ctx context.Context, householdID int64, by *int64, reason string) error {
 	return s.change(ctx, householdID, func(row *dbq.HouseholdLock) (string, bool) {
 		if row.Locked == 1 {
@@ -148,9 +137,7 @@ func (s *Service) Lock(ctx context.Context, householdID int64, by *int64, reason
 	}, by)
 }
 
-// Unlock unlocks the displays. by is the adult who unlocked (nil for the
-// household code or the schedule). Unlocking an unlocked household does
-// nothing.
+// Unlock unlocks the displays.
 func (s *Service) Unlock(ctx context.Context, householdID int64, by *int64, how string) error {
 	err := s.change(ctx, householdID, func(row *dbq.HouseholdLock) (string, bool) {
 		if row.Locked == 0 {
@@ -166,14 +153,11 @@ func (s *Service) Unlock(ctx context.Context, householdID int64, by *int64, how 
 		return "board.unlocked", true
 	}, by)
 	if err == nil {
-		// Someone's home (or the schedule ended): the idle clock restarts.
 		s.Touch(householdID)
 	}
 	return err
 }
 
-// change applies edit to the lock row in a transaction and logs verb. If
-// edit reports no change nothing is written.
 func (s *Service) change(ctx context.Context, householdID int64, edit func(*dbq.HouseholdLock) (verb string, changed bool), actor *int64) error {
 	now := s.now()
 	changed := false
@@ -217,8 +201,7 @@ func (s *Service) write(ctx context.Context, q *dbq.Queries, row dbq.HouseholdLo
 	return nil
 }
 
-// Invalidate drops the cached lock state, e.g. after the rows were
-// deleted.
+// Invalidate drops the cached lock state, e.g. after the rows were deleted.
 func (s *Service) Invalidate(householdID int64) {
 	s.mu.Lock()
 	delete(s.cache, householdID)
@@ -226,12 +209,6 @@ func (s *Service) Invalidate(householdID int64) {
 }
 
 // Tick applies the schedule and the idle lock; call it every minute.
-//
-// When a schedule window starts the displays lock (unless already locked)
-// and the window is marked as applied, so unlocking early holds until the
-// next window and a restart doesn't re-lock. When the window ends the
-// displays unlock, but only if the schedule locked them. The idle lock
-// fires once no display has been used for LockIdleHours.
 func (s *Service) Tick(ctx context.Context, householdID int64) error {
 	set, err := s.set.Get(ctx, householdID)
 	if err != nil {
@@ -257,7 +234,6 @@ func (s *Service) Tick(ctx context.Context, householdID int64) error {
 		}
 	}
 	if idle := set.LockIdle(); idle > 0 && now.Sub(s.idleSince(householdID)) >= idle {
-		// Lock is a no-op if already locked.
 		return s.Lock(ctx, householdID, nil, Idle)
 	}
 	return nil

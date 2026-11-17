@@ -24,10 +24,8 @@ func TestBoardDay(t *testing.T) {
 		{time.Date(2026, 7, 1, 3, 59, 0, 0, london), "2026-06-30"},
 		{time.Date(2026, 7, 1, 4, 0, 0, 0, london), "2026-07-01"},
 		{time.Date(2026, 7, 1, 23, 59, 0, 0, london), "2026-07-01"},
-		// 25 Oct 2026, clocks go back at 02:00 BST: 03:30 GMT is before reset.
 		{time.Date(2026, 10, 25, 3, 30, 0, 0, london), "2026-10-24"},
 		{time.Date(2026, 10, 25, 4, 30, 0, 0, london), "2026-10-25"},
-		// Input in UTC is converted: 02:30 UTC on 1 July is 03:30 BST.
 		{time.Date(2026, 7, 1, 2, 30, 0, 0, time.UTC), "2026-06-30"},
 	}
 	for _, tt := range tests {
@@ -58,7 +56,6 @@ func TestServiceUpdate(t *testing.T) {
 	if err := svc.Ensure(ctx, h.ID, london); err != nil {
 		t.Fatal(err)
 	}
-	// Ensure doesn't override a stored timezone.
 	if err := svc.Ensure(ctx, h.ID, time.UTC); err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +100,6 @@ func TestLockWindow(t *testing.T) {
 	}
 	at := func(d, hh, mm int) time.Time { return time.Date(2026, 10, d, hh, mm, 0, 0, london) }
 	const weekdays = 0b0111110
-	// 2026-10-23 is a Friday; the clocks go back at 02:00 on Sunday 25th.
 	for _, tc := range []struct {
 		name       string
 		s          Settings

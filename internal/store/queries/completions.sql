@@ -17,8 +17,6 @@ WHERE household_id = ? AND status = 'pending'
 ORDER BY completed_at;
 
 -- name: ListLiveCompletionsForRange :many
--- The live (pending or approved) completion for each occurrence due in
--- [from_date, to_date] (or whose window overlaps it), for the board.
 SELECT c.id, c.occurrence_id, c.person_id, c.for_person_id, c.completed_at, c.status
 FROM completions c
 JOIN chore_occurrences o ON o.id = c.occurrence_id
@@ -31,15 +29,11 @@ WHERE c.household_id = sqlc.arg(household_id)
 DELETE FROM completions WHERE household_id = ? AND id = ?;
 
 -- name: ReverseCompletion :execrows
--- An adult takes back an approved completion; the ledger is corrected with a
--- separate adjustment entry.
 UPDATE completions
 SET status = 'rejected', reviewed_by = sqlc.arg(reviewed_by), reviewed_at = sqlc.arg(reviewed_at)
 WHERE household_id = sqlc.arg(household_id) AND id = sqlc.arg(id) AND status = 'approved';
 
 -- name: ListCompletionDetails :many
--- Completions for adults to review: every pending one, plus anything
--- completed since since_unix. Pending first, then newest first.
 SELECT
     c.id, c.occurrence_id, c.person_id, c.completed_at, c.status, c.reviewed_at, c.points, c.pence,
     p.name AS person_name, p.colour AS person_colour, p.avatar AS person_avatar,

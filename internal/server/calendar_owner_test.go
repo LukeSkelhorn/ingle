@@ -8,8 +8,6 @@ import (
 	"testing"
 )
 
-// A calendar can be one person's: their events show in their colour, with
-// their avatar, on the board calendar and the screensaver.
 func TestCalendarOwner(t *testing.T) {
 	h, wall, phone := boardHousehold(t)
 	alfie, isla := h.person("Alfie"), h.person("Isla")
@@ -17,7 +15,6 @@ func TestCalendarOwner(t *testing.T) {
 		"BEGIN:VEVENT\r\nUID:1\r\nDTSTART;TZID=Europe/London:20260701T090000\r\nDTEND;TZID=Europe/London:20260701T100000\r\nSUMMARY:Swimming\r\nEND:VEVENT\r\n" +
 		"END:VCALENDAR\r\n")
 
-	// The add form offers the family and each person; the owner is checked.
 	expect(t, phone.get("/admin/calendars"), http.StatusOK, "Whose is it?", `<option value="">The family</option>`,
 		`<option value="`+itoa(alfie.ID)+`">Alfie</option>`)
 	expect(t, phone.post("/admin/calendars", url.Values{"name": {"Swim club"}, "url": {h.ics.URL + "/a.ics"}, "person": {"999999"}}),
@@ -25,7 +22,6 @@ func TestCalendarOwner(t *testing.T) {
 	r := phone.post("/admin/calendars", url.Values{"name": {"Swim club"}, "url": {h.ics.URL + "/a.ics"}, "person": {itoa(alfie.ID)}})
 	expect(t, r, http.StatusOK, "Swim club added.", "Alfie's ·")
 
-	// Alfie's colour and avatar on the board calendar and screensaver.
 	expect(t, wall.get("/board/calendar"), http.StatusOK,
 		`style="--item: `+alfie.Colour+`" hx-get="/board/calendar/event?`,
 		`<span class="cal-item__title">Swimming</span> <span class="cal-item__who" title="Alfie's calendar">`)
@@ -38,12 +34,10 @@ func TestCalendarOwner(t *testing.T) {
 	}
 	edit := "/admin/calendars/" + id[1] + "/edit"
 
-	// A bad edit shows that form open, with what was typed.
 	r = phone.post(edit, url.Values{"name": {""}, "person": {itoa(isla.ID)}})
 	expect(t, r, http.StatusUnprocessableEntity, `<details class="feed-edit" open>`, "Enter a name (up to 50 characters).",
 		`<option value="`+itoa(isla.ID)+`" selected>Isla</option>`)
 
-	// Isla's now, then the family's.
 	expect(t, phone.post(edit, url.Values{"name": {"Swimming"}, "person": {itoa(isla.ID)}}), http.StatusOK, "Swimming saved.", "Isla's ·")
 	expect(t, wall.get("/board/calendar"), http.StatusOK, `style="--item: `+isla.Colour+`" hx-get="/board/calendar/event?`)
 	r = phone.post(edit, url.Values{"name": {"Swimming"}, "person": {""}})
@@ -55,7 +49,6 @@ func TestCalendarOwner(t *testing.T) {
 	expectNot(t, wall.get("/screensaver"), `<li class="saver__event"><span class="avatar`)
 	expect(t, phone.get("/admin"), http.StatusOK, "edited a calendar")
 
-	// Archiving Isla hands her calendar back to the family.
 	expect(t, phone.post(edit, url.Values{"name": {"Swimming"}, "person": {itoa(isla.ID)}}), http.StatusOK, "Swimming saved.")
 	expectRedirect(t, phone.post("/admin/people/"+itoa(isla.ID)+"/archive", nil), "/admin/people")
 	expect(t, phone.get("/admin/calendars"), http.StatusOK, "Family ·")
@@ -67,10 +60,8 @@ func TestCalendarOwner(t *testing.T) {
 func TestTenancyCalendarOwner(t *testing.T) {
 	x := newTwoHouseholds(t)
 	x.h.setICS("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\nEND:VCALENDAR\r\n")
-	// A can't give a calendar to B's person…
 	expect(t, x.aW.post("/admin/calendars", url.Values{"name": {"Work"}, "url": {x.h.ics.URL + "/a.ics"}, "person": {itoa(x.beaID)}}),
 		http.StatusUnprocessableEntity, "Choose someone in the household, or the family.")
-	// …or edit B's calendar.
 	expect(t, x.bW.post("/admin/calendars", url.Values{"name": {"Work"}, "url": {x.h.ics.URL + "/b.ics"}}), http.StatusOK, "Work added.")
 	id := regexp.MustCompile(`/admin/calendars/(\d+)/edit`).FindStringSubmatch(x.bW.get("/admin/calendars").body)
 	if id == nil {

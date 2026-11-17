@@ -14,10 +14,6 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/store/storetest"
 )
 
-// TestSchemaParity checks that the Postgres schema has the same tables and
-// columns, in the same order and of matching types, as SQLite's. sqlc
-// generates the queries from the SQLite schema, so a migration added for one
-// engine but not the other fails here. It runs with task test:pg.
 func TestSchemaParity(t *testing.T) {
 	base := os.Getenv(storetest.EnvPG)
 	if base == "" {
@@ -60,7 +56,6 @@ func keys(ms ...map[string][]string) func(func(string) bool) {
 	}
 }
 
-// Each column is "name:kind", kind being int, text or blob.
 func sqliteColumns(t *testing.T, ctx context.Context, db *sql.DB) map[string][]string {
 	t.Helper()
 	rows, err := db.QueryContext(ctx, `

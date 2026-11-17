@@ -45,8 +45,7 @@
     <button class="btn btn--primary" type="submit">{{if .Data.ID}}Save{{else}}Add reward{{end}}</button>
   </form>
   <script>
-    // Adults have no money, so a reward that costs money is only for
-    // children: adults can't be ticked for it.
+    // A reward that costs money is only for children: adults have no money.
     (function () {
       var money = document.querySelector('[name="money"]');
       if (!money) return;

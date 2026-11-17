@@ -1,5 +1,4 @@
 -- +goose Up
--- See migrations/sqlite/00020_household_keys.sql.
 CREATE TABLE household_keys (
     household_id bigint PRIMARY KEY REFERENCES households (id) ON DELETE CASCADE,
     wrapped_key  bytea  NOT NULL,

@@ -1,10 +1,6 @@
 -- +goose NO TRANSACTION
 -- +goose Up
--- Shared chores: mode 'shared' is done once by any of a few chosen people,
--- listed in chore_people. SQLite can't change a CHECK constraint in place, so
--- chores is rebuilt. Foreign keys are off for the swap so dropping the old
--- table doesn't cascade to its occurrences (the database has one connection,
--- so the pragma applies to these statements).
+-- FKs off so dropping the old table doesn't cascade (one connection, so the pragma applies).
 PRAGMA foreign_keys = OFF;
 BEGIN;
 CREATE TABLE chores_new (

@@ -28,14 +28,11 @@ ORDER BY requested_at;
 SELECT * FROM redemptions WHERE household_id = ? AND id = ?;
 
 -- name: ReviewRedemption :execrows
--- Settle a waiting claim. Only a pending claim changes, so two adults
--- tapping at once can't both act on it.
 UPDATE redemptions
 SET status = sqlc.arg(status), reviewed_by = sqlc.arg(reviewed_by), reviewed_at = sqlc.arg(reviewed_at)
 WHERE household_id = sqlc.arg(household_id) AND id = sqlc.arg(id) AND status = 'pending';
 
 -- name: ListPendingRedemptionDetails :many
--- Waiting claims with who and what, oldest first.
 SELECT
     d.id, d.reward_id, d.person_id, d.points, d.pence, d.status, d.requested_at,
     p.name AS person_name, p.colour AS person_colour, p.avatar AS person_avatar,
@@ -57,8 +54,6 @@ JOIN rewards r ON r.id = d.reward_id
 WHERE d.household_id = sqlc.arg(household_id) AND d.id = sqlc.arg(id);
 
 -- name: HeldForPerson :one
--- What a person's waiting reward claims and bank requests hold back from
--- their balance. waiting counts the reward claims only.
 SELECT
     CAST(COALESCE(SUM(points), 0) AS INTEGER) AS points,
     CAST(COALESCE(SUM(pence), 0) AS INTEGER) AS pence,
@@ -72,7 +67,6 @@ FROM (
 );
 
 -- name: HeldForHousehold :many
--- HeldForPerson for everyone.
 SELECT
     person_id,
     CAST(COALESCE(SUM(points), 0) AS INTEGER) AS points,
@@ -101,8 +95,6 @@ ORDER BY title;
 UPDATE rewards SET archived_at = NULL WHERE household_id = ? AND id = ?;
 
 -- name: ListGoals :many
--- What each active person is saving for (never an archived reward, or one
--- they may not have), and whether they've already asked for it.
 SELECT
     p.id AS person_id, CAST(p.goal_set_at AS INTEGER) AS set_at,
     r.id, r.title, r.emoji, r.cost_points, r.cost_pence,
@@ -119,7 +111,6 @@ WHERE p.household_id = ? AND p.archived_at IS NULL AND r.archived_at IS NULL
   AND (r.cost_pence = 0 OR p.kind <> 'adult');
 
 -- name: ListPendingRedemptionsForPerson :many
--- A person's waiting claims, newest first, with what they're for.
 SELECT d.id, d.points, d.pence, d.requested_at, r.title, r.emoji
 FROM redemptions d
 JOIN rewards r ON r.id = d.reward_id
@@ -127,10 +118,6 @@ WHERE d.household_id = sqlc.arg(household_id) AND d.person_id = sqlc.arg(person_
 ORDER BY d.requested_at DESC, d.id DESC;
 
 -- name: ListRewardsForPerson :many
--- The active rewards a person may have, ordered like ListRewards. A person
--- may have a reward when it's for everyone or they're one of its people,
--- and (as adults have no money) it costs no money or they aren't an adult.
--- RewardAllowed, ClearGoalsNotAllowed and ListGoals apply the same rule.
 SELECT * FROM rewards r
 WHERE r.household_id = sqlc.arg(household_id) AND r.archived_at IS NULL
   AND (r.everyone = 1 OR EXISTS (
@@ -141,7 +128,6 @@ WHERE r.household_id = sqlc.arg(household_id) AND r.archived_at IS NULL
 ORDER BY r.cost_points, r.cost_pence, r.title;
 
 -- name: RewardAllowed :one
--- 1 if a person may have the reward, else 0.
 SELECT CAST(EXISTS (
     SELECT 1 FROM rewards r JOIN people p ON p.household_id = r.household_id
     WHERE r.household_id = sqlc.arg(household_id) AND r.id = sqlc.arg(reward_id) AND p.id = sqlc.arg(person_id)
@@ -151,8 +137,6 @@ SELECT CAST(EXISTS (
 ) AS INTEGER) AS allowed;
 
 -- name: ClearGoalsNotAllowed :exec
--- After a reward changes, anyone saving for it who may no longer have it
--- stops.
 UPDATE people SET goal_reward_id = NULL, goal_set_at = NULL
 WHERE people.household_id = sqlc.arg(household_id) AND people.goal_reward_id = sqlc.arg(reward_id)
   AND NOT EXISTS (
@@ -166,7 +150,6 @@ WHERE people.household_id = sqlc.arg(household_id) AND people.goal_reward_id = s
 UPDATE rewards SET everyone = ? WHERE household_id = ? AND id = ?;
 
 -- name: ListPeopleForReward :many
--- A reward's chosen people who are still active, in board order.
 SELECT rp.person_id
 FROM reward_people rp
 JOIN people p ON p.id = rp.person_id
@@ -174,7 +157,6 @@ WHERE rp.household_id = ? AND rp.reward_id = ? AND p.archived_at IS NULL
 ORDER BY p.sort_order, p.id;
 
 -- name: ListRewardPeople :many
--- Every reward's chosen people who are still active, in board order.
 SELECT rp.reward_id, rp.person_id
 FROM reward_people rp
 JOIN people p ON p.id = rp.person_id

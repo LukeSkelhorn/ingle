@@ -21,7 +21,6 @@ func TestReverseApproved(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Well past the kid's undo window, but within the adult's.
 	base := f.svc.now()
 	f.svc.now = func() time.Time { return base.Add(3 * 24 * time.Hour) }
 	if err := f.svc.Reverse(ctx, f.hh, c.ID, f.kid2.ID); !errors.Is(err, ErrNotAdult) {
@@ -41,7 +40,6 @@ func TestReverseApproved(t *testing.T) {
 	if got.Status != StatusRejected || got.ReviewedBy == nil || *got.ReviewedBy != f.adult.ID {
 		t.Errorf("completion = %+v, want rejected by Mum", got)
 	}
-	// The original credit stays; a compensating adjustment sits beside it.
 	var credits, adjustments int
 	if err := f.st.SQL().QueryRowContext(ctx,
 		`SELECT
@@ -64,7 +62,6 @@ func TestReverseApproved(t *testing.T) {
 		t.Errorf("Undo after Reverse = %v, want ErrUndoExpired", err)
 	}
 
-	// It can be done again, and counts again.
 	if _, err := f.svc.Complete(ctx, f.hh, occ.ID, f.kid.ID); err != nil {
 		t.Fatalf("Complete again: %v", err)
 	}
@@ -166,7 +163,6 @@ func TestCompletionsList(t *testing.T) {
 	complete("Checked", f.kid2, base.Add(time.Hour))
 	complete("New", f.kid, base.Add(2*time.Hour))
 
-	// A week and an hour on: "Old" has aged out, pending always stays.
 	f.svc.now = func() time.Time { return base.Add(ReverseWindow + time.Hour) }
 	got, err := f.svc.Completions(ctx, f.hh)
 	if err != nil {

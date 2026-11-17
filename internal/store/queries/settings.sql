@@ -19,6 +19,5 @@ RETURNING *;
 UPDATE household_settings SET unlock_code_hash = ?, unlock_code_length = ?, updated_at = ? WHERE household_id = ?;
 
 -- name: LearnUnlockCodeLength :exec
--- Records an older household code's length the first time it unlocks.
 UPDATE household_settings SET unlock_code_length = ?
 WHERE household_id = ? AND unlock_code_hash IS NOT NULL AND unlock_code_length IS NULL;

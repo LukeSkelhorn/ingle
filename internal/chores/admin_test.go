@@ -32,7 +32,7 @@ func TestCreateChoreValidation(t *testing.T) {
 func TestUpdateChoreReplacesOpenOccurrences(t *testing.T) {
 	f := newFixture(t)
 	ctx := t.Context()
-	day := f.svc.now() // Mon 2 Nov 2026
+	day := f.svc.now()
 	kid := f.kid.ID
 	c, err := f.svc.CreateChore(ctx, f.hh, f.adult.ID, Input{
 		Title: "Bins", Mode: ModePool,
@@ -46,7 +46,6 @@ func TestUpdateChoreReplacesOpenOccurrences(t *testing.T) {
 	if got := dueDates(rows); !slices.Equal(got, []string{"2026-11-02", "2026-11-05", "2026-11-09", "2026-11-12"}) {
 		t.Fatalf("initial dates %v", got)
 	}
-	// Alfie claims Thursday 5th; Isla completes Monday 9th.
 	if err := f.svc.Claim(ctx, f.hh, rows[1].ID, kid); err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +53,6 @@ func TestUpdateChoreReplacesOpenOccurrences(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Move to Tuesdays only.
 	if _, err := f.svc.UpdateChore(ctx, f.hh, f.adult.ID, c.ID, Input{
 		Title: "Bins", Mode: ModePool,
 		Repeat:   Recurrence{Kind: RepeatWeekly, Days: []time.Weekday{time.Tuesday}},
@@ -63,13 +61,10 @@ func TestUpdateChoreReplacesOpenOccurrences(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := dueDates(f.board("2026-11-02", "2026-11-15"))
-	// Claimed Thu 5 and done Mon 9 are kept; open Mon 2 and Thu 12 go;
-	// Tuesdays 3 and 10 are added.
 	if want := []string{"2026-11-03", "2026-11-05", "2026-11-09", "2026-11-10"}; !slices.Equal(got, want) {
 		t.Errorf("after edit %v, want %v", got, want)
 	}
 
-	// Archive drops the open ones.
 	if err := f.svc.ArchiveChore(ctx, f.hh, f.adult.ID, c.ID, day); err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +117,7 @@ func TestMovingOverdueOneOff(t *testing.T) {
 func TestChoreDayMode(t *testing.T) {
 	f := newFixture(t)
 	ctx := t.Context()
-	day := f.svc.now() // Mon 2 Nov 2026
+	day := f.svc.now()
 	tueThu := Recurrence{Kind: RepeatWeekly, Days: []time.Weekday{time.Tuesday, time.Thursday}}
 	in := Input{Title: "Stairs", Mode: ModePool, Repeat: tueThu, StartsOn: "2026-11-02"}
 
@@ -137,7 +132,6 @@ func TestChoreDayMode(t *testing.T) {
 		t.Fatalf("each rows = %v", got)
 	}
 
-	// Switching to any re-materialises one row a week.
 	in.DayMode = DayAny
 	if c, err = f.svc.UpdateChore(ctx, f.hh, f.adult.ID, c.ID, in, day); err != nil {
 		t.Fatal(err)
@@ -149,7 +143,6 @@ func TestChoreDayMode(t *testing.T) {
 		t.Fatalf("any rows = %v", got)
 	}
 
-	// Edited on Wednesday: this week starts fresh from Wednesday.
 	wed := time.Date(2026, 11, 4, 0, 0, 0, 0, london)
 	in.Points = 3
 	if _, err = f.svc.UpdateChore(ctx, f.hh, f.adult.ID, c.ID, in, wed); err != nil {
@@ -159,7 +152,6 @@ func TestChoreDayMode(t *testing.T) {
 		t.Errorf("after mid-week edit = %v", got)
 	}
 
-	// Daily and monthly have no days to choose between: stored as each.
 	in.Repeat = Recurrence{Kind: RepeatDaily}
 	if c, err = f.svc.UpdateChore(ctx, f.hh, f.adult.ID, c.ID, in, day); err != nil {
 		t.Fatal(err)

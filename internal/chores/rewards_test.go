@@ -55,7 +55,6 @@ func TestClaimHoldsUntilApproved(t *testing.T) {
 	screen := f.reward("Screen time", 30, 0)
 	comic := f.reward("Comic", 0, 150)
 
-	// Two of the same reward is fine while they can afford both.
 	a, err := f.svc.ClaimReward(ctx, f.hh, screen.ID, f.kid.ID, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -74,11 +73,9 @@ func TestClaimHoldsUntilApproved(t *testing.T) {
 	if s.WeekPoints != 70 {
 		t.Errorf("this week = %d, want 70 (claims aren't earnings)", s.WeekPoints)
 	}
-	// The third would spend held points.
 	if _, err := f.svc.ClaimReward(ctx, f.hh, screen.ID, f.kid.ID, nil); !errors.Is(err, ErrInsufficientBalance) {
 		t.Errorf("third claim: err = %v, want ErrInsufficientBalance", err)
 	}
-	// Money counts separately.
 	if _, err := f.svc.ClaimReward(ctx, f.hh, comic.ID, f.kid.ID, nil); !errors.Is(err, ErrInsufficientBalance) {
 		t.Errorf("comic: err = %v, want ErrInsufficientBalance", err)
 	}
@@ -86,7 +83,6 @@ func TestClaimHoldsUntilApproved(t *testing.T) {
 		t.Errorf("ledger has %d redemption rows before approval", n)
 	}
 
-	// Only an adult approves.
 	if err := f.svc.ApproveRedemption(ctx, f.hh, a.ID, f.kid2.ID); !errors.Is(err, ErrNotAdult) {
 		t.Errorf("child approving: err = %v, want ErrNotAdult", err)
 	}
@@ -103,7 +99,6 @@ func TestClaimHoldsUntilApproved(t *testing.T) {
 		t.Errorf("ledger has %d redemption rows, want 1", n)
 	}
 
-	// Declining lets the hold go, and touches nothing else.
 	if err := f.svc.DeclineRedemption(ctx, f.hh, b.ID, f.kid.ID); !errors.Is(err, ErrNotAdult) {
 		t.Errorf("child declining: err = %v, want ErrNotAdult", err)
 	}
@@ -230,7 +225,6 @@ func TestPendingRedemptions(t *testing.T) {
 	}
 }
 
-// verbs is the activity feed, newest first.
 func (f *fixture) verbs() []string {
 	f.t.Helper()
 	acts, err := f.st.Q.ListRecentActivity(f.t.Context(), dbq.ListRecentActivityParams{HouseholdID: f.hh, Limit: 20})

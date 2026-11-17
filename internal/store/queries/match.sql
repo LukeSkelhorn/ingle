@@ -2,8 +2,6 @@
 SELECT * FROM match_offers WHERE household_id = ? AND person_id = ?;
 
 -- name: ListMatchOffers :many
--- Every match offer in a household, with the name of the adult who set
--- each one up.
 SELECT m.*, CAST(p.name AS TEXT) AS set_by_name
 FROM match_offers m
 JOIN people p ON p.id = m.set_by
@@ -28,8 +26,6 @@ INSERT INTO match_entries (
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: MatchHeldForPerson :one
--- What a person still holds from matching, all told: matches less what was
--- taken back. The cap counts this.
 SELECT
     CAST(COALESCE(SUM(points), 0) AS INTEGER) AS points,
     CAST(COALESCE(SUM(pence), 0) AS INTEGER) AS pence
@@ -37,7 +33,6 @@ FROM match_entries
 WHERE household_id = ? AND person_id = ?;
 
 -- name: MatchForGoal :one
--- What a person holds from matching towards one goal.
 SELECT
     CAST(COALESCE(SUM(points), 0) AS INTEGER) AS points,
     CAST(COALESCE(SUM(pence), 0) AS INTEGER) AS pence
@@ -46,8 +41,6 @@ WHERE household_id = sqlc.arg(household_id) AND person_id = sqlc.arg(person_id)
   AND reward_id = sqlc.arg(reward_id) AND goal_set_at = sqlc.arg(goal_set_at);
 
 -- name: ListGoalMatches :many
--- What each active person holds from matching towards the goal they have
--- now.
 SELECT
     m.person_id,
     CAST(COALESCE(SUM(m.points), 0) AS INTEGER) AS points,
@@ -59,8 +52,6 @@ WHERE m.household_id = ? AND p.archived_at IS NULL
 GROUP BY m.person_id;
 
 -- name: MatchForCompletion :one
--- The match a chore earned, less any taken back with it, and the goal it
--- was towards.
 SELECT
     CAST(COALESCE(SUM(points), 0) AS INTEGER) AS points,
     CAST(COALESCE(SUM(pence), 0) AS INTEGER) AS pence,
@@ -70,8 +61,6 @@ FROM match_entries
 WHERE household_id = ? AND completion_id = ?;
 
 -- name: DeleteMatchForCompletion :exec
--- Undoing a chore removes its match. match_entries rows go with their
--- ledger entries.
 DELETE FROM ledger_entries
 WHERE ledger_entries.household_id = sqlc.arg(household_id) AND ledger_entries.kind = 'match'
   AND ledger_entries.id IN (
@@ -79,8 +68,6 @@ WHERE ledger_entries.household_id = sqlc.arg(household_id) AND ledger_entries.ki
     WHERE me.household_id = sqlc.arg(household_id) AND me.completion_id = sqlc.arg(completion_id));
 
 -- name: MoveGoalMatch :exec
--- Picking the same goal again starts it afresh (goal_set_at changes); what
--- was matched towards it moves with it.
 UPDATE match_entries SET goal_set_at = sqlc.arg(new_set_at)
 WHERE household_id = sqlc.arg(household_id) AND person_id = sqlc.arg(person_id)
   AND reward_id = sqlc.arg(reward_id) AND goal_set_at = sqlc.arg(old_set_at);

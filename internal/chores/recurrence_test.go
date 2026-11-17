@@ -67,12 +67,12 @@ func TestRecurrenceErrors(t *testing.T) {
 
 func TestParseCustomRecurrence(t *testing.T) {
 	for _, rule := range []string{
-		"FREQ=WEEKLY;BYDAY=TH,MO",         // non-canonical order
-		"FREQ=DAILY;COUNT=5",              // extra part
-		"FREQ=WEEKLY;INTERVAL=3;BYDAY=MO", // not fortnightly
-		"FREQ=MONTHLY;BYDAY=1MO",          // first Monday
-		"FREQ=YEARLY",                     // no preset
-		"FREQ=MONTHLY;BYMONTHDAY=31",      // outside picker
+		"FREQ=WEEKLY;BYDAY=TH,MO",
+		"FREQ=DAILY;COUNT=5",
+		"FREQ=WEEKLY;INTERVAL=3;BYDAY=MO",
+		"FREQ=MONTHLY;BYDAY=1MO",
+		"FREQ=YEARLY",
+		"FREQ=MONTHLY;BYMONTHDAY=31",
 		"garbage",
 	} {
 		got := ParseRecurrence(&rule)

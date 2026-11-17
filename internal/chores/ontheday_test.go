@@ -8,7 +8,6 @@ import (
 	"time"
 )
 
-// at sets the fixture's clock to a London wall-clock time.
 func (f *fixture) at(day, clock string) {
 	f.t.Helper()
 	t, err := time.ParseInLocation(DateLayout+" 15:04", day+" "+clock, london)
@@ -27,7 +26,7 @@ func TestCutoff(t *testing.T) {
 		{ptr("07:00"), 0, "2026-11-02 07:00"},
 		{nil, 0, "2026-11-03 00:00"},
 		{nil, 4 * time.Hour, "2026-11-03 04:00"},
-		{ptr("02:00"), 4 * time.Hour, "2026-11-03 02:00"}, // late on the board day
+		{ptr("02:00"), 4 * time.Hour, "2026-11-03 02:00"},
 		{ptr("19:30"), 4 * time.Hour, "2026-11-02 19:30"},
 	}
 	for _, tt := range tests {
@@ -36,7 +35,6 @@ func TestCutoff(t *testing.T) {
 			t.Errorf("cutoff(%v, %v) = %v, %v; want %s", tt.dueTime, tt.dayStart, got, ok, tt.want)
 		}
 	}
-	// Clocks go back on Sun 25 Oct 2026: still 07:00 local.
 	if got, _ := cutoff("2026-10-25", ptr("07:00"), london, 0); got.Hour() != 7 {
 		t.Errorf("cutoff across DST = %v", got)
 	}
@@ -61,7 +59,6 @@ func TestOnTheDayTimed(t *testing.T) {
 		t.Errorf("NextChange = %v, want %v", b.NextChange, want)
 	}
 
-	// At 07:00 it's gone and can't be ticked; the ordinary one stays.
 	f.at("2026-11-02", "07:00")
 	b = f.boardAt("2026-11-02")
 	if _, ok := cardTitled(b.column("Alfie"), "Bins out"); ok {
@@ -77,7 +74,6 @@ func TestOnTheDayTimed(t *testing.T) {
 		t.Fatalf("late Complete = %v, want ErrTooLate", err)
 	}
 
-	// Next day: yesterday's isn't Overdue.
 	f.at("2026-11-03", "06:00")
 	b = f.boardAt("2026-11-03")
 	var bins2 int
@@ -99,7 +95,6 @@ func TestOnTheDayTimed(t *testing.T) {
 
 func TestOnTheDayWeeklyNotOverdue(t *testing.T) {
 	f := newFixture(t)
-	// Weekly on Mondays: an ordinary chore would be Overdue on Tuesday.
 	f.chore("Bins out", choreOpts{assignee: &f.kid.ID, rrule: ptr("FREQ=WEEKLY;BYDAY=MO"), onTheDay: true})
 	f.chore("Recycling", choreOpts{assignee: &f.kid.ID, rrule: ptr("FREQ=WEEKLY;BYDAY=MO")})
 
@@ -124,7 +119,6 @@ func TestOnTheDayDayStart(t *testing.T) {
 	f.svc.SetDayStart(func(_ context.Context, _ int64) time.Duration { return 4 * time.Hour })
 	f.chore("Milk bottles", choreOpts{assignee: &f.kid.ID, rrule: ptr("FREQ=WEEKLY;BYDAY=MO"), onTheDay: true, points: 2})
 
-	// 03:00 Tuesday is still Monday's board day.
 	f.at("2026-11-03", "03:00")
 	b := f.boardAt("2026-11-02")
 	milk, ok := cardTitled(b.column("Alfie"), "Milk bottles")
@@ -193,7 +187,7 @@ func TestOnTheDayFlexible(t *testing.T) {
 	f := newFixture(t)
 	f.chore("Plants", choreOpts{assignee: &f.kid.ID, rrule: ptr("FREQ=WEEKLY;BYDAY=TU,TH"), anyDay: true, dueTime: ptr("18:00"), onTheDay: true})
 
-	f.at("2026-11-03", "19:00") // Tuesday, after the time: Thursday is still to come
+	f.at("2026-11-03", "19:00")
 	b := f.boardAt("2026-11-03")
 	if c, ok := cardTitled(b.column("Alfie"), "Plants"); !ok || c.Flex == "" {
 		t.Fatalf("Tuesday evening = %+v, ok %v; want flexible card", c, ok)
@@ -232,14 +226,13 @@ func TestMissedAndMarkDone(t *testing.T) {
 	ctx := t.Context()
 	f.chore("Bins out", choreOpts{assignee: &f.kid.ID, rrule: ptr("FREQ=WEEKLY;BYDAY=MO"), dueTime: ptr("07:00"), onTheDay: true, points: 5, approval: true})
 	f.chore("Milk out", choreOpts{rrule: ptr("FREQ=WEEKLY;BYDAY=MO"), onTheDay: true, points: 2})
-	f.chore("Tidy room", choreOpts{assignee: &f.kid.ID, rrule: ptr("FREQ=WEEKLY;BYDAY=MO")}) // not on the day
+	f.chore("Tidy room", choreOpts{assignee: &f.kid.ID, rrule: ptr("FREQ=WEEKLY;BYDAY=MO")})
 	f.chore("Feed fish", choreOpts{assignee: &f.kid2.ID, rrule: ptr("FREQ=WEEKLY;BYDAY=MO"), onTheDay: true})
 	f.sharedChore("Lunchboxes", []int64{f.kid.ID, f.kid2.ID}, func(in *Input) {
 		in.Repeat = Recurrence{Kind: RepeatWeekly, Days: []time.Weekday{time.Monday}}
 		in.OnTheDay = true
 	})
 
-	// Isla feeds the fish in time.
 	f.at("2026-11-02", "06:00")
 	b := f.boardAt("2026-11-02")
 	fish, _ := cardTitled(b.column("Isla"), "Feed fish")
@@ -286,7 +279,6 @@ func TestMissedAndMarkDone(t *testing.T) {
 	if err := f.svc.MarkDone(ctx, f.hh, got["Lunchboxes"].OccurrenceID, f.adult.ID, f.adult.ID); !errors.Is(err, ErrNotYours) {
 		t.Errorf("MarkDone shared as someone not chosen = %v", err)
 	}
-	// Needs approval normally; marked by an adult it counts straight away.
 	if err := f.svc.MarkDone(ctx, f.hh, bins, f.kid.ID, f.adult.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -314,7 +306,6 @@ func TestMissedAndMarkDone(t *testing.T) {
 		t.Errorf("after marking, missed = %+v", missed)
 	}
 
-	// A week on, Monday 2nd is out of the window.
 	f.at("2026-11-09", "06:00")
 	missed, _ = f.svc.Missed(ctx, f.hh, day("2026-11-09"))
 	for _, m := range missed {
@@ -363,7 +354,6 @@ func TestDismissMissed(t *testing.T) {
 	f.at("2026-11-03", "06:00")
 	b := f.boardAt("2026-11-03")
 	todayBed, _ := cardTitled(b.column("Alfie"), "Make bed")
-	// Not late yet: can't be dismissed.
 	if _, err := f.svc.Dismiss(ctx, f.hh, f.adult.ID, []int64{todayBed.OccurrenceID}); !errors.Is(err, ErrNotMissed) {
 		t.Errorf("Dismiss before the cutoff = %v", err)
 	}
@@ -373,14 +363,13 @@ func TestDismissMissed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(missed) != 3 { // Monday's bed and milk, Tuesday's bed
+	if len(missed) != 3 {
 		t.Fatalf("missed = %+v", missed)
 	}
 	if _, err := f.svc.Dismiss(ctx, f.hh, f.kid.ID, ids(missed[:1])); !errors.Is(err, ErrNotAdult) {
 		t.Errorf("Dismiss by a child = %v", err)
 	}
 
-	// One.
 	one := missed[0].OccurrenceID
 	done, err := f.svc.Dismiss(ctx, f.hh, f.adult.ID, []int64{one})
 	if err != nil || len(done) != 1 || done[0] != one {
@@ -406,7 +395,6 @@ func TestDismissMissed(t *testing.T) {
 		t.Errorf("Restore twice = %v", err)
 	}
 
-	// All, with one marked done in the meantime: that one is skipped.
 	all, _ := f.svc.Missed(ctx, f.hh, day("2026-11-03"))
 	if len(all) != 3 {
 		t.Fatalf("after restore, missed = %+v", all)

@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// Recurrence kinds offered in the admin form.
+// Repeat presets; RepeatCustom is an RRULE that matches none of them.
 const (
 	RepeatOnce        = "once"
 	RepeatDaily       = "daily"
@@ -16,9 +16,7 @@ const (
 	RepeatWeekly      = "weekly"
 	RepeatFortnightly = "fortnightly"
 	RepeatMonthly     = "monthly"
-	// RepeatCustom is an RRULE that doesn't match a preset (e.g. written by
-	// hand in the database). It is shown read-only and kept as-is.
-	RepeatCustom = "custom"
+	RepeatCustom      = "custom"
 )
 
 // LastDayOfMonth is the MonthDay value meaning "the last day of the month".
@@ -34,9 +32,9 @@ var (
 // Recurrence is the friendly form of a chore's schedule.
 type Recurrence struct {
 	Kind     string
-	Days     []time.Weekday // weekly and fortnightly
-	MonthDay int            // monthly: 1–28 or LastDayOfMonth
-	Raw      string         // custom: the RRULE as stored
+	Days     []time.Weekday
+	MonthDay int
+	Raw      string
 }
 
 // WeekOrder lists weekdays Monday first, the UK convention.
@@ -86,9 +84,7 @@ func (r Recurrence) RRule() (*string, error) {
 	return &rule, nil
 }
 
-// ParseRecurrence maps a stored RRULE back to a preset so the edit form can
-// be prefilled. Anything that isn't exactly a preset comes back as
-// RepeatCustom with Raw set.
+// ParseRecurrence maps a stored RRULE back to a preset so the edit form can be prefilled.
 func ParseRecurrence(rule *string) Recurrence {
 	if rule == nil {
 		return Recurrence{Kind: RepeatOnce}
@@ -145,7 +141,6 @@ func ParseRecurrence(rule *string) Recurrence {
 	return custom
 }
 
-// byDay returns the BYDAY list for days in Monday-first order.
 func byDay(days []time.Weekday) string {
 	var codes []string
 	for _, d := range WeekOrder {
@@ -156,7 +151,6 @@ func byDay(days []time.Weekday) string {
 	return strings.Join(codes, ",")
 }
 
-// parseByDay accepts only plain, canonical (Monday-first, no repeats) codes.
 func parseByDay(s string) ([]time.Weekday, bool) {
 	var days []time.Weekday
 	for c := range strings.SplitSeq(s, ",") {
