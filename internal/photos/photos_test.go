@@ -28,7 +28,7 @@ type fixture struct {
 	hh    int64
 	mum   dbq.Person
 	data  string
-	photo string // the read-only folder
+	photo string
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -68,26 +68,24 @@ func jpegBytes(t *testing.T, w, h int) []byte {
 	return b.Bytes()
 }
 
-// withOrientation inserts an EXIF APP1 segment saying "rotate 90° clockwise
-// to display" (orientation 6), as phone cameras write.
 func withOrientation(t *testing.T, j []byte) []byte {
 	t.Helper()
 	var tiff bytes.Buffer
 	tiff.WriteString("MM\x00\x2a")
 	_ = binary.Write(&tiff, binary.BigEndian, uint32(8))
-	_ = binary.Write(&tiff, binary.BigEndian, uint16(1))      // one entry
-	_ = binary.Write(&tiff, binary.BigEndian, uint16(0x0112)) // Orientation
-	_ = binary.Write(&tiff, binary.BigEndian, uint16(3))      // SHORT
+	_ = binary.Write(&tiff, binary.BigEndian, uint16(1))
+	_ = binary.Write(&tiff, binary.BigEndian, uint16(0x0112))
+	_ = binary.Write(&tiff, binary.BigEndian, uint16(3))
 	_ = binary.Write(&tiff, binary.BigEndian, uint32(1))
 	_ = binary.Write(&tiff, binary.BigEndian, uint16(6))
 	_ = binary.Write(&tiff, binary.BigEndian, uint16(0))
-	_ = binary.Write(&tiff, binary.BigEndian, uint32(0)) // no next IFD
+	_ = binary.Write(&tiff, binary.BigEndian, uint32(0))
 	payload := append([]byte("Exif\x00\x00"), tiff.Bytes()...)
 	var out bytes.Buffer
 	out.Write([]byte{0xFF, 0xD8, 0xFF, 0xE1})
 	_ = binary.Write(&out, binary.BigEndian, uint16(len(payload)+2))
 	out.Write(payload)
-	out.Write(j[2:]) // the rest of the original JPEG, after its SOI
+	out.Write(j[2:])
 	return out.Bytes()
 }
 
@@ -109,7 +107,6 @@ func TestUploadAndDelete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Upload: %v", err)
 	}
-	// Rotated upright (portrait now), then scaled to fit FullSize.
 	if p.Width != 682 || p.Height != FullSize {
 		t.Errorf("size = %dx%d, want 682x%d", p.Width, p.Height, FullSize)
 	}
@@ -199,7 +196,7 @@ func TestFolder(t *testing.T) {
 	if err := f.lib.Rescan(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if n := f.lib.FolderCount(); n != 3 { // beach, garden, broken
+	if n := f.lib.FolderCount(); n != 3 {
 		t.Fatalf("FolderCount = %d, want 3", n)
 	}
 	beach := folderID(filepath.Join("Holiday", "beach.JPG"))
@@ -218,7 +215,6 @@ func TestFolder(t *testing.T) {
 	if len(cached) != 1 {
 		t.Fatalf("cache = %v", cached)
 	}
-	// Served from the cache the second time.
 	before, _ := os.Stat(cached[0])
 	fh, err = f.lib.OpenFolder(ctx, beach)
 	if err != nil {
@@ -229,7 +225,6 @@ func TestFolder(t *testing.T) {
 		t.Error("cached copy was regenerated")
 	}
 
-	// The broken file drops out of the slideshow once it fails.
 	if _, err := f.lib.OpenFolder(ctx, folderID("broken.jpg")); !errors.Is(err, ErrNotFound) {
 		t.Errorf("broken = %v, want ErrNotFound", err)
 	}
@@ -243,7 +238,6 @@ func TestFolder(t *testing.T) {
 		}
 	}
 
-	// Changing the file makes a fresh copy and drops the stale one.
 	write(t, filepath.Join(f.photo, "Holiday", "beach.JPG"), jpegBytes(t, 300, 200))
 	later := time.Now().Add(time.Hour)
 	if err := os.Chtimes(filepath.Join(f.photo, "Holiday", "beach.JPG"), later, later); err != nil {
@@ -263,7 +257,6 @@ func TestFolder(t *testing.T) {
 		t.Errorf("cache after change = %v", cached)
 	}
 
-	// Removing the file prunes its cached copy.
 	if err := os.RemoveAll(filepath.Join(f.photo, "Holiday")); err != nil {
 		t.Fatal(err)
 	}

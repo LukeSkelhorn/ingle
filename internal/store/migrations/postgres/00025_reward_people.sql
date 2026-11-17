@@ -1,5 +1,4 @@
 -- +goose Up
--- See migrations/sqlite/00025_reward_people.sql.
 ALTER TABLE rewards ADD COLUMN everyone bigint NOT NULL DEFAULT 1 CHECK (everyone IN (0, 1));
 
 CREATE TABLE reward_people (

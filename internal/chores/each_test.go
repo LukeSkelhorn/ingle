@@ -11,8 +11,6 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/valid"
 )
 
-// eachChore creates a daily "each of these people" chore worth 2 points and
-// 10p to kids and adultPoints to adults, for everyone or for people.
 func (f *fixture) eachChore(title string, everyone bool, people []int64, mut ...func(*Input)) dbq.Chore {
 	f.t.Helper()
 	in := Input{
@@ -30,7 +28,6 @@ func (f *fixture) eachChore(title string, everyone bool, people []int64, mut ...
 	return c
 }
 
-// cardsTitled is a column's cards with the given title.
 func cardsTitled(c Column, title string) []Card {
 	var out []Card
 	for _, k := range c.Cards {
@@ -58,7 +55,6 @@ func TestEachChoreValidation(t *testing.T) {
 		t.Errorf("negative adult points: err = %v, want an adult_points error", err)
 	}
 
-	// One person stays an "each" chore (it keeps its adults' points).
 	c := f.eachChore("Teeth", false, []int64{f.kid.ID, f.kid.ID})
 	if c.Mode != ModeEach || c.ForEveryone != 0 || c.AdultPoints != 1 {
 		t.Errorf("chore = %+v", c)
@@ -66,7 +62,6 @@ func TestEachChoreValidation(t *testing.T) {
 	if got, _ := f.svc.ChorePeople(t.Context(), f.hh, c.ID); !slices.Equal(got, []int64{f.kid.ID}) {
 		t.Errorf("people = %v, want just Alfie", got)
 	}
-	// Everyone keeps no list.
 	e := f.eachChore("Bed", true, []int64{f.kid.ID})
 	if got, _ := f.svc.ChorePeople(t.Context(), f.hh, e.ID); len(got) != 0 || e.ForEveryone != 1 {
 		t.Errorf("everyone: people = %v, for_everyone = %d", got, e.ForEveryone)
@@ -95,8 +90,6 @@ func TestEachChoreOnTheBoard(t *testing.T) {
 		t.Errorf("worth: Mum %d/%dp, Alfie %d/%dp; want 1/0p and 2/10p", mum.Points, mum.Pence, alfie.Points, alfie.Pence)
 	}
 
-	// Each does their own: Alfie's can't be done as Isla, and doing his
-	// leaves everyone else's.
 	if _, err := f.svc.Complete(t.Context(), f.hh, alfie.OccurrenceID, f.kid2.ID); !errors.Is(err, ErrNotYours) {
 		t.Errorf("Isla doing Alfie's: %v, want ErrNotYours", err)
 	}
@@ -122,8 +115,6 @@ func TestEachChoreOnTheBoard(t *testing.T) {
 		t.Errorf("Alfie's = %+v, want done", c)
 	}
 
-	// The next day, yesterday's undone copies are each replaced by that
-	// person's new one, not piled up or swallowed by someone else's.
 	f.at("2026-11-03", "09:00")
 	b = f.boardAt("2026-11-03")
 	for _, name := range []string{"Mum", "Alfie", "Isla"} {
@@ -143,7 +134,6 @@ func TestEachChoreWeeklyOverduePerPerson(t *testing.T) {
 	if _, err := f.svc.Complete(t.Context(), f.hh, isla.OccurrenceID, f.kid2.ID); err != nil {
 		t.Fatal(err)
 	}
-	// Wednesday: Alfie's Monday one is overdue; Isla's is done and gone.
 	f.at("2026-11-04", "09:00")
 	b = f.boardAt("2026-11-04")
 	if c := cardsTitled(b.column("Alfie"), "Tidy room"); len(c) != 1 || !c[0].Overdue {
@@ -159,7 +149,7 @@ func TestEachChoreEveryoneFollowsTheHousehold(t *testing.T) {
 	f.eachChore("Brush teeth", true, nil)
 	f.eachChore("Exercise", false, []int64{f.kid.ID})
 	f.person("Dad", "adult")
-	b := f.boardAt("2026-11-02") // materialises again, as the hourly run does
+	b := f.boardAt("2026-11-02")
 	if n := len(cardsTitled(b.column("Dad"), "Brush teeth")); n != 1 {
 		t.Errorf("Dad has %d Brush teeth cards, want 1", n)
 	}
@@ -203,8 +193,6 @@ func TestEachChoreEditPeople(t *testing.T) {
 	if _, err := f.svc.Complete(t.Context(), f.hh, alfie.OccurrenceID, f.kid.ID); err != nil {
 		t.Fatal(err)
 	}
-	// Isla's taken off and Mum's added: Isla's open copy goes, Alfie's done
-	// one stays.
 	if _, err := f.svc.UpdateChore(t.Context(), f.hh, f.adult.ID, c.ID, Input{
 		Title: "Exercise", Mode: ModeEach, PeopleIDs: []int64{f.kid.ID, f.adult.ID},
 		Repeat: Recurrence{Kind: RepeatDaily}, StartsOn: "2026-11-02", Points: 2, Pence: 10, AdultPoints: 1,
@@ -228,7 +216,6 @@ func TestEachChoreCalendarAndMissed(t *testing.T) {
 	f.eachChore("Brush teeth", false, []int64{f.adult.ID, f.kid.ID}, func(in *Input) {
 		in.DueTimes, in.OnTheDay = []string{"07:30"}, true
 	})
-	// A day past the materialised window is projected per person.
 	cal := f.calendar("2026-11-02", "2026-12-20", "2026-12-20")
 	var got []string
 	for _, c := range cal["2026-12-20"] {
@@ -238,7 +225,6 @@ func TestEachChoreCalendarAndMissed(t *testing.T) {
 	if want := []string{"Alfie:2", "Mum:1"}; !slices.Equal(got, want) {
 		t.Errorf("projected = %q, want %q", got, want)
 	}
-	// Materialised days too, and ChoreOn picks the person asked for.
 	d := time.Date(2026, 11, 2, 0, 0, 0, 0, london)
 	f.boardAt("2026-11-02")
 	if n := len(f.calendar("2026-11-02", "2026-11-03", "2026-11-03")["2026-11-03"]); n != 2 {

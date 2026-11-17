@@ -1,4 +1,3 @@
-# https://taskfile.dev
 version: "3"
 
 dotenv: [".env"]
@@ -7,14 +6,11 @@ vars:
   BIN: bin/ingle
   IMAGE: ingle:dev
   REGISTRY_IMAGE: ghcr.io/lukeskelhorn/ingle
-  # Ingle used to be Domus: releases also go out under the old image name,
-  # so installs that still pull it keep getting updates. Drop it at v1.0.
+  # Old image name, so installs still pulling it get updates. Drop at v1.0.
   LEGACY_IMAGE: ghcr.io/lukeskelhorn/domus
   PLATFORMS: linux/amd64,linux/arm64
   BUILDER: ingle-multiarch
   MIGRATIONS: internal/store/migrations/sqlite
-  # The version baked into builds: VERSION=v1.2.3 when releasing, otherwise
-  # what git describe says (e.g. v0.1.0-3-gabc123-dirty), or "dev".
   BUILD_VERSION:
     sh: echo "${VERSION:-$(git describe --tags --always --dirty 2>/dev/null || echo dev)}"
   LDFLAGS: -s -w -X main.version={{.BUILD_VERSION}}

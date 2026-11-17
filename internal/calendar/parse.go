@@ -15,19 +15,15 @@ import (
 type Event struct {
 	Title    string
 	Start    time.Time
-	End      time.Time // exclusive
+	End      time.Time
 	AllDay   bool
 	Location string
-	Colour   string // the feed's colour; set by the Service
-	Feed     string // the feed's name; set by the Service
-	FeedID   int64  // set by the Service
-	// PersonID is whose calendar it is, or nil for the family's; set by
-	// the Service. Pages show a person's events in their colour.
+	Colour   string
+	Feed     string
+	FeedID   int64
 	PersonID *int64
 }
 
-// maxEvents caps how many occurrences one feed contributes to a window, so
-// a pathological feed can't flood the screen or memory.
 const maxEvents = 3000
 
 // Parse decodes an iCalendar stream.
@@ -39,10 +35,7 @@ func Parse(r io.Reader) (*ical.Calendar, error) {
 	return cal, nil
 }
 
-// Expand returns the events in cal that overlap [from, to), with recurring
-// events expanded, overridden occurrences (RECURRENCE-ID) replaced,
-// EXDATEs and cancelled events dropped. Floating times and unknown TZIDs
-// are read in loc. Events are sorted all-day first, then by start.
+// Expand returns the events in cal that overlap [from, to), with recurrences expanded.
 func Expand(cal *ical.Calendar, from, to time.Time, loc *time.Location) []Event {
 	type key struct {
 		uid string
@@ -57,7 +50,6 @@ func Expand(cal *ical.Calendar, from, to time.Time, loc *time.Location) []Event 
 	}
 
 	events := cal.Events()
-	// First pass: overrides of single occurrences.
 	for _, ev := range events {
 		rid := ev.Props.Get(ical.PropRecurrenceID)
 		if rid == nil {
@@ -71,7 +63,6 @@ func Expand(cal *ical.Calendar, from, to time.Time, loc *time.Location) []Event 
 			add(e)
 		}
 	}
-	// Second pass: ordinary and recurring events.
 	for _, ev := range events {
 		if ev.Props.Get(ical.PropRecurrenceID) != nil {
 			continue
@@ -125,7 +116,6 @@ func Expand(cal *ical.Calendar, from, to time.Time, loc *time.Location) []Event 
 	return out
 }
 
-// sortEvents orders by start; at the same start all-day events come first.
 func sortEvents(es []Event) {
 	sort.SliceStable(es, func(i, j int) bool {
 		a, b := es[i], es[j]
@@ -139,8 +129,6 @@ func sortEvents(es []Event) {
 	})
 }
 
-// single reads one VEVENT's own start, end and title. Cancelled events and
-// events without a start are skipped.
 func single(ev ical.Event, loc *time.Location) (Event, bool) {
 	if st, _ := ev.Status(); st == ical.EventCancelled {
 		return Event{}, false
@@ -191,9 +179,6 @@ func isDate(p *ical.Prop) bool {
 	return p.ValueType() == ical.ValueDate || (p.ValueType() == ical.ValueDefault && len(p.Value) == len("20060102"))
 }
 
-// parseTime reads a DATE or DATE-TIME property. All-day dates and floating
-// times are in loc; an unknown TZID (Outlook's Windows zone names, say)
-// falls back to a known mapping, then loc, rather than dropping the event.
 func parseTime(p *ical.Prop, loc *time.Location) (time.Time, error) {
 	t, err := p.DateTime(loc)
 	if err == nil {
@@ -219,8 +204,6 @@ func parseTime(p *ical.Prop, loc *time.Location) (time.Time, error) {
 	return q.DateTime(fallback)
 }
 
-// parseTimes reads a property that may hold a comma-separated list
-// (EXDATE, RDATE).
 func parseTimes(p *ical.Prop, loc *time.Location) []time.Time {
 	var out []time.Time
 	for v := range strings.SplitSeq(p.Value, ",") {
@@ -233,8 +216,6 @@ func parseTimes(p *ical.Prop, loc *time.Location) []time.Time {
 	return out
 }
 
-// windowsZones maps the Windows time zone names Outlook and Exchange put in
-// TZID to IANA names, for the zones a UK-centric household is likely to see.
 var windowsZones = map[string]string{
 	"GMT Standard Time":              "Europe/London",
 	"Greenwich Standard Time":        "Atlantic/Reykjavik",

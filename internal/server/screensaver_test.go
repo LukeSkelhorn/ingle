@@ -29,7 +29,6 @@ func testJPEG(t *testing.T, w, h int) []byte {
 	return b.Bytes()
 }
 
-// postFiles uploads several files under one field name, as <input multiple>.
 func (d *device) postFiles(path, field string, files map[string][]byte) resp {
 	d.h.t.Helper()
 	var buf bytes.Buffer
@@ -112,14 +111,12 @@ func TestScreensaverIdleOnlyOnDisplays(t *testing.T) {
 
 func TestScreensaverPanel(t *testing.T) {
 	h, wall, phone := boardHousehold(t)
-	// No calendars yet: clock and chores only.
 	r := wall.get("/screensaver")
 	expect(t, r, http.StatusOK, `class="saver__time">00:30<`, "Wednesday", "1 left", "Tap anywhere")
 	if strings.Contains(r.body, "Today") {
 		t.Errorf("shows a Today heading with no calendars\n%s", r.body)
 	}
 
-	// It's 00:30 BST on Wed 1 July.
 	h.setICS("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\n" +
 		"BEGIN:VEVENT\r\nUID:1\r\nDTSTART;TZID=Europe/London:20260701T090000\r\nDTEND;TZID=Europe/London:20260701T100000\r\nSUMMARY:Swimming\r\nEND:VEVENT\r\n" +
 		"BEGIN:VEVENT\r\nUID:2\r\nDTSTART;VALUE=DATE:20260702\r\nSUMMARY:Sports day\r\nEND:VEVENT\r\n" +
@@ -137,7 +134,6 @@ func TestScreensaverPanel(t *testing.T) {
 		}
 	}
 
-	// Finishing the chore shows on the panel.
 	expect(t, wall.post("/board/occurrences/"+itoa(h.occurrence("Feed the cat").ID)+"/complete", nil), http.StatusOK)
 	expect(t, wall.get("/screensaver"), http.StatusOK, "All done ✓")
 }
@@ -171,7 +167,6 @@ func TestPhotosAdmin(t *testing.T) {
 		t.Errorf("thumb %dx%d, %v", cfg.Width, cfg.Height, err)
 	}
 
-	// A folder photo joins the slideshow after a rescan.
 	if err := os.WriteFile(filepath.Join(h.photoDir, "garden.jpg"), testJPEG(t, 120, 80), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -208,7 +203,6 @@ func TestCalendarsAdmin(t *testing.T) {
 
 	expect(t, phone.post("/admin/calendars", url.Values{"name": {"Family"}, "url": {"file:///etc/passwd"}}),
 		http.StatusUnprocessableEntity, "Enter a calendar address starting https:// or webcal://.")
-	// Nothing served yet: the address is checked before saving.
 	secret := h.ics.URL + "/private-abc123/basic.ics"
 	r := phone.post("/admin/calendars", url.Values{"name": {"Family"}, "url": {secret}})
 	expect(t, r, http.StatusUnprocessableEntity, "Couldn&#39;t read that calendar")

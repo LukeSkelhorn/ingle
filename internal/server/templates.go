@@ -21,8 +21,6 @@ import (
 	"github.com/lukeskelhorn/ingle/web"
 )
 
-// pages holds one template set per page: layout + partials + that page, so
-// every page can define its own "title" and "content" blocks.
 type pages struct {
 	base *template.Template
 	sets map[string]*template.Template
@@ -51,8 +49,7 @@ func loadPages(funcs template.FuncMap) (*pages, error) {
 	return p, nil
 }
 
-// clone copies p. It fails once p has executed, so the master set that
-// clones come from is never executed itself.
+// clone fails once p has executed, so the master set must never be executed.
 func (p *pages) clone() (*pages, error) {
 	base, err := p.base.Clone()
 	if err != nil {
@@ -67,8 +64,6 @@ func (p *pages) clone() (*pages, error) {
 	return c, nil
 }
 
-// bind replaces funcs in every set. A set's funcs are its own once cloned,
-// so this only touches the render holding p.
 func (p *pages) bind(funcs template.FuncMap) {
 	p.base.Funcs(funcs)
 	for _, set := range p.sets {
@@ -76,8 +71,6 @@ func (p *pages) bind(funcs template.FuncMap) {
 	}
 }
 
-// pagePool hands each render its own copy of the templates, so the
-// household funcs can be bound to that render's request.
 type pagePool struct {
 	master *pages
 	pool   sync.Pool
@@ -108,53 +101,38 @@ func (p *pages) partial(w io.Writer, name string, data any) error {
 	return p.base.ExecuteTemplate(w, name, data)
 }
 
-// view is the data every page gets. Data carries the page-specific part.
 type view struct {
-	Title     string
-	Nav       string // active admin section
-	Household string
-	Viewer    viewer
-	Flash     string
-	Errors    valid.Errors
-	Data      any
-	Version   string // the Ingle build, shown in admin
-	// ExternalSignIn is set when another service signs adults in: Ingle
-	// shows no email or password for them.
+	Title          string
+	Nav            string
+	Household      string
+	Viewer         viewer
+	Flash          string
+	Errors         valid.Errors
+	Data           any
+	Version        string
 	ExternalSignIn bool
-	// Edit names the pop-up a page opens with, from ?edit= on a GET: the
-	// links that open admin pop-ups use it when JavaScript is off.
-	Edit string
+	Edit           string
 }
 
-// viewer describes who is looking at the page.
 type viewer struct {
-	IsDisplay   bool
-	DisplayName string
-	Adult       *dbq.Person
-	Kind        string // auth.KindDisplay or auth.KindPersonal when Adult is set
-	// IdleSeconds is the client-side auto-lock for admin on a display.
-	IdleSeconds int
-	// ScreensaverSeconds is how long a display waits, untouched, before
-	// showing the screensaver; 0 means never (always 0 off a display).
+	IsDisplay          bool
+	DisplayName        string
+	Adult              *dbq.Person
+	Kind               string
+	IdleSeconds        int
 	ScreensaverSeconds int
-	// CalendarSeconds is how long a display shows the board calendar,
-	// untouched, before going back to the chores; 0 means never (always 0
-	// off a display).
-	CalendarSeconds int
+	CalendarSeconds    int
 }
 
-// OnDisplayAdmin reports whether an adult is unlocked on a household display
-// (so the page should auto-lock when idle).
 func (v viewer) OnDisplayAdmin() bool { return v.Adult != nil && v.Kind == auth.KindDisplay }
 
-// avatarView is what the "avatar" partial needs.
 type avatarView struct {
 	Name    string
 	Colour  string
 	Emoji   string
 	Photo   string
 	Initial string
-	Size    string // "sm", "md", "lg"
+	Size    string
 }
 
 func avatarOf(p dbq.Person, size string) avatarView {
@@ -172,14 +150,9 @@ func avatarOf(p dbq.Person, size string) avatarView {
 	return v
 }
 
-// householdFuncs are the template funcs that depend on the household being
-// rendered for. Each render binds them to its request (see pages.bind).
 func (s *Server) householdFuncs(ctx context.Context) template.FuncMap {
 	return template.FuncMap{
-		// moduleOn "rewards" reports whether a module is switched on, so
-		// pages and partials can hide its pieces.
 		"moduleOn": func(id string) bool { return s.moduleOn(ctx, id) },
-		// adminNav is the admin bar's links, for the modules that are on.
 		"adminNav": func() adminNav { return s.adminNav(ctx) },
 		"when": func(unix int64) string {
 			loc := s.Locale
@@ -189,7 +162,6 @@ func (s *Server) householdFuncs(ctx context.Context) template.FuncMap {
 			t := time.Unix(unix, 0)
 			return loc.FormatDate(t) + " " + loc.FormatTime(t)
 		},
-		// dayOf is a moment's local day, e.g. "Thu 5 Nov".
 		"dayOf": func(unix int64) string {
 			loc := time.UTC
 			if s.Settings != nil {
@@ -212,11 +184,8 @@ func (s *Server) staticFuncs() template.FuncMap {
 	return template.FuncMap{
 		"money":      func(pence int64) string { return s.Locale.FormatMoney(pence) },
 		"moneyInput": locale.FormatMoneyInput,
-		// updatedAgo says how long since a bank balance was checked.
 		"updatedAgo": func(t time.Time) string { return updatedAgo(s.now(), t) },
 		"avatar":     avatarOf,
-		// plainAvatar is an avatar without its photo (initial or emoji),
-		// for the locked display, where /avatars/ isn't served.
 		"plainAvatar": func(p dbq.Person, size string) avatarView {
 			v := avatarOf(p, size)
 			if v.Photo != "" {
@@ -243,39 +212,33 @@ func (s *Server) staticFuncs() template.FuncMap {
 			return p
 		},
 		"weekdayShort": func(d time.Weekday) string { return d.String()[:3] },
-		// names and orNames list people: "Isla and Mum", "Luke or Sam".
-		"names":     func(ps []dbq.Person) string { return joinNames(ps, "and") },
-		"orNames":   func(ps []dbq.Person) string { return joinNames(ps, "or") },
-		"shortDate": shortDate,
-		"worth":     s.worth,
-		"togo":      s.togo,
-		"pts":       pts,
-		"inc":       func(i int) int { return i + 1 },
-		"signedPts": signedPts,
-		"net":       s.net,
-		"change":    s.change,
-		"neg":       func(n int64) int64 { return -n },
+		"names":        func(ps []dbq.Person) string { return joinNames(ps, "and") },
+		"orNames":      func(ps []dbq.Person) string { return joinNames(ps, "or") },
+		"shortDate":    shortDate,
+		"worth":        s.worth,
+		"togo":         s.togo,
+		"pts":          pts,
+		"inc":          func(i int) int { return i + 1 },
+		"signedPts":    signedPts,
+		"net":          s.net,
+		"change":       s.change,
+		"neg":          func(n int64) int64 { return -n },
 		"percent": func(done, total int) int {
 			if total == 0 {
 				return 0
 			}
 			return done * 100 / total
 		},
-		"dict":     dict,
-		"chosen":   chosen,
-		"list":     func(v ...string) []string { return v },
-		"activity": describeActivity,
-		// activityLine is the feed's phrase for an activity row, with
-		// the amount and who for bank transfers.
-		"activityLine": s.activityLine,
-		// asset is a static file's URL with the build's asset hash, so a new
-		// build's CSS and JS are never served from an old cache.
+		"dict":          dict,
+		"chosen":        chosen,
+		"list":          func(v ...string) []string { return v },
+		"activity":      describeActivity,
+		"activityLine":  s.activityLine,
 		"asset":         func(name string) string { return "/static/" + name + "?v=" + web.StaticVersion() },
 		"activityActor": activityActor,
 	}
 }
 
-// shortDate formats a stored YYYY-MM-DD as e.g. "Mon 2 Nov" (UK order).
 func shortDate(ymd string) string {
 	t, err := time.Parse("2006-01-02", ymd)
 	if err != nil {
@@ -284,8 +247,6 @@ func shortDate(ymd string) string {
 	return t.Format("Mon 2 Jan")
 }
 
-// worth describes what a chore is worth, e.g. "5 pts · £0.50", or "" if
-// nothing.
 func (s *Server) worth(points, pence int64) string {
 	var parts []string
 	if points > 0 {
@@ -297,8 +258,6 @@ func (s *Server) worth(points, pence int64) string {
 	return strings.Join(parts, " · ")
 }
 
-// togo says how much is left to save for a goal: "40 pts to go",
-// "£1.50 to go", or "40 pts and £1.50 to go". It's "" when nothing is left.
 func (s *Server) togo(points, pence int64) string {
 	var parts []string
 	if points > 0 {
@@ -313,8 +272,6 @@ func (s *Server) togo(points, pence int64) string {
 	return strings.Join(parts, " and ") + " to go"
 }
 
-// pts formats a points count: "1 pt", "12 pts", "−5 pts" (with a real
-// minus sign).
 func pts(n int64) string {
 	unit := " pts"
 	if n == 1 || n == -1 {
@@ -323,7 +280,6 @@ func pts(n int64) string {
 	return minus(n) + unit
 }
 
-// signedPts formats a change in points: "+5", "−5".
 func signedPts(n int64) string {
 	if n > 0 {
 		return "+" + strconv.FormatInt(n, 10)
@@ -331,7 +287,6 @@ func signedPts(n int64) string {
 	return minus(n)
 }
 
-// minus formats n with a real minus sign when it's negative.
 func minus(n int64) string {
 	if n < 0 {
 		return "−" + strconv.FormatInt(-n, 10)
@@ -339,8 +294,6 @@ func minus(n int64) string {
 	return strconv.FormatInt(n, 10)
 }
 
-// net describes a net amount that can be negative, e.g. "−5 pts · £0.50",
-// or "" if nothing. Unlike worth, negative points are shown.
 func (s *Server) net(points, pence int64) string {
 	var parts []string
 	if points != 0 {
@@ -352,8 +305,6 @@ func (s *Server) net(points, pence int64) string {
 	return strings.Join(parts, " · ")
 }
 
-// change describes a signed change to a balance, e.g. "+10 pts +20p" or
-// "−£5.00", or "" if nothing.
 func (s *Server) change(points, pence int64) string {
 	var parts []string
 	if points != 0 {
@@ -368,10 +319,6 @@ func (s *Server) change(points, pence int64) string {
 	return strings.Join(parts, " ")
 }
 
-// dict builds a map from alternating keys and values, for passing several
-// values to a partial.
-// chosen reports whether id is ticked in a people_pick: sel is one id
-// (int64) or several ([]int64).
 func chosen(sel any, id int64) bool {
 	switch v := sel.(type) {
 	case int64:
@@ -397,7 +344,6 @@ func dict(kv ...any) (map[string]any, error) {
 	return m, nil
 }
 
-// joinNames lists people's names as "A, B and C" (or "A, B or C").
 func joinNames(ps []dbq.Person, last string) string {
 	names := make([]string, len(ps))
 	for i, p := range ps {
@@ -406,7 +352,6 @@ func joinNames(ps []dbq.Person, last string) string {
 	return joinWords(names, last)
 }
 
-// joinWords lists words as "A, B and C" (or "A, B or C").
 func joinWords(words []string, last string) string {
 	if len(words) < 2 {
 		return strings.Join(words, "")

@@ -11,17 +11,14 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/valid"
 )
 
-// matchPanel is the person page's Match savings section: a child's match
-// offer, and the form to set it up (with what was typed, after an error).
 type matchPanel struct {
-	Current              *chores.MatchOffer // nil until it's set up
+	Current              *chores.MatchOffer
 	AddMoney, PerMoney   string
 	AddPoints, PerPoints string
 	CapMoney, CapPoints  string
-	Typed                bool // the fields are what was typed, not Current
+	Typed                bool
 }
 
-// loadMatchPanel fills f.Match for a child while Rewards is on.
 func (s *Server) loadMatchPanel(r *http.Request, f *personForm) error {
 	if f.Kind != "child" || !s.moduleOn(r.Context(), modRewards) {
 		return nil
@@ -34,7 +31,6 @@ func (s *Server) loadMatchPanel(r *http.Request, f *personForm) error {
 	if f.Match.Typed {
 		return nil
 	}
-	// A start that reads well: for every £1, for every 10 points.
 	f.Match.PerMoney, f.Match.PerPoints = formatMoneyInput(100), "10"
 	if o == nil {
 		return nil
@@ -54,7 +50,6 @@ func (s *Server) loadMatchPanel(r *http.Request, f *personForm) error {
 	return nil
 }
 
-// handleMatchSave is Save on the Match savings section.
 func (s *Server) handleMatchSave(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.loadPerson(w, r)
 	if !ok {
@@ -129,7 +124,6 @@ func (s *Server) handleMatchSave(w http.ResponseWriter, r *http.Request) {
 		fmt.Sprintf("Matching saved. %s will see it on their goal.", p.Name))
 }
 
-// handleMatchRemove is Stop matching.
 func (s *Server) handleMatchRemove(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.loadPerson(w, r)
 	if !ok {

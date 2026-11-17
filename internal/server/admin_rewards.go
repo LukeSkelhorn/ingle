@@ -16,8 +16,6 @@ type rewardsView struct {
 	Archived []dbq.Reward
 }
 
-// rewardListRow is a reward in Admin › Rewards with who it's for: People
-// are the chosen people (none for everyone), and Who says it in words.
 type rewardListRow struct {
 	dbq.Reward
 	People []dbq.Person
@@ -50,7 +48,6 @@ func (s *Server) handleRewards(w http.ResponseWriter, r *http.Request) {
 	for _, rw := range list {
 		row := rewardListRow{Reward: rw, Who: "Everyone"}
 		if rw.CostPence > 0 {
-			// Adults have no money.
 			row.Who = "Children"
 		}
 		if rw.Everyone == 0 {
@@ -79,9 +76,9 @@ type rewardForm struct {
 	CostPoints  int64
 	Money       string
 	Archived    bool
-	Everyone    bool         // for everyone, or PeopleIDs
-	PeopleIDs   []int64      // who it's for when it isn't everyone
-	People      []dbq.Person // active people, to choose from
+	Everyone    bool
+	PeopleIDs   []int64
+	People      []dbq.Person
 }
 
 func newRewardForm() rewardForm {
@@ -96,7 +93,6 @@ func rewardFormFor(rw dbq.Reward) rewardForm {
 	}
 }
 
-// savedRewardForm is the form for a saved reward, with who it's for.
 func (s *Server) savedRewardForm(r *http.Request, rw dbq.Reward) (rewardForm, error) {
 	f := rewardFormFor(rw)
 	if f.Everyone {

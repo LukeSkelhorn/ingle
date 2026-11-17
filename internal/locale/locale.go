@@ -1,5 +1,4 @@
-// Package locale formats dates and money according to the household's
-// locale settings (UK by default: Europe/London, DD/MM/YYYY, Monday, £).
+// Package locale formats dates and money for the household's locale.
 package locale
 
 import (
@@ -9,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	// Embed tzdata so Europe/London resolves in minimal container images.
+	// Embedded so Europe/London resolves in minimal container images.
 	_ "time/tzdata"
 )
 
@@ -25,7 +24,6 @@ type Locale struct {
 func UK() Locale {
 	loc, err := time.LoadLocation("Europe/London")
 	if err != nil {
-		// tzdata is embedded above, so this cannot fail.
 		panic(err)
 	}
 	return Locale{
@@ -51,8 +49,7 @@ func (l Locale) FormatTime(t time.Time) string {
 	return l.In(t).Format("15:04")
 }
 
-// StartOfWeek returns midnight (local time) on the first day of the week
-// containing t.
+// StartOfWeek returns local midnight on the first day of t's week.
 func (l Locale) StartOfWeek(t time.Time) time.Time {
 	t = l.In(t)
 	offset := (int(t.Weekday()) - int(l.WeekStart) + 7) % 7
@@ -114,9 +111,7 @@ func groupThousands(s string) string {
 // ErrInvalidMoney is returned by ParseMoney for input it can't read.
 var ErrInvalidMoney = errors.New("enter an amount like 1.50")
 
-// ParseMoney reads an amount typed into a form ("1.50", "£1.50", "0.5",
-// "2", "1,000.00") as minor units (pence). Negative amounts and more than
-// two decimal places are rejected; an empty string is zero.
+// ParseMoney reads a typed amount such as "£1.50" as pence.
 func (l Locale) ParseMoney(s string) (int64, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -153,8 +148,7 @@ func (l Locale) ParseMoney(s string) (int64, error) {
 	return w*100 + f, nil
 }
 
-// FormatMoneyInput formats pence for a form field, without the symbol or
-// thousands separators (150 -> "1.50").
+// FormatMoneyInput formats pence for a form field (150 -> "1.50").
 func FormatMoneyInput(minor int64) string {
 	sign := ""
 	if minor < 0 {

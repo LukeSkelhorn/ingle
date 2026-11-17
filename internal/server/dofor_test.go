@@ -9,9 +9,6 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
-// A long press on a child's chore opens "I did it" for an adult, who then
-// gets the points. The wall needs an adult unlocked, for the sheet and the
-// POST alike.
 func TestDoForChildsChore(t *testing.T) {
 	h, wall, phone := boardHousehold(t)
 	alfie, mum := h.person("Alfie"), h.person("Mum")
@@ -20,11 +17,9 @@ func TestDoForChildsChore(t *testing.T) {
 	post := "/board/occurrences/" + itoa(occ.ID) + "/do-for"
 	form := url.Values{"person": {itoa(alfie.ID)}}
 
-	// The chore carries the long press on Alfie's column, not on the pool.
 	r := wall.get("/board")
 	expect(t, r, http.StatusOK, `data-hold="`+strings.ReplaceAll(sheet, "&", "&amp;")+`"`)
 
-	// No adult at the wall: neither the sheet nor the POST.
 	r = wall.get(sheet)
 	expect(t, r, http.StatusConflict)
 	if tt := toastOf(t, r); !tt.Error || !strings.Contains(tt.Message, "grown-up") {
@@ -38,7 +33,6 @@ func TestDoForChildsChore(t *testing.T) {
 		t.Errorf("Mum has %d points after a refused POST", b.Points)
 	}
 
-	// Mum's phone: the sheet, then I did it.
 	expect(t, phone.get(sheet), http.StatusOK, "Feed the cat", "Alfie", "I did it")
 	r = phone.post(post, form)
 	expect(t, r, http.StatusOK, `id="board"`, "Done by Mum")
@@ -55,15 +49,12 @@ func TestDoForChildsChore(t *testing.T) {
 	}
 	expect(t, phone.get("/admin/completions"), http.StatusOK, "Done by Mum for Alfie")
 
-	// Again: it's done already.
 	expect(t, phone.post(post, form), http.StatusConflict)
 
-	// Not for an adult's own column, nor a pool chore.
 	pool := h.occurrence("Hoover the lounge")
 	expect(t, phone.post("/board/occurrences/"+itoa(pool.ID)+"/do-for", url.Values{"person": {itoa(alfie.ID)}}), http.StatusConflict)
 	expect(t, phone.get("/board/occurrences/"+itoa(pool.ID)+"/do-for?person="+itoa(mum.ID)), http.StatusConflict)
 
-	// Undo works as usual.
 	r = phone.post(tt.Undo, nil)
 	expect(t, r, http.StatusOK)
 	if u := toastOf(t, r); u.Message != "Undone." {
@@ -74,8 +65,6 @@ func TestDoForChildsChore(t *testing.T) {
 	}
 }
 
-// With two adults the sheet asks which of them did it, starting on the one
-// signed in, and the one chosen gets the points.
 func TestDoForAnotherAdult(t *testing.T) {
 	h, _, phone := boardHousehold(t)
 	expectPersonCreated(t, phone.post("/admin/people", url.Values{
@@ -89,7 +78,6 @@ func TestDoForAnotherAdult(t *testing.T) {
 	expect(t, phone.get(sheet), http.StatusOK, "Who did it?",
 		`name="by" value="`+itoa(mum.ID)+`" checked`, `name="by" value="`+itoa(dad.ID)+`"`, "Dad")
 
-	// A child can't be the one who did it.
 	expect(t, phone.post(post, url.Values{"person": {itoa(alfie.ID)}, "by": {itoa(h.person("Isla").ID)}}), http.StatusConflict)
 
 	r := phone.post(post, url.Values{"person": {itoa(alfie.ID)}, "by": {itoa(dad.ID)}})

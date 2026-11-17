@@ -26,9 +26,6 @@ ORDER BY p.sort_order, p.name;
 DELETE FROM ledger_entries WHERE household_id = ? AND completion_id = ?;
 
 -- name: EarnedSinceForPerson :one
--- What a person has earned since since_unix, net: completions, reversals and
--- manual adjustments (bonuses and points taken away). Spending (redemptions,
--- payouts) isn't counted.
 SELECT
     CAST(COALESCE(SUM(points), 0) AS INTEGER) AS points,
     CAST(COALESCE(SUM(pence), 0) AS INTEGER) AS pence
@@ -38,8 +35,6 @@ WHERE household_id = sqlc.arg(household_id) AND person_id = sqlc.arg(person_id)
   AND created_at >= sqlc.arg(since_unix);
 
 -- name: ListManualAdjustments :many
--- A person's manual adjustments (bonuses and points taken away) since
--- since_unix, newest first, with who made each one.
 SELECT l.id, l.points, l.note, l.created_at, COALESCE(p.name, '') AS by_name
 FROM ledger_entries l
 LEFT JOIN people p ON p.id = l.created_by
@@ -49,7 +44,6 @@ ORDER BY l.created_at DESC, l.id DESC
 LIMIT sqlc.arg(lim);
 
 -- name: RecentManualNotes :many
--- The last few distinct reasons used, to suggest on the form.
 SELECT note FROM ledger_entries
 WHERE household_id = ? AND kind = 'manual'
 GROUP BY note
@@ -57,16 +51,11 @@ ORDER BY MAX(created_at) DESC
 LIMIT 10;
 
 -- name: DeleteManualEntry :execrows
--- Undoes a manual adjustment made since since_unix.
 DELETE FROM ledger_entries
 WHERE household_id = sqlc.arg(household_id) AND id = sqlc.arg(id)
   AND kind = 'manual' AND created_at >= sqlc.arg(since_unix);
 
 -- name: ListLedgerHistory :many
--- A person's ledger, newest first, for My money: entries since since_unix
--- (0 for any) and older than before_id (math.MaxInt64 for any), with the
--- chore or reward each one was for, the chore's time ('' for none), and
--- whose chore it was when someone did it for them ('' otherwise).
 SELECT
     l.id, l.kind, l.points, l.pence, l.note, l.created_at,
     CAST(COALESCE(ch.title, rw.title, '') AS TEXT) AS title,
@@ -87,7 +76,6 @@ ORDER BY l.id DESC
 LIMIT sqlc.arg(lim);
 
 -- name: BalanceBeforeForPerson :one
--- A person's balance from every entry made before before_unix.
 SELECT
     CAST(COALESCE(SUM(points), 0) AS INTEGER) AS points,
     CAST(COALESCE(SUM(pence), 0) AS INTEGER) AS pence
@@ -96,7 +84,6 @@ WHERE household_id = sqlc.arg(household_id) AND person_id = sqlc.arg(person_id)
   AND created_at < sqlc.arg(before_unix);
 
 -- name: ListLedgerChangesBetween :many
--- A person's entries made in [from_unix, to_unix), oldest first.
 SELECT points, pence FROM ledger_entries
 WHERE household_id = sqlc.arg(household_id) AND person_id = sqlc.arg(person_id)
   AND created_at >= sqlc.arg(from_unix) AND created_at < sqlc.arg(to_unix)

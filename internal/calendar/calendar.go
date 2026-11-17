@@ -1,8 +1,4 @@
-// Package calendar reads the household's ICS feeds (Google, iCloud or
-// Outlook "secret address" links) so the screensaver and the board
-// calendar can show what's on.
-// Feeds are fetched in the background and a few months of events are kept
-// in memory; nothing about the events is stored in the database.
+// Package calendar reads the household's ICS calendar feeds.
 package calendar
 
 import (
@@ -28,14 +24,9 @@ import (
 const (
 	FetchTimeout = 20 * time.Second
 	MaxFeedBytes = 5 << 20
-	// RefreshEvery is how often the background loop re-fetches feeds.
 	RefreshEvery = 15 * time.Minute
-	// KeepBehind and KeepAhead bound the events cached per feed: enough for
-	// the board calendar (back to the month 4 weeks ago, 3 months ahead,
-	// padded to whole weeks), and the screensaver keeps working if a feed
-	// stops answering.
-	KeepBehind = 75 * 24 * time.Hour
-	KeepAhead  = 100 * 24 * time.Hour
+	KeepBehind   = 75 * 24 * time.Hour
+	KeepAhead    = 100 * 24 * time.Hour
 )
 
 // ErrNotFound is returned for an unknown feed.
@@ -46,8 +37,8 @@ type Feed struct {
 	ID        int64
 	Name      string
 	Colour    string
-	PersonID  *int64 // whose calendar it is; nil for the family's
-	Masked    string // e.g. "calendar.google.com/…"
+	PersonID  *int64
+	Masked    string
 	FetchedAt time.Time
 	Error     string
 }
@@ -59,8 +50,8 @@ type feedState struct {
 	name        string
 	personID    *int64
 	events      []Event
-	fetchedAt   time.Time // last success
-	err         string    // last failure, cleared on success
+	fetchedAt   time.Time
+	err         string
 }
 
 // Service manages feeds and their cached events.
@@ -71,21 +62,16 @@ type Service struct {
 	now    func() time.Time
 	zone   func(ctx context.Context, householdID int64) *time.Location
 
-	// secrets encrypts the feeds' addresses, which are credentials (nil:
-	// stored as they are).
 	secrets *secrets.Keyring
 
 	mu    sync.RWMutex
-	state map[int64]*feedState // by feed id
+	state map[int64]*feedState
 }
 
-// SetSecrets encrypts feed addresses with k from now on. Addresses saved
-// before are encrypted on their household's next refresh.
+// SetSecrets encrypts feed addresses with k from now on.
 func (s *Service) SetSecrets(k *secrets.Keyring) { s.secrets = k }
 
-// New returns a Service. zone gives a household's timezone, used for
-// events with floating times (settings.Service.Location fits). client may
-// be nil for a default with FetchTimeout.
+// New returns a Service.
 func New(st *store.Store, zone func(ctx context.Context, householdID int64) *time.Location, client *http.Client, log *slog.Logger) *Service {
 	if client == nil {
 		client = &http.Client{Timeout: FetchTimeout}
@@ -96,8 +82,7 @@ func New(st *store.Store, zone func(ctx context.Context, householdID int64) *tim
 // SetClock replaces the clock (tests).
 func (s *Service) SetClock(now func() time.Time) { s.now = now }
 
-// NormaliseURL checks a pasted feed address: webcal:// becomes https://,
-// and only http and https are allowed.
+// NormaliseURL checks a pasted feed address: webcal:// becomes https://, and only http and https are allowed.
 func NormaliseURL(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if len(raw) > 2000 {
@@ -113,8 +98,7 @@ func NormaliseURL(raw string) (string, error) {
 	return u.String(), nil
 }
 
-// Mask shows enough of a feed URL to recognise it without revealing the
-// secret part.
+// Mask shows enough of a feed URL to recognise it without revealing the secret part.
 func Mask(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" {
@@ -146,10 +130,7 @@ func (s *Service) Feeds(ctx context.Context, householdID int64) ([]Feed, error) 
 	return out, nil
 }
 
-// AddFeed validates and fetches a feed, and saves it only if it could be
-// read, so a mistyped address is caught straight away. Problems are
-// returned as valid.Errors on "name", "url" or "person". personID is whose
-// calendar it is, or nil for the family's.
+// AddFeed validates and fetches a feed, and saves it only if it could be read.
 func (s *Service) AddFeed(ctx context.Context, householdID, actorID int64, name, rawURL string, personID *int64) (Feed, error) {
 	errs := valid.Errors{}
 	name = s.checkFeed(ctx, householdID, name, personID, errs)
@@ -198,9 +179,6 @@ func (s *Service) AddFeed(ctx context.Context, householdID, actorID int64, name,
 	return Feed{ID: row.ID, Name: row.Name, Colour: row.Colour, PersonID: row.PersonID, Masked: Mask(u), FetchedAt: now}, nil
 }
 
-// checkFeed checks a feed's name and owner, adding problems to errs, and
-// returns the trimmed name. The owner must be someone in the household who
-// isn't archived.
 func (s *Service) checkFeed(ctx context.Context, householdID int64, name string, personID *int64, errs valid.Errors) string {
 	name = strings.TrimSpace(name)
 	if name == "" || len([]rune(name)) > 50 {
@@ -216,8 +194,6 @@ func (s *Service) checkFeed(ctx context.Context, householdID int64, name string,
 }
 
 // UpdateFeed changes a feed's name and whose it is (nil for the family's).
-// Its cached events change straight away. Problems are returned as
-// valid.Errors on "name" or "person".
 func (s *Service) UpdateFeed(ctx context.Context, householdID, actorID, feedID int64, name string, personID *int64) error {
 	errs := valid.Errors{}
 	name = s.checkFeed(ctx, householdID, name, personID, errs)
@@ -251,9 +227,7 @@ func (s *Service) UpdateFeed(ctx context.Context, householdID, actorID, feedID i
 	return nil
 }
 
-// ForgetPerson turns a person's cached calendars into the family's, after
-// they're archived (household.Service.ArchivePerson does the same in the
-// database).
+// ForgetPerson turns a person's cached calendars into the family's.
 func (s *Service) ForgetPerson(householdID, personID int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -317,7 +291,6 @@ func (s *Service) RefreshHousehold(ctx context.Context, householdID int64) error
 	return nil
 }
 
-// seal encrypts a feed's address saved before there was a master key.
 func (s *Service) seal(ctx context.Context, householdID, feedID int64, u string) error {
 	sealed, err := s.secrets.Seal(ctx, householdID, u)
 	if err != nil {
@@ -346,7 +319,6 @@ func (s *Service) store(r dbq.CalendarFeed, events []Event, fetchErr error) {
 	st.stamp()
 }
 
-// stamp copies the feed's details onto its events. Callers hold s.mu.
 func (st *feedState) stamp() {
 	for i := range st.events {
 		e := &st.events[i]
@@ -354,8 +326,7 @@ func (st *feedState) stamp() {
 	}
 }
 
-// Upcoming returns the household's events overlapping [from, to), merged
-// across feeds and sorted.
+// Upcoming returns the household's events overlapping [from, to), merged across feeds and sorted.
 func (s *Service) Upcoming(householdID int64, from, to time.Time) []Event {
 	s.mu.RLock()
 	var out []Event

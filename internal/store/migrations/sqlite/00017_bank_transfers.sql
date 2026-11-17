@@ -1,9 +1,4 @@
 -- +goose Up
--- Bank transfers: a child asks for some of their money to go to their real
--- bank, and an adult (who does the transfer in their banking app) approves
--- or declines. A pending request holds its pence, as a waiting reward claim
--- does. Approving writes the payout to the ledger, linked by ledger_entry_id.
--- An adult can also pay out directly: that's stored as already approved.
 CREATE TABLE transfer_requests (
     id              INTEGER PRIMARY KEY,
     household_id    INTEGER NOT NULL REFERENCES households (id) ON DELETE CASCADE,

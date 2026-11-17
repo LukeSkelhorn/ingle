@@ -63,7 +63,6 @@ func TestSealAndOpen(t *testing.T) {
 		t.Errorf("Open = %q, %v", got, err)
 	}
 
-	// Bound to its household: copied into B, it won't open.
 	if _, err := k.Seal(ctx, b, "b's own"); err != nil {
 		t.Fatal(err)
 	}
@@ -71,23 +70,19 @@ func TestSealAndOpen(t *testing.T) {
 		t.Error("A's secret opened as household B")
 	}
 
-	// The data key is stored wrapped, not as it is.
 	wrapped, err := st.Q.GetHouseholdKey(store.WithHousehold(ctx, a), a)
 	if err != nil || len(wrapped) < secrets.KeySize+16 {
 		t.Fatalf("wrapped key = %d bytes, %v", len(wrapped), err)
 	}
 
-	// A new Keyring (a restart) with the same master key opens it.
 	k2, _ := secrets.New(st, master)
 	if got, err := k2.Open(ctx, a, sealed); err != nil || got != url {
 		t.Errorf("after restart: Open = %q, %v", got, err)
 	}
-	// Another master key can't.
 	k3, _ := secrets.New(st, masterKey(t))
 	if _, err := k3.Open(ctx, a, sealed); err == nil {
 		t.Error("opened with the wrong master key")
 	}
-	// Without a key at all, it says why.
 	var none *secrets.Keyring
 	if _, err := none.Open(ctx, a, sealed); !errors.Is(err, secrets.ErrNoKey) {
 		t.Errorf("no key: err = %v, want ErrNoKey", err)

@@ -16,33 +16,26 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/valid"
 )
 
-// Countdowns count the days to a birthday, a holiday or a big day. A
-// countdown is one-off (over after its day) or yearly (the same day and
-// month every year). Everyone's birthday counts down too, every year,
-// without a countdowns row: it's set on the person.
-
-// MaxCountdownTitle is the longest a countdown's title can be, in
-// characters.
+// MaxCountdownTitle is the longest a countdown's title can be, in characters.
 const MaxCountdownTitle = 60
 
 // Countdown is one countdown, worked out for a day.
 type Countdown struct {
-	ID       int64 // 0 for a birthday
+	ID       int64
 	Title    string
 	Emoji    string
-	People   []dbq.Person // who it's for (the birthday person), if anyone
-	OnDate   string       // as saved, YYYY-MM-DD; for a birthday, the next one
+	People   []dbq.Person
+	OnDate   string
 	Yearly   bool
 	Birthday bool
-	AddedBy  int64  // who added it, 0 if not known
-	Next     string // the day it counts to, YYYY-MM-DD
-	Days     int    // days from today to Next; below 0 once a one-off has passed
-	Turns    int    // the age a birthday person turns, 0 if not known
+	AddedBy  int64
+	Next     string
+	Days     int
+	Turns    int
 	today    string
 }
 
-// Person is the first person it's for, nil for nobody: their colour tints
-// it.
+// Person is the first person it's for, nil for nobody: their colour tints it.
 func (c Countdown) Person() *dbq.Person {
 	if len(c.People) == 0 {
 		return nil
@@ -56,8 +49,7 @@ func (c Countdown) Passed() bool { return c.Days < 0 }
 // Today reports whether the day is today.
 func (c Countdown) Today() bool { return c.Days == 0 }
 
-// Label says how long to go, short enough for the board's strip: "Today!",
-// "Tomorrow", "3 days", "5 weeks", "4 months".
+// Label says how long to go, e.g. "Tomorrow" or "3 days".
 func (c Countdown) Label() string {
 	switch d := c.Days; {
 	case d < 0:
@@ -75,8 +67,7 @@ func (c Countdown) Label() string {
 	}
 }
 
-// Sentence is the countdown in words, for the screensaver: "Sam's birthday
-// in 3 days", "Christmas tomorrow", "Christmas is today!".
+// Sentence is the countdown in words, for the screensaver.
 func (c Countdown) Sentence() string {
 	switch c.Days {
 	case 0:
@@ -95,8 +86,7 @@ func (c Countdown) DaysWord() string {
 	return "days to go"
 }
 
-// When is the day it counts to, e.g. "Sat 2 Aug", with the year when it
-// isn't this year's.
+// When is the day it counts to, e.g. "Sat 2 Aug", with the year when it isn't this year's.
 func (c Countdown) When() string { return dayLabel(c.Next, c.today) }
 
 // Kind says what sort of countdown it is, for Admin › Countdowns.
@@ -117,8 +107,6 @@ func plural(n int, word string) string {
 	return strconv.Itoa(n) + " " + word + "s"
 }
 
-// monthsBetween is the whole months from one date to a later one, at least
-// 1.
 func monthsBetween(from, to string) int {
 	a, err1 := time.Parse(DateLayout, from)
 	b, err2 := time.Parse(DateLayout, to)
@@ -132,9 +120,6 @@ func monthsBetween(from, to string) int {
 	return max(n, 1)
 }
 
-// nextOn is the next date, from today on, with month and day: this year's,
-// or next year's once this year's has gone. 29 February falls on 28
-// February in years without one.
 func nextOn(month time.Month, day int, today time.Time) time.Time {
 	at := func(y int) time.Time {
 		if month == time.February && day == 29 && !leap(y) {
@@ -155,9 +140,7 @@ func daysBetween(from, to time.Time) int {
 	return int(math.Round(to.Sub(from).Hours() / 24))
 }
 
-// Countdowns lists the household's countdowns and birthdays, soonest first,
-// for today (the board day). Passed one-off countdowns come last when
-// withPassed is set, and are left out otherwise.
+// Countdowns lists the household's countdowns and birthdays, soonest first.
 func (s *Service) Countdowns(ctx context.Context, householdID int64, boardDay time.Time, withPassed bool) ([]Countdown, error) {
 	q := s.st.Q
 	rows, err := q.ListCountdowns(ctx, householdID)
@@ -175,11 +158,7 @@ func (s *Service) Countdowns(ctx context.Context, householdID int64, boardDay ti
 	return countdownViews(rows, people, links, boardDay, withPassed), nil
 }
 
-// CountdownsOn lists the countdowns and birthdays that fall from first to
-// last (local midnights, under a year apart), by day (YYYY-MM-DD), for the
-// board calendar. Yearly ones and birthdays fall every year; a birthday
-// knows the age turned that year. Their Days and Label count from first,
-// not from today.
+// CountdownsOn lists the countdowns and birthdays from first to last, by day, for the board calendar.
 func (s *Service) CountdownsOn(ctx context.Context, householdID int64, first, last time.Time) (map[string][]Countdown, error) {
 	all, err := s.Countdowns(ctx, householdID, first, true)
 	if err != nil {
@@ -254,7 +233,7 @@ func countdownViews(rows []dbq.Countdown, people []dbq.Person, links []dbq.ListC
 			return -1
 		}
 		if a.Passed() {
-			return b.Days - a.Days // most recently passed first
+			return b.Days - a.Days
 		}
 		if a.Days != b.Days {
 			return a.Days - b.Days
@@ -270,10 +249,8 @@ func countdownViews(rows []dbq.Countdown, people []dbq.Person, links []dbq.ListC
 	return out
 }
 
-// possessive is "Sam's", or "James's".
 func possessive(name string) string { return name + "'s" }
 
-// parseBirthday reads a saved birthday, MM-DD.
 func parseBirthday(b *string) (time.Month, int, bool) {
 	if b == nil {
 		return 0, 0, false
@@ -285,8 +262,7 @@ func parseBirthday(b *string) (time.Month, int, bool) {
 	return t.Month(), t.Day(), true
 }
 
-// Birthday is a birthday as typed on Admin › People: day and month, and
-// the year if it's known. All empty is no birthday.
+// Birthday is a birthday as typed on Admin › People: day and month, and the year if it's known.
 type Birthday struct {
 	Day, Month, Year string
 }
@@ -304,8 +280,7 @@ func BirthdayOf(p dbq.Person) Birthday {
 	return b
 }
 
-// Parse checks a birthday from the form. It returns nil values for no
-// birthday, or a message for the form.
+// Parse checks a birthday from the form.
 func (b Birthday) Parse(today time.Time) (md *string, year *int64, msg string) {
 	b.Day, b.Month, b.Year = strings.TrimSpace(b.Day), strings.TrimSpace(b.Month), strings.TrimSpace(b.Year)
 	if b.Day == "" && b.Month == "" && b.Year == "" {
@@ -340,8 +315,7 @@ func (b Birthday) Parse(today time.Time) (md *string, year *int64, msg string) {
 	return md, year, ""
 }
 
-// SetBirthday saves a person's birthday (nil for none) and birth year (nil
-// if not known).
+// SetBirthday saves a person's birthday (nil for none) and birth year (nil if not known).
 func (s *Service) SetBirthday(ctx context.Context, householdID, personID int64, md *string, year *int64) error {
 	if md == nil {
 		year = nil
@@ -354,8 +328,7 @@ func (s *Service) SetBirthday(ctx context.Context, householdID, personID int64, 
 	return nil
 }
 
-// SetCanAddCountdowns lets a child add countdowns from the board (or stops
-// them).
+// SetCanAddCountdowns lets a child add countdowns from the board (or stops them).
 func (s *Service) SetCanAddCountdowns(ctx context.Context, householdID, personID int64, can bool) error {
 	if err := s.st.Q.SetPersonCanAddCountdowns(ctx, dbq.SetPersonCanAddCountdownsParams{
 		CanAddCountdowns: boolInt(can), HouseholdID: householdID, ID: personID,
@@ -369,9 +342,9 @@ func (s *Service) SetCanAddCountdowns(ctx context.Context, householdID, personID
 type CountdownInput struct {
 	Title     string
 	Emoji     string
-	OnDate    string // YYYY-MM-DD
+	OnDate    string
 	Yearly    bool
-	PeopleIDs []int64 // who it's for, if anyone
+	PeopleIDs []int64
 }
 
 // Countdown is one saved countdown.

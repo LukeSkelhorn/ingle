@@ -1,13 +1,7 @@
-# HTTPS in front of Ingle. The iPad needs HTTPS for the home-screen app
-# and offline cache; the certificate comes from Let's Encrypt via your DNS
-# provider, so nothing needs to be open to the internet.
 {$INGLE_HOSTNAME} {
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
 	}
 	encode zstd gzip
-	# Sets X-Forwarded-For/-Proto; Ingle trusts them from this network
-	# only (INGLE_TRUSTED_PROXIES). Server-sent events (/board/events)
-	# are streamed, not buffered.
 	reverse_proxy ingle:8080
 }

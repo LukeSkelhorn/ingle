@@ -1,11 +1,3 @@
-// Ingle screensaver: a shuffled photo slideshow with a drifting info panel,
-// shared by the board's screensaver and the locked display.
-//
-//   var saver = IngleSaver(el, { info: function (panel) { ... } });
-//   saver.start(); saver.stop(); saver.showing();
-//
-// el holds .saver__photos and .saver__info. info(panel) is called on start
-// and every minute to refresh the panel's contents.
 (function () {
   "use strict";
   var SLIDE_MS = 20000;
@@ -25,7 +17,6 @@
         slides = [], at = 0, failures = 0, wakeLock = null;
 
     function refreshInfo() {
-      // Drift the text a little each minute: kinder to an always-on panel.
       info.style.setProperty("--dx", Math.round(Math.random() * 40 - 20) + "px");
       info.style.setProperty("--dy", Math.round(Math.random() * 30) + "px");
       if (opts.info) opts.info(info);
@@ -41,7 +32,7 @@
       if (!showing) return;
       saver.classList.toggle("saver--empty", !slides.length);
       if (!slides.length || failures >= slides.length) return;
-      if (at >= slides.length) { loadSlides(); return; } // new pass, new order, new photos
+      if (at >= slides.length) { loadSlides(); return; }
       var img = new Image();
       img.className = "saver__photo";
       img.alt = "";
@@ -50,7 +41,7 @@
         failures = 0;
         var old = layer.querySelectorAll(".saver__photo");
         layer.appendChild(img);
-        void img.offsetWidth; // start the crossfade from transparent
+        void img.offsetWidth; // reflow so the crossfade starts from transparent
         img.classList.add("is-shown");
         old.forEach(function (o) { o.classList.remove("is-shown"); setTimeout(function () { o.remove(); }, 2000); });
         slideTimer = setTimeout(next, SLIDE_MS);
@@ -88,7 +79,7 @@
       setTimeout(function () {
         if (showing) return;
         saver.hidden = true;
-        layer.textContent = ""; // free the decoded photos
+        layer.textContent = "";
       }, 400);
       if (wakeLock) { wakeLock.release().catch(function () {}); wakeLock = null; }
     }

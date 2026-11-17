@@ -13,8 +13,7 @@ func NewToken() string {
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
-// HashToken returns the sha256 of a token. Only hashes are stored, so a
-// leaked database can't be replayed as cookies.
+// HashToken returns the sha256 of a token.
 func HashToken(token string) []byte {
 	h := sha256.Sum256([]byte(token))
 	return h[:]

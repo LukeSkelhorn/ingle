@@ -110,8 +110,6 @@ type LastSettledTransferForPersonParams struct {
 	SinceUnix   int64 `json:"since_unix"`
 }
 
-// A person's latest request decided since since_unix: if it was declined,
-// My money says why.
 func (q *Queries) LastSettledTransferForPerson(ctx context.Context, arg LastSettledTransferForPersonParams) ([]TransferRequest, error) {
 	rows, err := q.db.QueryContext(ctx, lastSettledTransferForPerson, arg.HouseholdID, arg.PersonID, arg.SinceUnix)
 	if err != nil {
@@ -182,8 +180,6 @@ type ListTransferDetailsRow struct {
 	ReviewedByName  string  `json:"reviewed_by_name"`
 }
 
-// Requests with who they're for and who decided: every waiting one, and the
-// rest requested since since_unix.
 func (q *Queries) ListTransferDetails(ctx context.Context, arg ListTransferDetailsParams) ([]ListTransferDetailsRow, error) {
 	rows, err := q.db.QueryContext(ctx, listTransferDetails, arg.HouseholdID, arg.SinceUnix)
 	if err != nil {
@@ -298,8 +294,6 @@ type SettleTransferRequestParams struct {
 	ID          int64  `json:"id"`
 }
 
-// Settle a waiting request. Only a pending one changes, so two adults
-// tapping at once can't both act on it.
 func (q *Queries) SettleTransferRequest(ctx context.Context, arg SettleTransferRequestParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, settleTransferRequest,
 		arg.Status,

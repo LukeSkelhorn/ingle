@@ -11,18 +11,14 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
-// holidayForm is Admin › Settings › Holiday mode: the holidays that haven't
-// finished, and the form for adding one.
 type holidayForm struct {
 	Today    string
 	Holidays []chores.Holiday
 	People   []dbq.Person
-	// The add form's values: From defaults to today ("from now").
 	From, To string
-	PersonID int64 // 0: everyone
+	PersonID int64
 }
 
-// loadHolidays fills in f.Holidays with the list for the household.
 func (s *Server) loadHolidays(r *http.Request, f *holidayForm) error {
 	day := s.boardDay(r)
 	f.Today = day.Format(chores.DateLayout)

@@ -16,7 +16,6 @@ import (
 	"github.com/lukeskelhorn/ingle/app"
 )
 
-// freeAddr returns a loopback address with a port nothing is listening on.
 func freeAddr(t *testing.T) string {
 	t.Helper()
 	l, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
@@ -84,8 +83,7 @@ func TestRunManyHouseholds(t *testing.T) {
 	t.Setenv("INGLE_BACKUP_KEEP", "0")
 
 	opts := app.Options{
-		Version: "test",
-		// No address names a household here, so only a cookie could.
+		Version:          "test",
 		ResolveHousehold: func(*http.Request) (int64, bool, error) { return 0, false, nil },
 		Routes: func(mux *http.ServeMux, h app.Helpers) {
 			mux.HandleFunc("GET /hello", func(w http.ResponseWriter, r *http.Request) {
@@ -122,7 +120,6 @@ func TestRunManyHouseholds(t *testing.T) {
 	if code, loc, _ := get("/admin/billing"); code != http.StatusSeeOther || loc != "/signin" {
 		t.Errorf("/admin/billing = %d → %q, want sign in", code, loc)
 	}
-	// No household was made at startup, so there's none to set up.
 	if code, loc, _ := get("/"); code != http.StatusSeeOther || loc != "/signin" {
 		t.Errorf("/ = %d → %q, want sign in", code, loc)
 	}
@@ -130,7 +127,6 @@ func TestRunManyHouseholds(t *testing.T) {
 		t.Errorf("/setup = %d, want 404", code)
 	}
 
-	// A worker runs the jobs beside it and stops with its context.
 	jobsCtx, stopJobs := context.WithCancel(context.Background())
 	jobsDone := make(chan error, 1)
 	go func() { jobsDone <- app.RunJobs(jobsCtx, opts) }()
@@ -156,7 +152,6 @@ func TestRunManyHouseholds(t *testing.T) {
 	}
 }
 
-// waitHealthy waits for the server Run started to answer /healthz.
 func waitHealthy(t *testing.T, done <-chan error) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)

@@ -17,7 +17,6 @@ WHERE household_id = ? AND id = ?;
 DELETE FROM countdowns WHERE household_id = ? AND id = ?;
 
 -- name: ListCountdownPeople :many
--- Every countdown's people who are still active, in board order.
 SELECT cp.countdown_id, cp.person_id
 FROM countdown_people cp
 JOIN people p ON p.id = cp.person_id

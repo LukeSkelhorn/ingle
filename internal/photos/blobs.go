@@ -14,21 +14,13 @@ import (
 	"regexp"
 )
 
-// Blobs stores the files of uploaded photos, each a JPEG under a name such
-// as "3f9c…a1.jpg" or its thumbnail "3f9c…a1_t.jpg". The default keeps them
-// on disk beside the database; another program can keep them elsewhere
-// (e.g. object storage) with [Library.SetBlobs].
+// Blobs stores the files of uploaded photos.
 type Blobs interface {
-	// Put stores data under name, replacing any file already there.
 	Put(ctx context.Context, name string, data []byte) error
-	// Open returns the file stored under name. A missing name is an
-	// error matching fs.ErrNotExist.
 	Open(ctx context.Context, name string) (io.ReadSeekCloser, error)
-	// Delete removes the file under name. A missing name is not an error.
 	Delete(ctx context.Context, name string) error
 }
 
-// blobNameRe is the names the library stores: an upload or its thumbnail.
 var blobNameRe = regexp.MustCompile(`^[0-9a-f]{32}(_t)?\.jpg$`)
 
 // DiskBlobs keeps photo files in a directory.
@@ -49,8 +41,7 @@ func (d *DiskBlobs) path(name string) (string, error) {
 	return filepath.Join(d.dir, name), nil
 }
 
-// Put writes data to a temporary file and renames it into place, so a
-// reader never sees half a photo.
+// Put writes data to a temporary file and renames it into place.
 func (d *DiskBlobs) Put(_ context.Context, name string, data []byte) error {
 	p, err := d.path(name)
 	if err != nil {

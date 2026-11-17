@@ -24,8 +24,6 @@ type DeleteFoldedLedgerParams struct {
 	KeepID      int64 `json:"keep_id"`
 }
 
-// The rest of a person's folded lines (see ListLedgerToFold), once keep_id
-// holds their total.
 func (q *Queries) DeleteFoldedLedger(ctx context.Context, arg DeleteFoldedLedgerParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, deleteFoldedLedger,
 		arg.HouseholdID,
@@ -69,8 +67,6 @@ type DeleteOldCompletionsParams struct {
 	CutoffUnix  int64 `json:"cutoff_unix"`
 }
 
-// Chores ticked off before cutoff_unix and since approved or rejected,
-// that no ledger line points at. Ones waiting for a grown-up are kept.
 func (q *Queries) DeleteOldCompletions(ctx context.Context, arg DeleteOldCompletionsParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, deleteOldCompletions, arg.HouseholdID, arg.CutoffUnix)
 	if err != nil {
@@ -90,8 +86,6 @@ type DeleteOldOccurrencesParams struct {
 	CutoffDay   string `json:"cutoff_day"`
 }
 
-// Chore copies due before cutoff_day (YYYY-MM-DD) with nothing ticked off
-// left on them.
 func (q *Queries) DeleteOldOccurrences(ctx context.Context, arg DeleteOldOccurrencesParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, deleteOldOccurrences, arg.HouseholdID, arg.CutoffDay)
 	if err != nil {
@@ -112,8 +106,6 @@ type DeleteOldRedemptionsParams struct {
 	CutoffUnix  *int64 `json:"cutoff_unix"`
 }
 
-// Reward claims decided before cutoff_unix that no ledger line points at.
-// Waiting ones are always kept.
 func (q *Queries) DeleteOldRedemptions(ctx context.Context, arg DeleteOldRedemptionsParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, deleteOldRedemptions, arg.HouseholdID, arg.CutoffUnix)
 	if err != nil {
@@ -123,7 +115,6 @@ func (q *Queries) DeleteOldRedemptions(ctx context.Context, arg DeleteOldRedempt
 }
 
 const deleteOldTransferRequests = `-- name: DeleteOldTransferRequests :execrows
-
 DELETE FROM transfer_requests
 WHERE household_id = ?1 AND status <> 'pending'
   AND COALESCE(reviewed_at, requested_at) < ?2
@@ -134,9 +125,6 @@ type DeleteOldTransferRequestsParams struct {
 	CutoffUnix  *int64 `json:"cutoff_unix"`
 }
 
-// Keep history: the nightly clear-out of history older than a household's
-// cutoff. See chores.ClearHistory for the order these run in.
-// Bank requests decided before cutoff_unix. Waiting ones are always kept.
 func (q *Queries) DeleteOldTransferRequests(ctx context.Context, arg DeleteOldTransferRequestsParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, deleteOldTransferRequests, arg.HouseholdID, arg.CutoffUnix)
 	if err != nil {
@@ -175,11 +163,6 @@ type ListLedgerToFoldRow struct {
 	Pence    int64 `json:"pence"`
 }
 
-// Per person, the ledger lines before cutoff_unix that fold into one
-// Brought forward line: all but interest and match lines (which feed
-// Interest so far and matching) and lines a bank request still points at.
-// keep_id is the oldest, which becomes the Brought forward line; folded is
-// how many of them already are one.
 func (q *Queries) ListLedgerToFold(ctx context.Context, arg ListLedgerToFoldParams) ([]ListLedgerToFoldRow, error) {
 	rows, err := q.db.QueryContext(ctx, listLedgerToFold, arg.HouseholdID, arg.CutoffUnix)
 	if err != nil {
@@ -226,7 +209,6 @@ type SetBroughtForwardParams struct {
 	ID          int64 `json:"id"`
 }
 
-// Turns a ledger line into a person's Brought forward line.
 func (q *Queries) SetBroughtForward(ctx context.Context, arg SetBroughtForwardParams) error {
 	_, err := q.db.ExecContext(ctx, setBroughtForward,
 		arg.Points,

@@ -13,7 +13,6 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/valid"
 )
 
-// doChore has p complete a new pool chore worth points and pence, today.
 func (f *fixture) doChore(p dbq.Person, points, pence int64, approval bool) dbq.Completion {
 	f.t.Helper()
 	f.chores++
@@ -48,7 +47,6 @@ func (f *fixture) goal(p dbq.Person, r dbq.Reward) {
 	}
 }
 
-// matched is what p holds from matching, and the match ledger lines.
 func (f *fixture) matched(p dbq.Person) (points, pence int64, lines []dbq.LedgerEntry) {
 	f.t.Helper()
 	held, err := f.st.Q.MatchHeldForPerson(f.t.Context(), dbq.MatchHeldForPersonParams{HouseholdID: f.hh, PersonID: p.ID})
@@ -84,7 +82,6 @@ func (f *fixture) wantMatchVerbs(want ...string) {
 	}
 }
 
-// tenPence is 10p for every £1 and 1 point for every 10.
 var tenPence = MatchInput{AddPence: 10, PerPence: 100, AddPoints: 1, PerPoints: 10}
 
 func TestMatchProportionalRounded(t *testing.T) {
@@ -92,9 +89,9 @@ func TestMatchProportionalRounded(t *testing.T) {
 	f.goal(f.kid, f.reward("Lego", 1000, 5000))
 	f.offer(f.kid, tenPence)
 
-	f.doChore(f.kid, 15, 50, false) // 5p, 1 pt (1.5 rounded down)
-	f.doChore(f.kid, 5, 5, false)   // 0p and 0 pts: nothing
-	f.doChore(f.kid, 0, 100, false) // 10p
+	f.doChore(f.kid, 15, 50, false)
+	f.doChore(f.kid, 5, 5, false)
+	f.doChore(f.kid, 0, 100, false)
 	pts, pence, lines := f.matched(f.kid)
 	if pts != 1 || pence != 15 || len(lines) != 2 {
 		t.Fatalf("matched %d pts %dp in %+v; want 1 pt 15p in 2 lines", pts, pence, lines)
@@ -105,16 +102,13 @@ func TestMatchProportionalRounded(t *testing.T) {
 	if b := f.balance(f.kid); b.Points != 21 || b.Pence != 170 {
 		t.Errorf("balance = %+v, want 21 pts 170p", b)
 	}
-	// It isn't "earned this week": that's chores.
 	if s := f.summary(f.kid); s.WeekPoints != 20 || s.WeekPence != 155 {
 		t.Errorf("this week = %d pts %dp, want 20 pts 155p", s.WeekPoints, s.WeekPence)
 	}
-	// The goal shows the matched part and the offer.
 	g := f.summary(f.kid).Goal
 	if g == nil || g.MatchedPence != 15 || g.MatchedPoints != 1 || g.Offer == nil || g.Offer.SetByName != "Mum" {
 		t.Fatalf("goal = %+v", g)
 	}
-	// 170 of 5000p is 3%; 21 of 1000 pts is 2%, the slower: 1 of 21 matched.
 	if g.Percent != 2 || g.MatchPercent != 0 {
 		t.Errorf("bar = %d%% with %d%% matched", g.Percent, g.MatchPercent)
 	}
@@ -125,24 +119,21 @@ func TestMatchOnlyWithGoalAndOffer(t *testing.T) {
 	lego := f.reward("Lego", 100, 1000)
 
 	f.offer(f.kid, tenPence)
-	f.doChore(f.kid, 10, 100, false) // no goal yet
+	f.doChore(f.kid, 10, 100, false)
 	f.goal(f.kid2, lego)
-	f.doChore(f.kid2, 10, 100, false) // goal, but no offer
+	f.doChore(f.kid2, 10, 100, false)
 	if _, p, _ := f.matched(f.kid); p != 0 {
 		t.Errorf("Alfie matched %dp without a goal", p)
 	}
 	if _, p, _ := f.matched(f.kid2); p != 0 {
 		t.Errorf("Isla matched %dp without an offer", p)
 	}
-	// Adults can't be offered a match.
 	if err := f.svc.SaveMatchOffer(t.Context(), f.hh, f.adult.ID, f.adult.ID, tenPence); !errors.Is(err, ErrNotFound) {
 		t.Errorf("offer for an adult = %v", err)
 	}
-	// Only adults set one up.
 	if err := f.svc.SaveMatchOffer(t.Context(), f.hh, f.kid.ID, f.kid2.ID, tenPence); !errors.Is(err, ErrNotAdult) {
 		t.Errorf("offer by a child = %v", err)
 	}
-	// Turned off, nothing more is matched, and nothing is taken back.
 	f.goal(f.kid, lego)
 	f.doChore(f.kid, 10, 100, false)
 	if err := f.svc.RemoveMatchOffer(t.Context(), f.hh, f.kid.ID, f.adult.ID); err != nil {
@@ -179,13 +170,12 @@ func TestMatchStopsAtGoal(t *testing.T) {
 	f := newFixture(t)
 	f.goal(f.kid, f.reward("Comic", 0, 300))
 	f.offer(f.kid, MatchInput{AddPence: 50, PerPence: 100})
-	f.doChore(f.kid, 0, 200, false) // 100p matched: 300 of 300
-	f.doChore(f.kid, 0, 100, false) // past the goal: nothing
+	f.doChore(f.kid, 0, 200, false)
+	f.doChore(f.kid, 0, 100, false)
 	if _, p, lines := f.matched(f.kid); p != 100 || len(lines) != 1 {
 		t.Fatalf("matched %dp in %d lines, want 100p in 1", p, len(lines))
 	}
 
-	// Not past it either: 250 earned and 125 matched would be 375.
 	f2 := newFixture(t)
 	f2.goal(f2.kid, f2.reward("Comic", 0, 300))
 	f2.offer(f2.kid, MatchInput{AddPence: 50, PerPence: 100})
@@ -197,7 +187,6 @@ func TestMatchStopsAtGoal(t *testing.T) {
 		t.Errorf("goal = %+v", g)
 	}
 
-	// Not while a claim is waiting.
 	f3 := newFixture(t)
 	comic := f3.reward("Comic", 0, 300)
 	f3.goal(f3.kid, comic)
@@ -220,15 +209,14 @@ func TestMatchCap(t *testing.T) {
 	f.offer(f.kid, MatchInput{AddPence: 10, PerPence: 100, CapPence: 25})
 	f.doChore(f.kid, 0, 100, false)
 	f.doChore(f.kid, 0, 100, false)
-	f.doChore(f.kid, 0, 100, false) // 10 + 10 + 5 (the cap)
-	f.doChore(f.kid, 0, 100, false) // nothing
+	f.doChore(f.kid, 0, 100, false)
+	f.doChore(f.kid, 0, 100, false)
 	if _, p, _ := f.matched(f.kid); p != 25 {
 		t.Fatalf("matched %dp, want the cap, 25p", p)
 	}
 	if o := f.summary(f.kid).Goal.Offer; o == nil || !o.Spent() || o.CapLeftPence() != 0 {
 		t.Errorf("offer = %+v, want spent", o)
 	}
-	// Changing the goal takes it back, which frees the cap.
 	f.goal(f.kid, comic)
 	if _, p, _ := f.matched(f.kid); p != 0 {
 		t.Fatalf("after taking back, holds %dp", p)
@@ -260,7 +248,6 @@ func TestMatchUndoAndReverse(t *testing.T) {
 	f.goal(f.kid, f.reward("Lego", 0, 10000))
 	f.offer(f.kid, MatchInput{AddPence: 50, PerPence: 100})
 
-	// Undo removes the match with the chore.
 	c := f.doChore(f.kid, 0, 100, false)
 	if err := f.svc.Undo(t.Context(), f.hh, c.ID); err != nil {
 		t.Fatal(err)
@@ -269,16 +256,13 @@ func TestMatchUndoAndReverse(t *testing.T) {
 		t.Fatalf("after undo: %dp in %+v", p, lines)
 	}
 
-	// A reversal takes it back, as much as is left.
-	c = f.doChore(f.kid, 0, 200, false) // +100p matched: 300p
-	f.earn(f.kid, 0, -250)              // spent: 50p left
+	c = f.doChore(f.kid, 0, 200, false)
+	f.earn(f.kid, 0, -250)
 	base := f.svc.now()
 	f.clock(base.Add(time.Hour))
 	if err := f.svc.Reverse(t.Context(), f.hh, c.ID, f.adult.ID); err != nil {
 		t.Fatal(err)
 	}
-	// The reversal took 200p (to −150p); nothing's left to take the match
-	// from, so it stays.
 	if _, p, _ := f.matched(f.kid); p != 100 {
 		t.Errorf("after reversal while overdrawn: holds %dp, want 100p", p)
 	}
@@ -287,12 +271,11 @@ func TestMatchUndoAndReverse(t *testing.T) {
 	f2.goal(f2.kid, f2.reward("Lego", 0, 10000))
 	f2.offer(f2.kid, MatchInput{AddPence: 50, PerPence: 100})
 	f2.earn(f2.kid, 0, 30)
-	c = f2.doChore(f2.kid, 0, 200, false) // 330p with 100p matched
+	c = f2.doChore(f2.kid, 0, 200, false)
 	f2.clock(f2.svc.now().Add(time.Hour))
 	if err := f2.svc.Reverse(t.Context(), f2.hh, c.ID, f2.adult.ID); err != nil {
 		t.Fatal(err)
 	}
-	// 130p left after the reversal; all 100p of the match goes.
 	_, p, lines := f2.matched(f2.kid)
 	if p != 0 || len(lines) != 2 || lines[1].Note != "Match taken back: Chore 1" {
 		t.Errorf("after reversal: holds %dp in %+v", p, lines)
@@ -308,14 +291,12 @@ func TestMatchTakenBackWhenGoalChanges(t *testing.T) {
 	comic := f.reward("Comic", 0, 10000)
 	f.goal(f.kid, lego)
 	f.offer(f.kid, MatchInput{AddPence: 50, PerPence: 100})
-	f.doChore(f.kid, 0, 200, false) // 100p matched
-	// Picking the same goal again keeps it.
+	f.doChore(f.kid, 0, 200, false)
 	f.goal(f.kid, lego)
 	if g := f.summary(f.kid).Goal; g.MatchedPence != 100 {
 		t.Fatalf("same goal again: matched %dp, want 100p", g.MatchedPence)
 	}
-	// Spent some: only what's left can be taken back.
-	f.earn(f.kid, 0, -250) // 50p left
+	f.earn(f.kid, 0, -250)
 	f.goal(f.kid, comic)
 	if _, p, lines := f.matched(f.kid); p != 50 || len(lines) != 2 || lines[1].Pence != -50 || lines[1].Note != matchTakenBackGoal {
 		t.Fatalf("after changing goal: holds %dp in %+v", p, lines)
@@ -323,7 +304,6 @@ func TestMatchTakenBackWhenGoalChanges(t *testing.T) {
 	if b := f.balance(f.kid); b.Pence != 0 {
 		t.Errorf("balance = %dp, want 0", b.Pence)
 	}
-	// The new goal's match is its own; removing the goal takes it back.
 	f.doChore(f.kid, 0, 100, false)
 	if err := f.svc.ClearGoal(t.Context(), f.hh, f.kid.ID); err != nil {
 		t.Fatal(err)
@@ -342,7 +322,7 @@ func TestMatchKeptWhenClaimedOrArchived(t *testing.T) {
 	comic := f.reward("Comic", 0, 300)
 	f.goal(f.kid, comic)
 	f.offer(f.kid, MatchInput{AddPence: 50, PerPence: 100})
-	f.doChore(f.kid, 0, 200, false) // 300p: enough
+	f.doChore(f.kid, 0, 200, false)
 	d, err := f.svc.ClaimReward(t.Context(), f.hh, comic.ID, f.kid.ID, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -354,12 +334,10 @@ func TestMatchKeptWhenClaimedOrArchived(t *testing.T) {
 		t.Errorf("after claiming: %dp in %+v, want the match kept", p, lines)
 	}
 
-	// An archived reward isn't the child's doing: they keep the match.
 	lego := f.reward("Lego", 0, 10000)
 	f.goal(f.kid2, lego)
 	f.offer(f.kid2, MatchInput{AddPence: 50, PerPence: 100})
 	f.doChore(f.kid2, 0, 200, false)
-	// As household.ArchiveReward does.
 	if err := f.st.Q.ClearGoalsForReward(t.Context(), dbq.ClearGoalsForRewardParams{HouseholdID: f.hh, GoalRewardID: &lego.ID}); err != nil {
 		t.Fatal(err)
 	}
@@ -375,11 +353,10 @@ func TestMatchNotForOtherMoney(t *testing.T) {
 	if _, err := f.svc.AdjustPoints(t.Context(), f.hh, f.adult.ID, f.kid.ID, 50, "Bonus"); err != nil {
 		t.Fatal(err)
 	}
-	f.earnAt(f.kid, 0, 500, f.svc.now()) // like interest or a transfer: not a chore credit
+	f.earnAt(f.kid, 0, 500, f.svc.now())
 	if pts, p, _ := f.matched(f.kid); pts != 0 || p != 0 {
 		t.Errorf("matched %d pts %dp from non-chore money", pts, p)
 	}
-	// Adults doing a chore aren't matched (they have no offer anyway).
 	f.doChore(f.adult, 10, 0, false)
 	if pts, _, _ := f.matched(f.adult); pts != 0 {
 		t.Errorf("adult matched %d pts", pts)
@@ -404,7 +381,6 @@ func TestSaveMatchOfferValidates(t *testing.T) {
 			t.Errorf("%+v: err = %v, want one on %s", c.in, err, c.field)
 		}
 	}
-	// A half left blank is off.
 	f.offer(f.kid, MatchInput{AddPoints: 1, PerPoints: 10, PerPence: 100})
 	o, err := f.svc.MatchOffer(t.Context(), f.hh, f.kid.ID)
 	if err != nil || o == nil || o.Money() || !o.Points() || o.PerPence != 0 || o.Capped() {

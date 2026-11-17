@@ -41,7 +41,7 @@ func TestCalendar(t *testing.T) {
 	weekly := "FREQ=WEEKLY;BYDAY=MO"
 	teeth := f.chore("Teeth", choreOpts{assignee: &f.kid.ID, rrule: &daily, startsOn: "2026-10-26"})
 	f.chore("Bins", choreOpts{rrule: &weekly, startsOn: "2026-10-26"})
-	f.chore("Car", choreOpts{startsOn: "2026-11-20"}) // one-off, past the window
+	f.chore("Car", choreOpts{startsOn: "2026-11-20"})
 	gone := f.chore("Gone", choreOpts{assignee: &f.kid.ID, rrule: &daily, startsOn: "2026-10-26"})
 	later := f.chore("Later", choreOpts{assignee: &f.kid2.ID, rrule: &daily, startsOn: "2026-12-01"})
 	if _, err := f.st.Q.UpdateChore(ctx, dbq.UpdateChoreParams{
@@ -57,7 +57,6 @@ func TestCalendar(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Past days: 27 Oct done, 28 Oct skipped, 29 Oct missed.
 	rows := f.board("2026-10-26", "2026-11-30")
 	occ := map[string]int64{}
 	for _, r := range rows {
@@ -69,7 +68,6 @@ func TestCalendar(t *testing.T) {
 	if err := f.st.Q.SetOccurrenceStatus(ctx, dbq.SetOccurrenceStatusParams{Status: "skipped", HouseholdID: f.hh, ID: occ["Teeth2026-10-28"]}); err != nil {
 		t.Fatal(err)
 	}
-	// Someone does today's pool chore without claiming it.
 	if _, err := f.svc.Complete(ctx, f.hh, occ["Bins2026-11-02"], f.kid2.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -81,9 +79,9 @@ func TestCalendar(t *testing.T) {
 		"2026-10-29": "Teeth:missed",
 		"2026-11-02": "Bins:done, Teeth:today",
 		"2026-11-03": "Teeth:upcoming",
-		"2026-11-20": "Car:upcoming*, Teeth:upcoming*", // projected past the 14-day window
+		"2026-11-20": "Car:upcoming*, Teeth:upcoming*",
 		"2026-11-30": "Bins:upcoming*, Teeth:upcoming*",
-		"2026-12-01": "Later:upcoming*, Teeth:upcoming*", // timed first
+		"2026-12-01": "Later:upcoming*, Teeth:upcoming*",
 	} {
 		if got := calTitles(cal[day]); got != want {
 			t.Errorf("%s: got %q, want %q", day, got, want)
@@ -101,7 +99,6 @@ func TestCalendar(t *testing.T) {
 		t.Errorf("upcoming pool chore = %+v, want up for grabs", b)
 	}
 
-	// Claimed pool chores belong to the claimer.
 	if err := f.svc.Claim(ctx, f.hh, occ["Bins2026-11-09"], f.kid.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +106,6 @@ func TestCalendar(t *testing.T) {
 		t.Errorf("claimed = %+v, want Alfie's", b)
 	}
 
-	// Nothing projected before today, and nothing written.
 	before := len(f.board("2026-10-01", "2027-01-31"))
 	if got := f.calendar("2026-11-02", "2026-10-01", "2026-10-25"); len(got) != 0 {
 		t.Errorf("before the chores started: %+v", got)
@@ -118,7 +114,6 @@ func TestCalendar(t *testing.T) {
 		t.Errorf("Calendar wrote occurrences: %d → %d", before, after)
 	}
 
-	// ChoreOn.
 	d := time.Date(2026, 11, 2, 0, 0, 0, 0, london)
 	c, ch, err := f.svc.ChoreOn(ctx, f.hh, d, teeth.ID, "2026-11-25", CalPick{})
 	if err != nil || c.Status != CalUpcoming || ch.ID != teeth.ID {

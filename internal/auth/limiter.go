@@ -5,9 +5,7 @@ import (
 	"time"
 )
 
-// Limiter blocks a key after too many consecutive failures. It is in memory:
-// a restart clears it, which is fine for slowing down guessing on a home
-// server.
+// Limiter blocks a key after too many consecutive failures.
 type Limiter struct {
 	max    int
 	window time.Duration
@@ -53,7 +51,6 @@ func (l *Limiter) Fail(key string) bool {
 		e = &limitEntry{}
 		l.entries[key] = e
 	}
-	// Failures spread out by more than the window don't accumulate.
 	if !e.blockedUntil.IsZero() && !now.Before(e.blockedUntil) || now.Sub(e.last) > l.window {
 		e.failures = 0
 		e.blockedUntil = time.Time{}
@@ -74,7 +71,6 @@ func (l *Limiter) Reset(key string) {
 	delete(l.entries, key)
 }
 
-// sweep drops stale entries so the map can't grow without bound.
 func (l *Limiter) sweep(now time.Time) {
 	if len(l.entries) < 1024 {
 		return

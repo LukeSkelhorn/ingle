@@ -6,21 +6,16 @@ import (
 	"strings"
 )
 
-// Admin › Modules: switch whole features on or off.
-
 type modulesPage struct {
 	Modules []moduleRow
-	// Chosen is false until the page has been saved once.
-	Chosen bool
-	// Confirm names the modules that would also go off, when the adult is
-	// asked first.
+	Chosen  bool
 	Confirm string
 }
 
 type moduleRow struct {
 	ID, Name, Description string
 	On                    bool
-	Needs                 string // names of the modules it requires
+	Needs                 string
 }
 
 func (s *Server) handleModules(w http.ResponseWriter, r *http.Request) {
@@ -66,7 +61,6 @@ func (s *Server) handleModulesUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	c := reg.Plan(st.On, want)
 	if len(c.AlsoOff) > 0 && r.PostForm.Get("confirm") == "" {
-		// Ask first: show the page as they left it, with a warning.
 		s.renderModules(w, r, http.StatusOK, want, st.Chosen, s.moduleNames(c.AlsoOff), "")
 		return
 	}
@@ -81,7 +75,6 @@ func (s *Server) handleModulesUpdate(w http.ResponseWriter, r *http.Request) {
 	s.renderModules(w, r, http.StatusOK, c.Final, true, "", flash)
 }
 
-// moduleNames is the modules' names, e.g. "Rewards and Photos".
 func (s *Server) moduleNames(ids []string) string {
 	var names []string
 	for _, id := range ids {

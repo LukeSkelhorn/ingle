@@ -38,18 +38,16 @@ import (
 )
 
 type harness struct {
-	t    *testing.T
-	ts   *httptest.Server
-	st   *store.Store
-	hh   int64
-	auth *auth.Service
-	// photoDir is the read-only photos folder (INGLE_PHOTOS_DIR).
+	t        *testing.T
+	ts       *httptest.Server
+	st       *store.Store
+	hh       int64
+	auth     *auth.Service
 	photoDir string
 	lib      *photos.Library
 	lock     *lock.Service
-	// ics serves calendar feeds: icsBody at any path.
-	ics *httptest.Server
-	srv *Server
+	ics      *httptest.Server
+	srv      *Server
 
 	mu      sync.Mutex
 	now     time.Time
@@ -74,8 +72,6 @@ func (h *harness) advance(d time.Duration) {
 	h.now = h.now.Add(d)
 }
 
-// ctx is the test's context, scoped to the harness's household, for
-// calling services directly (requests get theirs from the middleware).
 func (h *harness) ctx() context.Context { return store.WithHousehold(h.t.Context(), h.hh) }
 
 func newHarness(t *testing.T) *harness {
@@ -83,17 +79,14 @@ func newHarness(t *testing.T) *harness {
 	return newHarnessWith(t)
 }
 
-// newHarnessWith also registers extra modules after Ingle's own.
 func newHarnessWith(t *testing.T, extra ...module.Module) *harness {
 	t.Helper()
 	ctx := t.Context()
 	dir := t.TempDir()
-	// Scoped: on Postgres, row-level security applies, as in production.
 	db := storetest.OpenScoped(t, filepath.Join(dir, "ingle.db"))
 	st := store.New(db)
 
 	uk := locale.UK()
-	// 30 June 2026 23:30 UTC is 1 July 00:30 BST.
 	h := &harness{t: t, st: st, now: time.Date(2026, 6, 30, 23, 30, 0, 0, time.UTC)}
 
 	hh, err := st.EnsureHousehold(ctx, "Home", h.clock())
@@ -158,12 +151,9 @@ func newHarnessWith(t *testing.T, extra ...module.Module) *harness {
 	return h
 }
 
-// device is a browser with its own cookie jar (the wall tablet, a phone…).
 type device struct {
-	h *harness
-	c *http.Client
-	// host, when set, is sent as the Host header (the tenancy tests tell
-	// households apart by it).
+	h    *harness
+	c    *http.Client
 	host string
 }
 
@@ -215,9 +205,6 @@ func (d *device) get(path string) resp {
 
 func (d *device) post(path string, form url.Values) resp {
 	d.h.t.Helper()
-	// Chore and reward forms behave like a browser running the page's
-	// script, which offers emoji suggestions itself. Pass suggest_offered
-	// (even empty) to act otherwise.
 	if (strings.HasPrefix(path, "/admin/chores") || strings.HasPrefix(path, "/admin/rewards")) && !form.Has("suggest_offered") {
 		f := url.Values{"suggest_offered": {"1"}}
 		for k, v := range form {
@@ -293,8 +280,6 @@ var setupValues = url.Values{
 	"display_name":     {"Kitchen"},
 }
 
-// setUp runs first-run setup from a new device, registering it as the
-// household display, and returns it (unlocked as Mum).
 func (h *harness) setUp() *device {
 	h.t.Helper()
 	d := h.device()
@@ -334,8 +319,6 @@ func TestOpenRoutes(t *testing.T) {
 	}
 }
 
-// Pages link static files with the build's asset hash, and the service
-// worker's cache is named after it, so a new build never shows old CSS.
 func TestStaticAssetsAreVersioned(t *testing.T) {
 	h := newHarness(t)
 	d := h.device()
@@ -361,7 +344,6 @@ func TestEverythingGoesToSetupFirst(t *testing.T) {
 	for _, p := range []string{"/", "/admin", "/signin", "/admin/unlock", "/clock"} {
 		expectRedirect(t, d.get(p), "/setup")
 	}
-	// The PIN is typed twice on Ingle's keypad, not the tablet's keyboard.
 	expect(t, d.get("/setup"), http.StatusOK, "Welcome to Ingle", `name="pin"`, `name="pin_confirm"`, "data-pinpad-set", "/static/pinpad.js")
 }
 
@@ -381,7 +363,6 @@ func TestSetupValidation(t *testing.T) {
 
 	bad.Set("pin_confirm", "12")
 	expect(t, d.post("/setup", bad), http.StatusUnprocessableEntity, "Use 4 to 6 digits.")
-	// Still not set up.
 	expectRedirect(t, d.get("/"), "/setup")
 }
 
@@ -390,11 +371,9 @@ func TestSetupRegistersDisplayAndSignsIn(t *testing.T) {
 	wall := h.setUp()
 
 	expect(t, wall.get("/admin"), http.StatusOK, "Hello Mum", "The Smiths", "set up the household")
-	// The board shows on the display, with the admin link.
 	expect(t, wall.get("/"), http.StatusOK, "The Smiths", "01/07/2026", `href="/admin"`)
 	expect(t, wall.get("/clock"), http.StatusOK, "00:30")
 
-	// Setup is gone once done.
 	expect(t, wall.get("/setup"), http.StatusNotFound)
 	expect(t, wall.post("/setup", setupValues), http.StatusNotFound)
 	expect(t, h.device().get("/setup"), http.StatusNotFound)
@@ -410,7 +389,6 @@ func TestSetupWithoutDisplay(t *testing.T) {
 	form.Del("use_as_display")
 	expectRedirect(t, d.post("/setup", form), "/admin")
 	expect(t, d.get("/admin"), http.StatusOK, "Hello Mum")
-	// A personal device: its menu offers Sign out, not Lock.
 	expect(t, d.get("/admin"), http.StatusOK, ">Sign out<")
 }
 
@@ -421,13 +399,11 @@ func TestUnknownDeviceOnlySeesSignIn(t *testing.T) {
 	for _, p := range []string{"/", "/clock", "/avatars/0123456789abcdef0123456789abcdef.jpg", "/admin", "/admin/people"} {
 		expectRedirect(t, stranger.get(p), "/signin")
 	}
-	// Not a display, so there's no PIN pad either.
 	expectRedirect(t, stranger.get("/admin/unlock"), "/signin")
 	expect(t, stranger.post("/admin/unlock", url.Values{"person": {"1"}, "pin": {"2468"}}), http.StatusSeeOther)
 	expectRedirect(t, stranger.get("/admin"), "/signin")
 	r := stranger.get("/signin")
 	expect(t, r, http.StatusOK, "Sign in", `name="password"`)
-	// No household data on the sign-in page.
 	if strings.Contains(r.body, "The Smiths") || strings.Contains(r.body, "Mum") {
 		t.Error("sign-in page shows household data to an unknown device")
 	}
@@ -444,7 +420,6 @@ func TestSignInFromPhone(t *testing.T) {
 	expect(t, phone.get("/admin"), http.StatusOK, "Hello Mum", ">Sign out<")
 	expect(t, phone.get("/"), http.StatusOK, "The Smiths")
 
-	// Personal sessions last 30 days of inactivity, rolling.
 	h.advance(29 * 24 * time.Hour)
 	expect(t, phone.get("/admin"), http.StatusOK)
 	h.advance(29 * 24 * time.Hour)
@@ -462,10 +437,8 @@ func TestSignInLockout(t *testing.T) {
 		expect(t, phone.post("/signin", bad), http.StatusUnauthorized, "don&#39;t match")
 	}
 	expect(t, phone.post("/signin", bad), http.StatusUnauthorized, "Too many attempts")
-	// Even the right password is refused while locked out…
 	good := url.Values{"email": {"mum@example.com"}, "password": {"correct horse battery"}}
 	expect(t, phone.post("/signin", good), http.StatusUnauthorized, "Too many attempts")
-	// …until the lockout passes.
 	h.advance(auth.LockoutPeriod)
 	expectRedirect(t, phone.post("/signin", good), "/admin")
 }
@@ -485,9 +458,7 @@ func TestDisplayUnlockLockAndIdle(t *testing.T) {
 	expect(t, wall.get("/admin"), http.StatusOK, ">Lock<", "var idleMs =  120  * 1000")
 	expectRedirect(t, wall.post("/admin/lock", nil), "/")
 	expectRedirect(t, wall.get("/admin"), "/admin/unlock")
-	// The board is still visible, with a link to unlock.
 	expect(t, wall.get("/"), http.StatusOK, `href="/admin/unlock"`)
-	// Displays use PINs, not passwords.
 	expectRedirect(t, wall.get("/signin"), "/admin/unlock")
 
 	r := wall.get("/admin/unlock")
@@ -499,7 +470,6 @@ func TestDisplayUnlockLockAndIdle(t *testing.T) {
 	expectRedirect(t, wall.post("/admin/unlock", url.Values{"person": {mumID}, "pin": {"2468"}}), "/admin")
 	expect(t, wall.get("/admin"), http.StatusOK)
 
-	// Activity keeps it unlocked; two idle minutes locks it.
 	h.advance(90 * time.Second)
 	expect(t, wall.get("/admin/people"), http.StatusOK)
 	h.advance(90 * time.Second)
@@ -537,8 +507,6 @@ func TestDisplaySessionDoesNotWorkElsewhere(t *testing.T) {
 	if sess == nil {
 		t.Fatal("no session cookie on the display")
 	}
-	// Copying the display's admin session to another device doesn't work
-	// without the display cookie too.
 	thief := h.device()
 	thief.c.Jar.SetCookies(u, []*http.Cookie{{Name: sessionCookie, Value: sess.Value}})
 	expectRedirect(t, thief.get("/admin"), "/signin")
@@ -569,7 +537,6 @@ func TestPeopleAdmin(t *testing.T) {
 	h.setUp()
 	phone := h.phone()
 
-	// Validation.
 	expect(t, phone.post("/admin/people", url.Values{"name": {""}, "kind": {"child"}, "colour": {"#46A758"}, "avatar_mode": {"none"}}),
 		http.StatusUnprocessableEntity, "Enter a name")
 
@@ -582,36 +549,29 @@ func TestPeopleAdmin(t *testing.T) {
 
 	expect(t, phone.get("/admin/people"), http.StatusOK, "Alfie", "🦖", "Child")
 	alfie := h.person("Alfie")
-	// Kids have a My money PIN but no sign-in section…
 	r := phone.get("/admin/people/" + itoa(alfie.ID))
 	expect(t, r, http.StatusOK, "Archive Alfie", "Opens Alfie's My money", "can't open admin")
 	if strings.Contains(r.body, "/login\"") {
 		t.Error("child page offers a sign-in form")
 	}
-	// …and can't be given one.
 	expect(t, phone.post("/admin/people/"+itoa(alfie.ID)+"/login", url.Values{
 		"email": {"alfie@example.com"}, "password": {"a long password"}, "password_confirm": {"a long password"},
 	}), http.StatusConflict, "Only adults")
 
-	// Kids never appear on the unlock screen.
 	wall := h.setUpDisplayLocked()
 	r = wall.get("/admin/unlock")
 	if strings.Contains(r.body, "Alfie") {
 		t.Error("child listed on the unlock screen")
 	}
 
-	// Archive and restore.
 	expectRedirect(t, phone.post("/admin/people/"+itoa(alfie.ID)+"/archive", nil), "/admin/people")
 	expect(t, phone.get("/admin/people"), http.StatusOK, "Archived (1)")
 	expectRedirect(t, phone.post("/admin/people/"+itoa(alfie.ID)+"/restore", nil), "/admin/people/"+itoa(alfie.ID))
 
-	// The last adult who can sign in can't be archived.
 	mum := h.person("Mum")
 	expect(t, phone.post("/admin/people/"+itoa(mum.ID)+"/archive", nil), http.StatusConflict, "At least one adult")
 }
 
-// setUpDisplayLocked returns the wall display from a fresh login of an
-// existing household: it registers a new display from a phone.
 func (h *harness) setUpDisplayLocked() *device {
 	h.t.Helper()
 	d := h.phone()
@@ -643,16 +603,13 @@ func TestAddAdultWithCredentials(t *testing.T) {
 	expectRedirect(t, dadPhone.post("/signin", url.Values{"email": {"dad@example.com"}, "password": {"dads password 1"}}), "/admin")
 	expect(t, dadPhone.get("/admin"), http.StatusOK, "Hello Dad")
 
-	// Changing Dad's password signs him out elsewhere.
 	expect(t, phone.post("/admin/people/"+dad+"/login", url.Values{
 		"email": {"dad@example.com"}, "password": {"new dad password"}, "password_confirm": {"new dad password"},
 	}), http.StatusOK, "Sign-in saved.")
 	expectRedirect(t, dadPhone.get("/admin"), "/signin")
 
-	// Now Mum isn't the last admin, so her PIN can go.
 	mum := itoa(h.person("Mum").ID)
 	expect(t, phone.post("/admin/people/"+mum+"/pin/clear", nil), http.StatusOK, "PIN removed.")
-	// Mum's own phone session survives changing her own credentials.
 	expect(t, phone.get("/admin"), http.StatusOK)
 }
 
@@ -693,8 +650,6 @@ func TestPhotoAvatar(t *testing.T) {
 	expect(t, wall.get("/avatars/..%2fingle.db"), http.StatusNotFound)
 	expect(t, wall.get("/avatars/nope.jpg"), http.StatusNotFound)
 
-	// Saving again without a new file keeps the photo; switching to an emoji
-	// removes the old file.
 	expect(t, wall.postMultipart("/admin/people/"+itoa(mum.ID), fields, "", "", nil), http.StatusOK, "Saved.")
 	expect(t, wall.get("/avatars/"+name), http.StatusOK)
 	fields["avatar_mode"], fields["emoji"] = "emoji", "🐼"
@@ -713,7 +668,6 @@ func TestChoresAdmin(t *testing.T) {
 
 	expect(t, phone.get("/admin/chores/new"), http.StatusOK, "What needs doing?", "Alfie")
 
-	// Weekly with no days, and a bad money value.
 	expect(t, phone.post("/admin/chores", url.Values{
 		"title": {"Bins"}, "mode": {"assigned"}, "assignee_id": {itoa(alfie.ID)}, "repeat": {"weekly"},
 		"starts_on": {"2026-07-01"}, "money": {"1.234"},
@@ -723,12 +677,10 @@ func TestChoresAdmin(t *testing.T) {
 		"starts_on": {"2026-07-01"}, "money": {"0.50"},
 	}), http.StatusUnprocessableEntity, "Choose at least one day.")
 
-	// Mon + Thu, assigned to Alfie, 10 points + 50p.
 	expectRedirect(t, phone.post("/admin/chores", url.Values{
 		"title": {"Bins"}, "mode": {"assigned"}, "assignee_id": {itoa(alfie.ID)}, "repeat": {"weekly"},
 		"days": {"1", "4"}, "starts_on": {"2026-07-01"}, "points": {"10"}, "money": {"£0.50"}, "due_time": {"18:00"},
 	}), "/admin/chores")
-	// A pool chore every day.
 	expectRedirect(t, phone.post("/admin/chores", url.Values{
 		"title": {"Unload dishwasher"}, "mode": {"pool"}, "repeat": {"daily"}, "starts_on": {"2026-07-01"},
 		"points": {"5"}, "requires_approval": {"1"},
@@ -737,7 +689,6 @@ func TestChoresAdmin(t *testing.T) {
 	expect(t, phone.get("/admin/chores"), http.StatusOK,
 		"Bins", "Weekly: Mon, Thu", "by 18:00", "10 pts · £0.50", "Unload dishwasher", "Anyone can claim", "Every day")
 
-	// Occurrences for the next 14 days from Wed 1 July: Thu 2, Mon 6, Thu 9, Mon 13.
 	bins := h.chore("Bins")
 	if got := h.dueDates(bins.ID); strings.Join(got, ",") != "2026-07-02,2026-07-06,2026-07-09,2026-07-13" {
 		t.Errorf("Bins due %v", got)
@@ -746,7 +697,6 @@ func TestChoresAdmin(t *testing.T) {
 		t.Errorf("dishwasher has %d occurrences, want 14", len(got))
 	}
 
-	// Edit: move Bins to Tuesdays; upcoming open days are replaced.
 	r := phone.get("/admin/chores/" + itoa(bins.ID))
 	expect(t, r, http.StatusOK, `value="0.50"`, `value="18:00"`)
 	expect(t, phone.post("/admin/chores/"+itoa(bins.ID), url.Values{
@@ -757,7 +707,6 @@ func TestChoresAdmin(t *testing.T) {
 		t.Errorf("after edit Bins due %v", got)
 	}
 
-	// Alfie can't be archived while Bins is assigned to him.
 	expect(t, phone.post("/admin/people/"+itoa(alfie.ID)+"/archive", nil), http.StatusConflict, "still have chores")
 	expectRedirect(t, phone.post("/admin/chores/"+itoa(bins.ID)+"/archive", nil), "/admin/chores")
 	if got := h.dueDates(bins.ID); len(got) != 0 {
@@ -799,8 +748,6 @@ func TestSettingsAdmin(t *testing.T) {
 	expect(t, phone.post("/admin/settings", url.Values{
 		"household_name": {"Smith HQ"}, "timezone": {"Europe/London"}, "day_starts_at": {"04:00"}, "lock_from": {"09:00"}, "lock_until": {"15:00"}, "admin_idle_minutes": {"5"},
 	}), http.StatusOK, "Settings saved.")
-	// It's 00:30 on 1 July; with a 04:00 reset the board is still on 30 June,
-	// so a new chore defaults to starting then.
 	expect(t, phone.get("/admin/chores/new"), http.StatusOK, `value="2026-06-30"`)
 	expect(t, phone.get("/"), http.StatusOK, "Smith HQ")
 }
@@ -813,7 +760,6 @@ func TestDevicesAdmin(t *testing.T) {
 	r := phone.get("/admin/devices")
 	expect(t, r, http.StatusOK, "Kitchen", "Make this a household display", "This device")
 
-	// Register a second display from another browser, then revoke it from the phone.
 	hall := h.setUpDisplayLocked()
 	expectRedirect(t, hall.get("/admin"), "/admin/unlock")
 	devices, err := h.st.Q.ListDevices(h.ctx(), h.hh)
@@ -828,10 +774,8 @@ func TestDevicesAdmin(t *testing.T) {
 	}
 	expectRedirect(t, phone.post("/admin/devices/"+itoa(hallID)+"/revoke", nil), "/admin/devices")
 	expectRedirect(t, hall.get("/"), "/signin")
-	// The kitchen display is unaffected.
 	expect(t, wall.get("/"), http.StatusOK)
 
-	// Sign out another phone session.
 	other := h.phone()
 	expect(t, phone.post("/admin/sessions/others", nil), http.StatusOK, "Signed out everywhere else.")
 	expectRedirect(t, other.get("/admin"), "/signin")
@@ -853,7 +797,6 @@ func TestHTMXRedirect(t *testing.T) {
 	}
 }
 
-// expectPersonCreated checks a successful "add person" (303 to their page).
 func expectPersonCreated(t *testing.T, r resp) {
 	t.Helper()
 	const prefix = "/admin/people/"

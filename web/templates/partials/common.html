@@ -6,10 +6,6 @@
 
 {{define "flash"}}{{with .Flash}}<p class="flash" role="status">{{.}}</p>{{end}}{{end}}
 
-{{/* Choose people by tapping their faces. Put it inside a fieldset with a
-     legend. dict "People" []dbq.Person "Name" string "Multi" bool
-     (checkboxes; otherwise one, radios) "Chosen" (an id or []int64) and,
-     optionally, "Show" (a data-show-when). Each input has data-kind. */}}
 {{define "people_pick"}}
 <div class="people-pick"{{with .Show}} data-show-when="{{.}}"{{end}}>
   {{range .People}}
@@ -49,7 +45,6 @@
 </header>
 {{end}}
 
-{{/* dict "Selected" "#RRGGBB" "Colours" []string "Err" string */}}
 {{define "colour_picker"}}
 <fieldset class="field">
   <legend>Colour</legend>
@@ -65,7 +60,6 @@
 </fieldset>
 {{end}}
 
-{{/* dict "Selected" emoji "Emojis" []string "Err" string */}}
 {{define "emoji_picker"}}
 <fieldset class="field">
   <legend>Emoji</legend>
@@ -81,9 +75,6 @@
 </fieldset>
 {{end}}
 
-{{/* The chore and reward emoji: dict "F" emojiField "Err" string. A grid
-     with None, a box to type any emoji, and (with JavaScript) a "Use 🐶"
-     suggestion from the form's title as it's typed. */}}
 {{define "emoji_field"}}{{with .F}}
 <fieldset class="field emoji-field" data-emoji-picker data-suggest="{{.Suggest}}">
   <legend>Emoji (optional)</legend>
@@ -109,9 +100,6 @@
 </fieldset>
 {{end}}{{end}}
 
-{{/* The Adjust points form: dict "PersonID" int64 "Name" string "Panel"
-     pointsPanel "Errors" valid.Errors "From" ("people" sends it back to
-     Admin › People, "" to the person's page). */}}
 {{define "points_form"}}{{$p := .Panel}}{{$errs := .Errors}}
 <form class="stack" method="post" action="/admin/people/{{.PersonID}}/points">
   {{if .From}}<input type="hidden" name="from" value="{{.From}}">{{end}}

@@ -10,7 +10,7 @@ import (
 func TestChoreEmoji(t *testing.T) {
 	f := newFixture(t)
 	ctx := t.Context()
-	day := f.svc.now() // Mon 2 Nov 2026
+	day := f.svc.now()
 	in := Input{
 		Title: "Feed the dog", Emoji: " 🐶 ", Mode: ModeAssigned, AssigneeID: &f.kid.ID,
 		Repeat: Recurrence{Kind: RepeatDaily}, StartsOn: "2026-11-02", Points: 1,
@@ -22,7 +22,7 @@ func TestChoreEmoji(t *testing.T) {
 	if card := f.boardAt("2026-11-02").column("Alfie").Cards[0]; card.Emoji != "🐶" || card.PictureEmoji() != "🐶" {
 		t.Errorf("card emoji = %q / %q", card.Emoji, card.PictureEmoji())
 	}
-	in.Emoji = "🦕" // not in the grid: typed
+	in.Emoji = "🦕"
 	if c, err = f.svc.UpdateChore(ctx, f.hh, f.adult.ID, c.ID, in, day); err != nil || c.Emoji != "🦕" {
 		t.Fatalf("UpdateChore = %q, %v", c.Emoji, err)
 	}

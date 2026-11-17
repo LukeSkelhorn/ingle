@@ -44,7 +44,6 @@ func (f *fixture) countWhere(table, where string) int {
 	return f.count(table + " WHERE " + where)
 }
 
-// money is everything a clear-out must leave alone for p.
 type money struct {
 	Balance                       dbq.BalanceForPersonRow
 	Interest                      dbq.InterestTotalsForPersonRow
@@ -72,12 +71,9 @@ func (f *fixture) money(p dbq.Person) money {
 	return m
 }
 
-// oldHistory fills the household with a bit of everything on 2 November
-// 2026, some of it decided and some still waiting.
 func (f *fixture) oldHistory() {
 	f.t.Helper()
 	ctx := f.t.Context()
-	// Alfie saves for Lego, matched by Mum, and does chores.
 	f.goal(f.kid, f.reward("Lego", 1000, 5000))
 	f.offer(f.kid, tenPence)
 	f.doChore(f.kid, 15, 50, false)
@@ -85,11 +81,10 @@ func (f *fixture) oldHistory() {
 	if err := f.svc.Approve(ctx, f.hh, approved.ID, f.adult.ID); err != nil {
 		f.t.Fatal(err)
 	}
-	f.doChore(f.kid, 5, 20, true) // still waiting for a grown-up
+	f.doChore(f.kid, 5, 20, true)
 	if _, err := f.svc.AdjustPoints(ctx, f.hh, f.adult.ID, f.kid.ID, -2, "Shouted"); err != nil {
 		f.t.Fatal(err)
 	}
-	// A reward claimed and approved, and one still waiting.
 	sweets := f.reward("Sweets", 5, 0)
 	d, err := f.svc.ClaimReward(ctx, f.hh, sweets.ID, f.kid.ID, nil)
 	if err != nil {
@@ -101,13 +96,11 @@ func (f *fixture) oldHistory() {
 	if _, err := f.svc.ClaimReward(ctx, f.hh, sweets.ID, f.kid.ID, nil); err != nil {
 		f.t.Fatal(err)
 	}
-	// Interest, which the clear-out leaves as it is.
 	if _, err := f.st.Q.InsertLedgerEntry(ctx, dbq.InsertLedgerEntryParams{
 		HouseholdID: f.hh, PersonID: f.kid.ID, Points: 1, Pence: 7, Kind: "interest", Note: InterestNote, CreatedAt: f.svc.now().Unix(),
 	}); err != nil {
 		f.t.Fatal(err)
 	}
-	// Isla has money in the bank: one request paid, and one waiting.
 	f.earn(f.kid2, 40, 1000)
 	req, err := f.svc.RequestTransfer(ctx, f.hh, f.kid2.ID, 300)
 	if err != nil {
@@ -124,7 +117,6 @@ func (f *fixture) oldHistory() {
 func TestClearHistory(t *testing.T) {
 	f := newFixture(t)
 	f.oldHistory()
-	// Fourteen months later, with one recent line.
 	f.clock(time.Date(2028, 1, 10, 9, 0, 0, 0, london))
 	f.earnAt(f.kid, 3, 30, time.Date(2027, 12, 20, 12, 0, 0, 0, london))
 	before := map[string]money{"Alfie": f.money(f.kid), "Isla": f.money(f.kid2)}
@@ -134,7 +126,6 @@ func TestClearHistory(t *testing.T) {
 		kept[kind] = f.countWhere("ledger_entries", "kind = '"+kind+"'")
 	}
 
-	// Everything, then 24 months: nothing is old enough.
 	f.keepHistory(0)
 	if c := f.clearHistory(); c.Any() {
 		t.Errorf("Everything cleared %+v", c)
@@ -159,8 +150,6 @@ func TestClearHistory(t *testing.T) {
 		}
 	}
 
-	// Each child has one Brought forward line; interest and match lines,
-	// the recent line and the waiting ones are still there.
 	if n := f.countWhere("ledger_entries", "kind = 'brought_forward'"); n != 2 {
 		t.Errorf("%d brought forward lines, want 2", n)
 	}
@@ -181,7 +170,6 @@ func TestClearHistory(t *testing.T) {
 	if n := f.countWhere("completions", "status = 'pending'"); n != 1 || f.count("completions") != 1 {
 		t.Errorf("completions left: %d waiting of %d", n, f.count("completions"))
 	}
-	// The waiting completion keeps its chore copy; the rest go.
 	if n := f.count("chore_occurrences"); n != 1 {
 		t.Errorf("%d chore copies left, want 1", n)
 	}
@@ -189,7 +177,6 @@ func TestClearHistory(t *testing.T) {
 		t.Errorf("%d old activity lines left", n)
 	}
 
-	// My money: Brought forward is the last line, dated before the cutoff.
 	items, next := f.history(f.kid, 1<<62)
 	for next != 0 {
 		var more []HistoryItem
@@ -201,7 +188,6 @@ func TestClearHistory(t *testing.T) {
 		t.Errorf("last history line = %+v, want Brought forward", last)
 	}
 
-	// Again: nothing more to do, and the money's the same.
 	if c := f.clearHistory(); c.Any() {
 		t.Errorf("second run cleared %+v", c)
 	}
@@ -209,7 +195,6 @@ func TestClearHistory(t *testing.T) {
 		t.Errorf("Alfie's money after a second run = %+v", got)
 	}
 
-	// A month on, last month's line folds into Brought forward too.
 	f.clock(time.Date(2029, 1, 1, 9, 0, 0, 0, london))
 	if c := f.clearHistory(); c.Folded != 1 {
 		t.Errorf("a year on folded %d, want 1", c.Folded)

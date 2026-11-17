@@ -52,7 +52,6 @@ func TestSavePhoto(t *testing.T) {
 	if _, err := s.Open(name); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("Open after Remove: %v", err)
 	}
-	// No temp files left behind.
 	entries, _ := os.ReadDir(filepath.Join(dir, "avatars"))
 	if len(entries) != 0 {
 		t.Errorf("leftover files %v", entries)
@@ -70,7 +69,6 @@ func TestSavePhotoRejects(t *testing.T) {
 	if _, err := s.SavePhoto(bytes.NewReader(make([]byte, MaxUpload+1))); !errors.Is(err, ErrTooLarge) {
 		t.Errorf("oversize: %v", err)
 	}
-	// A small file that claims to be enormous.
 	if _, err := s.SavePhoto(bytes.NewReader(pngBytes(t, 10000, 10000))); !errors.Is(err, ErrTooLarge) {
 		t.Errorf("bomb: %v", err)
 	}

@@ -7,20 +7,14 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
-// doForView is the sheet a long press on a child's chore opens: an adult
-// can say they did it, and get the points themselves. Adults lists every
-// adult, as the one who unlocked the board may not be the one who did it;
-// Adult (that one) is picked to start with.
 type doForView struct {
 	OccurrenceID int64
 	Title, Emoji string
 	Child, Adult dbq.Person
 	Adults       []dbq.Person
-	Points       int64 // what an adult earns
+	Points       int64
 }
 
-// handleDoForSheet is the "I did it" sheet. It needs an adult, signed in or
-// unlocked, like approving a chore.
 func (s *Server) handleDoForSheet(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(r)
 	if !ok {
@@ -79,10 +73,6 @@ func (s *Server) handleDoForSheet(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleDoFor records an adult doing the child's chore: the one chosen as
-// "by", or else the one who unlocked the board. Someone must be unlocked or
-// signed in, checked here, not just by hiding the sheet; DoFor checks the
-// chosen one is an adult.
 func (s *Server) handleDoFor(w http.ResponseWriter, r *http.Request) {
 	id, child, ok := s.boardAction(w, r)
 	if !ok {
@@ -113,9 +103,6 @@ func (s *Server) handleDoFor(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// sheetFailed answers a request for a sheet that can't open: an error toast
-// and the fresh board, swapped in place of the board rather than into the
-// sheet, so no sheet opens.
 func (s *Server) sheetFailed(w http.ResponseWriter, r *http.Request, err error) {
 	msg, ok := boardErrorText(err)
 	if !ok {

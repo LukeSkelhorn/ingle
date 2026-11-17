@@ -1,12 +1,5 @@
 -- +goose Up
--- The Postgres schema, as of SQLite migration 00018. It is numbered 00018 so
--- the next migration for both engines can share a number (00019_...).
---
--- Columns are in the same order as in SQLite: sqlc writes `SELECT *` scans
--- in that order, and TestSchemaParity checks the two engines match.
--- Times are Unix seconds and flags are 0/1, as in SQLite, so the same
--- queries and generated Go types work on both.
-
+-- Column order must match SQLite: sqlc scans `SELECT *` in that order.
 CREATE TABLE app_meta (
     key   text PRIMARY KEY,
     value text NOT NULL
@@ -33,13 +26,11 @@ CREATE TABLE people (
     email          text,
     password_hash  text,
     pin_length     bigint CHECK (pin_length IS NULL OR pin_length BETWEEN 4 AND 6),
-    goal_reward_id bigint, -- REFERENCES rewards, added below
+    goal_reward_id bigint,
     goal_set_at    bigint,
     picture_cards  bigint NOT NULL DEFAULT 0 CHECK (picture_cards IN (0, 1)),
     UNIQUE (household_id, name)
 );
--- SQLite compares emails without case (COLLATE NOCASE). Postgres keeps one
--- unique address per person regardless of case; the app stores them lower.
 CREATE UNIQUE INDEX people_email_idx ON people (lower(email));
 CREATE INDEX people_email_exact_idx ON people (email);
 

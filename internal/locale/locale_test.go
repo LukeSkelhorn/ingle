@@ -38,11 +38,8 @@ func TestFormatDateAcrossDST(t *testing.T) {
 		wantDate string
 		wantTime string
 	}{
-		// BST (UTC+1): 23:30 UTC on 30 June is already 1 July in London.
 		{time.Date(2026, 6, 30, 23, 30, 0, 0, time.UTC), "01/07/2026", "00:30"},
-		// GMT (UTC+0) in winter.
 		{time.Date(2026, 12, 31, 23, 30, 0, 0, time.UTC), "31/12/2026", "23:30"},
-		// Clocks go back 25 Oct 2026 at 02:00 BST -> 01:00 GMT.
 		{time.Date(2026, 10, 25, 0, 30, 0, 0, time.UTC), "25/10/2026", "01:30"},
 		{time.Date(2026, 10, 25, 1, 30, 0, 0, time.UTC), "25/10/2026", "01:30"},
 	}

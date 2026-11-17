@@ -1,7 +1,4 @@
 -- +goose Up
--- Who a reward is for: everyone (the default, including people added
--- later), or the people in reward_people. A reward that costs money is only
--- ever for children, as adults have no money; that's applied when listing.
 ALTER TABLE rewards ADD COLUMN everyone INTEGER NOT NULL DEFAULT 1 CHECK (everyone IN (0, 1));
 
 CREATE TABLE reward_people (

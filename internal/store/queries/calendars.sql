@@ -19,5 +19,4 @@ UPDATE calendar_feeds SET url = ? WHERE household_id = ? AND id = ?;
 UPDATE calendar_feeds SET name = ?, person_id = ? WHERE household_id = ? AND id = ?;
 
 -- name: ClearCalendarFeedPerson :exec
--- Turns an archived person's calendars into the family's.
 UPDATE calendar_feeds SET person_id = NULL WHERE household_id = ? AND person_id = ?;

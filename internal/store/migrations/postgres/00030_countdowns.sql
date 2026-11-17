@@ -1,5 +1,4 @@
 -- +goose Up
--- See migrations/sqlite/00030_countdowns.sql.
 ALTER TABLE people ADD COLUMN birthday text
     CHECK (birthday IS NULL OR (birthday ~ '^\d{2}-\d{2}$' AND pg_input_is_valid('2000-' || birthday, 'date')));
 ALTER TABLE people ADD COLUMN birth_year bigint CHECK (birth_year IS NULL OR birth_year BETWEEN 1900 AND 2999);

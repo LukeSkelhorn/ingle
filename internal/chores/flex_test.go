@@ -8,8 +8,6 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
-// Mon 2 Nov 2026 is the fixture's first day; Tue 3, Thu 5, Sat 7, Sun 8.
-
 func windows(rows []dbq.ListBoardRow) []string {
 	var out []string
 	for _, r := range rows {
@@ -36,15 +34,13 @@ func (f *fixture) materialise(from string, days int) {
 func TestFlexMaterialise(t *testing.T) {
 	f := newFixture(t)
 	f.chore("Stairs", choreOpts{assignee: &f.kid.ID, rrule: ptr("FREQ=WEEKLY;BYDAY=TU,TH"), anyDay: true})
-	// A window ending on a Wednesday still sees that week's Thursday.
-	f.materialise("2026-11-02", 9) // Mon 2 – Tue 10
-	f.materialise("2026-11-02", 9) // idempotent
+	f.materialise("2026-11-02", 9)
+	f.materialise("2026-11-02", 9)
 	got := windows(f.board("2026-11-01", "2026-11-30"))
 	want := []string{"2026-11-03..2026-11-05", "2026-11-10..2026-11-12"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("windows = %v, want %v", got, want)
 	}
-	// A later run starting mid-week doesn't make a second row for the week.
 	f.materialise("2026-11-04", 14)
 	got = windows(f.board("2026-11-01", "2026-11-17"))
 	want = []string{"2026-11-03..2026-11-05", "2026-11-10..2026-11-12", "2026-11-17..2026-11-19"}
@@ -64,11 +60,8 @@ func TestFlexMaterialiseKinds(t *testing.T) {
 		by[r.Title] = append(by[r.Title], *r.AvailableFrom+".."+r.DueOn)
 	}
 	checks := map[string][]string{
-		// Sat+Sun is one weekend: weeks are Mon–Sun whatever the week start.
-		"Car": {"2026-11-07..2026-11-08", "2026-11-14..2026-11-15", "2026-11-21..2026-11-22"},
-		// Every other week only.
+		"Car":  {"2026-11-07..2026-11-08", "2026-11-14..2026-11-15", "2026-11-21..2026-11-22"},
 		"Lawn": {"2026-11-02..2026-11-06", "2026-11-16..2026-11-20"},
-		// Weekdays, starting on a Wednesday: the first week is Wed–Fri.
 		"Tidy": {"2026-11-04..2026-11-06", "2026-11-09..2026-11-13", "2026-11-16..2026-11-20"},
 	}
 	for title, want := range checks {
@@ -93,11 +86,9 @@ func TestFlexBoard(t *testing.T) {
 		return Card{}, false
 	}
 
-	// Monday isn't one of its days: only last week's missed one is up.
 	if c, ok := card(f.boardAt("2026-11-02")); !ok || !c.Overdue || c.DueOn != "2026-10-29" {
 		t.Errorf("Mon card = %+v, want last week's, overdue", c)
 	}
-	// Tuesday: up, labelled, and sorted with today's chores (not by its Thursday due date).
 	b := f.boardAt("2026-11-03")
 	c, ok := card(b)
 	if !ok || c.Flex != "Today or Thu" || c.LastChance || c.Overdue {
@@ -106,15 +97,12 @@ func TestFlexBoard(t *testing.T) {
 	if got := titles(b.column("Alfie").Cards); !slices.Equal(got, []string{"Stairs@2026-11-05", "Teeth@2026-11-03"}) {
 		t.Errorf("Tue order = %v", got)
 	}
-	// Wednesday is between its days: still up, the only day left is Thu.
 	if c, ok := card(f.boardAt("2026-11-04")); !ok || c.Flex != "" || c.LastChance {
 		t.Errorf("Wed card = %+v, ok %v", c, ok)
 	}
-	// Thursday: last chance.
 	if c, ok := card(f.boardAt("2026-11-05")); !ok || !c.LastChance || c.Flex != "" {
 		t.Errorf("Thu card = %+v, want last chance", c)
 	}
-	// Friday: overdue, until next week's window opens on Tuesday.
 	if c, ok := card(f.boardAt("2026-11-06")); !ok || !c.Overdue {
 		t.Errorf("Fri card = %+v, want overdue", c)
 	}
@@ -135,7 +123,6 @@ func TestFlexBoard(t *testing.T) {
 		t.Errorf("next Tue shows Stairs %d times, want once", n)
 	}
 
-	// Done on Tuesday: ticked that day, gone for the rest of the week.
 	tue := time.Date(2026, 11, 10, 18, 0, 0, 0, london)
 	f.svc.now = func() time.Time { return tue }
 	c, _ = card(f.boardAt("2026-11-10"))
@@ -155,7 +142,6 @@ func TestFlexBoard(t *testing.T) {
 		t.Errorf("points = %d, want 5 (once for the week)", bal.Points)
 	}
 
-	// Undo brings it back for the days left.
 	if err := f.svc.Undo(ctx, f.hh, comp.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -234,7 +220,6 @@ func TestFlexCalendar(t *testing.T) {
 		return out
 	}
 
-	// Materialised (first two weeks) and projected (after): on each of its days.
 	got := days(cal(mon))
 	want := []string{
 		"2026-11-03:upcoming", "2026-11-05:upcoming", "2026-11-10:upcoming", "2026-11-12:upcoming",
@@ -245,13 +230,11 @@ func TestFlexCalendar(t *testing.T) {
 		t.Fatalf("calendar = %v\nwant %v", got, want)
 	}
 
-	// Done on Tue 10: just that day, ticked; nothing on Thu 12.
 	f.svc.now = func() time.Time { return time.Date(2026, 11, 10, 17, 0, 0, 0, london) }
 	week2 := f.board("2026-11-10", "2026-11-10")
 	if _, err := f.svc.Complete(ctx, f.hh, week2[0].ID, f.kid.ID); err != nil {
 		t.Fatal(err)
 	}
-	// Board day Fri 13: week 1 was missed (on its Thursday only), week 2 done on Tuesday.
 	m := cal(time.Date(2026, 11, 13, 0, 0, 0, 0, london))
 	got = nil
 	for _, d := range []string{"2026-11-03", "2026-11-05", "2026-11-10", "2026-11-12"} {
@@ -264,7 +247,6 @@ func TestFlexCalendar(t *testing.T) {
 		t.Errorf("after = %v, want %v", got, want)
 	}
 
-	// The sheet finds it on either day.
 	if _, _, err := f.svc.ChoreOn(ctx, f.hh, mon, week2[0].ChoreID, "2026-11-26", CalPick{}); err != nil {
 		t.Errorf("ChoreOn projected Thu: %v", err)
 	}

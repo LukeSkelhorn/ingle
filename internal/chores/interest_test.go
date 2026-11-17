@@ -63,13 +63,11 @@ func day(m time.Month, d, h int) time.Time { return time.Date(2026, m, d, h, 0, 
 
 func TestInterestOnLowestBalance(t *testing.T) {
 	f := newFixture(t)
-	// Before interest is on, Alfie had nothing; that doesn't count.
 	f.earnAt(f.kid, 100, 1000, day(11, 2, 8))
-	f.interestOn(InterestInput{RateBP: 1000, Money: true, Points: true}) // 10% a month, at 09:00
+	f.interestOn(InterestInput{RateBP: 1000, Money: true, Points: true})
 	f.earnAt(f.kid, 0, -400, day(11, 10, 12))
 	f.earnAt(f.kid, 50, 600, day(11, 20, 12))
 
-	// Nothing is paid for a month that hasn't finished.
 	f.clock(day(11, 30, 23))
 	if n := f.payInterest(); n != 0 {
 		t.Fatalf("paid %d before the month ended", n)
@@ -79,7 +77,6 @@ func TestInterestOnLowestBalance(t *testing.T) {
 	if n := f.payInterest(); n != 1 {
 		t.Fatalf("paid %d, want 1", n)
 	}
-	// Lowest was 600p (after spending 400) and 100 pts.
 	lines := f.interestLines(f.kid)
 	if len(lines) != 1 || lines[0].Pence != 60 || lines[0].Points != 10 || lines[0].Note != InterestNote {
 		t.Fatalf("interest = %+v", lines)
@@ -87,18 +84,15 @@ func TestInterestOnLowestBalance(t *testing.T) {
 	if got := time.Unix(lines[0].CreatedAt, 0).In(london); !got.Equal(day(12, 1, 0).Add(-time.Second)) {
 		t.Errorf("dated %v, want the month's last second", got)
 	}
-	// Safe to run again.
 	if n := f.payInterest(); n != 0 {
 		t.Errorf("second run paid %d", n)
 	}
 	if s := f.summary(f.kid); s.Pence != 1260 || s.Points != 160 {
 		t.Errorf("balance = %d pts %dp", s.Points, s.Pence)
 	}
-	// It isn't "earned this week".
 	if pts, p, _ := f.svc.InterestTotals(t.Context(), f.hh, f.kid.ID); pts != 10 || p != 60 {
 		t.Errorf("totals = %d pts %dp", pts, p)
 	}
-	// Isla had nothing, and adults never earn interest.
 	if got := f.interestLines(f.kid2); len(got) != 0 {
 		t.Errorf("Isla got %+v", got)
 	}
@@ -122,9 +116,8 @@ func TestInterestNegativeBalanceEarnsNothing(t *testing.T) {
 func TestInterestCarriesFractionsAndCatchesUp(t *testing.T) {
 	f := newFixture(t)
 	f.earnAt(f.kid, 0, 50, day(11, 1, 8))
-	f.interestOn(InterestInput{RateBP: 100, Money: true}) // 1% of 50p is half a penny
+	f.interestOn(InterestInput{RateBP: 100, Money: true})
 
-	// Ingle was off over Christmas: November, December and January are paid at once.
 	f.clock(time.Date(2027, 2, 3, 10, 0, 0, 0, london))
 	if n := f.payInterest(); n != 1 {
 		t.Fatalf("paid %d, want 1", n)
@@ -159,7 +152,6 @@ func TestInterestCapsAndChoices(t *testing.T) {
 		t.Fatalf("interest = %+v", lines)
 	}
 
-	// Points only, with a points cap.
 	f.interestOn(InterestInput{RateBP: 1000, Points: true, CapPoints: 30})
 	f.clock(time.Date(2027, 1, 1, 1, 0, 0, 0, london))
 	f.payInterest()
@@ -182,7 +174,6 @@ func TestInterestOptOutAndOff(t *testing.T) {
 	if n := f.payInterest(); n != 1 {
 		t.Fatalf("paid %d, want 1 (Alfie)", n)
 	}
-	// Opting Isla back in never backdates November.
 	if err := f.svc.SetInterestOptOut(ctx, f.hh, f.kid2.ID, false); err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +181,6 @@ func TestInterestOptOutAndOff(t *testing.T) {
 		t.Errorf("Isla was paid for a month she'd opted out of")
 	}
 
-	// Off: December is never paid, and turning it back on starts afresh.
 	if err := f.svc.SaveInterest(ctx, f.hh, f.adult.ID, InterestInput{On: false, Money: true, Points: true}); err != nil {
 		t.Fatal(err)
 	}
@@ -223,7 +213,6 @@ func TestSaveInterestValidates(t *testing.T) {
 		t.Error("11% a month was allowed")
 	}
 
-	// Saving again while on keeps the first month's start.
 	f.interestOn(InterestInput{RateBP: 100, Money: true})
 	first, _ := f.svc.InterestSettings(t.Context(), f.hh)
 	f.clock(day(11, 20, 9))
@@ -253,7 +242,6 @@ func TestRateHelpers(t *testing.T) {
 	if got := YearlyRate(100); got != "12.7" {
 		t.Errorf("YearlyRate(100) = %q", got)
 	}
-	// £10 at 1% a month for a year, compounding by the penny.
 	if got := InterestAfter(1000, 100, 0, 12); got != 1126 {
 		t.Errorf("InterestAfter = %d", got)
 	}

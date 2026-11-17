@@ -203,8 +203,6 @@ type ListCompletionDetailsRow struct {
 	DueTime      string  `json:"due_time"`
 }
 
-// Completions for adults to review: every pending one, plus anything
-// completed since since_unix. Pending first, then newest first.
 func (q *Queries) ListCompletionDetails(ctx context.Context, arg ListCompletionDetailsParams) ([]ListCompletionDetailsRow, error) {
 	rows, err := q.db.QueryContext(ctx, listCompletionDetails, arg.HouseholdID, arg.SinceUnix)
 	if err != nil {
@@ -271,8 +269,6 @@ type ListLiveCompletionsForRangeRow struct {
 	Status       string `json:"status"`
 }
 
-// The live (pending or approved) completion for each occurrence due in
-// [from_date, to_date] (or whose window overlaps it), for the board.
 func (q *Queries) ListLiveCompletionsForRange(ctx context.Context, arg ListLiveCompletionsForRangeParams) ([]ListLiveCompletionsForRangeRow, error) {
 	rows, err := q.db.QueryContext(ctx, listLiveCompletionsForRange, arg.HouseholdID, arg.FromDate, arg.ToDate)
 	if err != nil {
@@ -357,8 +353,6 @@ type ReverseCompletionParams struct {
 	ID          int64  `json:"id"`
 }
 
-// An adult takes back an approved completion; the ledger is corrected with a
-// separate adjustment entry.
 func (q *Queries) ReverseCompletion(ctx context.Context, arg ReverseCompletionParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, reverseCompletion,
 		arg.ReviewedBy,

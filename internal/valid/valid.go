@@ -1,5 +1,4 @@
-// Package valid carries per-field validation errors from the domain
-// packages back to forms.
+// Package valid carries per-field validation errors back to forms.
 package valid
 
 import (

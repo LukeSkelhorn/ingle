@@ -1,19 +1,8 @@
 -- +goose Up
--- Row-level security: each household sees only its own rows, even if a
--- query forgets its WHERE household_id = ... (see internal/store/household.go).
--- Postgres only, so SQLite has no 00019; the next migration for both is 00020.
---
--- The app sets app.household_id (and app.system) with SET LOCAL at the start
--- of every transaction. FORCE applies the policies to the tables' owner too,
--- so only a superuser or a BYPASSRLS role skips them; the app is neither.
--- TestRowLevelSecurityCoverage fails if a table is added without this.
-
 CREATE FUNCTION ingle_household() RETURNS bigint
     LANGUAGE sql STABLE
     AS $$ SELECT nullif(current_setting('app.household_id', true), '')::bigint $$;
 
--- System lookups are made before the household is known: a display or
--- session token, an email at sign-in, the list of households.
 CREATE FUNCTION ingle_system() RETURNS boolean
     LANGUAGE sql STABLE
     AS $$ SELECT coalesce(current_setting('app.system', true), '') = 'on' $$;
@@ -46,13 +35,11 @@ CREATE POLICY household ON households
     WITH CHECK (id = ingle_household());
 CREATE POLICY system_create ON households FOR INSERT WITH CHECK (ingle_system());
 
--- What a system lookup may read.
 CREATE POLICY system_read ON households FOR SELECT USING (ingle_system());
 CREATE POLICY system_read ON devices FOR SELECT USING (ingle_system());
 CREATE POLICY system_read ON sessions FOR SELECT USING (ingle_system());
 CREATE POLICY system_read ON people FOR SELECT USING (ingle_system());
 
--- app_meta holds no household data (just the schema's owner).
 ALTER TABLE app_meta ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app_meta FORCE ROW LEVEL SECURITY;
 CREATE POLICY read ON app_meta FOR SELECT USING (true);

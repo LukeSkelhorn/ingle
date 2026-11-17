@@ -6,8 +6,6 @@ import (
 	"time"
 )
 
-// An adult doing a child's chore gets the adults' points and no money; the
-// child gets nothing, but the chore is done on their column.
 func TestDoFor(t *testing.T) {
 	f := newFixture(t)
 	ctx := t.Context()
@@ -61,7 +59,6 @@ func TestDoFor(t *testing.T) {
 		t.Errorf("Mum's history = %+v, want 3 pts for Alfie", hist)
 	}
 
-	// Undo takes the adult's points back and puts the chore back.
 	if err := f.svc.Undo(ctx, f.hh, c.ID); err != nil {
 		t.Fatalf("Undo: %v", err)
 	}
@@ -73,7 +70,6 @@ func TestDoFor(t *testing.T) {
 	}
 }
 
-// A chore that needs checking doesn't wait when an adult did it.
 func TestDoForSkipsApproval(t *testing.T) {
 	f := newFixture(t)
 	f.adultChore("Feed cat", Input{Mode: ModeAssigned, AssigneeID: &f.kid.ID, RequiresApproval: true})
@@ -127,8 +123,6 @@ func TestDoForRefused(t *testing.T) {
 	}
 }
 
-// A shared chore an adult did for one of its people is done for everyone,
-// and shows under that child, not the adult.
 func TestDoForShared(t *testing.T) {
 	f := newFixture(t)
 	f.adultChore("Tidy up", Input{Mode: ModeShared, PeopleIDs: []int64{f.kid.ID, f.kid2.ID}})
@@ -148,7 +142,6 @@ func TestDoForShared(t *testing.T) {
 	}
 }
 
-// Each of these people: the adult does one child's own copy.
 func TestDoForEach(t *testing.T) {
 	f := newFixture(t)
 	f.adultChore("Brush teeth", Input{Mode: ModeEach, PeopleIDs: []int64{f.kid.ID, f.kid2.ID}})

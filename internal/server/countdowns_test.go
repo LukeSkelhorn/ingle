@@ -12,8 +12,6 @@ import (
 
 var countdownToken = regexp.MustCompile(`\?t=([A-Za-z0-9_-]+)`)
 
-// The board day in the tests is Wed 1 Jul 2026.
-
 func TestCountdownsAdmin(t *testing.T) {
 	h, wall, phone := boardHousehold(t)
 	alfie, isla := h.person("Alfie"), h.person("Isla")
@@ -22,10 +20,8 @@ func TestCountdownsAdmin(t *testing.T) {
 	expect(t, phone.get("/admin"), http.StatusOK, `href="/admin/countdowns"`)
 	expect(t, phone.get("/admin/countdowns/new"), http.StatusOK, `name="on_date"`, `name="yearly"`, `type="checkbox" name="people_ids"`, "🎂")
 
-	// Errors keep what was typed.
 	expect(t, phone.post("/admin/countdowns", url.Values{"title": {"Seaside"}, "emoji": {"🏖️"}, "on_date": {"2026-06-01"}}),
 		http.StatusUnprocessableEntity, "That day has already been", `value="Seaside"`)
-	// No emoji chosen: it offers one first.
 	expect(t, phone.post("/admin/countdowns", url.Values{"title": {"Holiday to Spain"}, "on_date": {"2026-07-04"}, "people_ids": {itoa(alfie.ID)}}),
 		http.StatusUnprocessableEntity, "We picked 🏖️ for this countdown")
 	expectRedirect(t, phone.post("/admin/countdowns", url.Values{
@@ -42,7 +38,6 @@ func TestCountdownsAdmin(t *testing.T) {
 		"title": {"Panto"}, "emoji": {"🎭"}, "on_date": {"2026-12-20"},
 	}), "/admin/countdowns?flash=Added+Panto.")
 
-	// A birthday from People.
 	expect(t, phone.get("/admin/people/"+itoa(alfie.ID)), http.StatusOK, `name="birth_day"`, `name="birth_month"`, `name="can_add_countdowns"`)
 	r := phone.post("/admin/people/"+itoa(alfie.ID), url.Values{
 		"name": {"Alfie"}, "kind": {"child"}, "colour": {"#46A758"}, "avatar_mode": {"emoji"}, "emoji": {"🦖"},
@@ -61,8 +56,7 @@ func TestCountdownsAdmin(t *testing.T) {
 		t.Error("the birthday isn't first")
 	}
 
-	// The board: a strip with the next three, and the view with them all.
-	wall.get("/") // nothing cached
+	wall.get("/")
 	board := wall.get("/board")
 	expect(t, board, http.StatusOK, `class="countdown-strip"`, `data-view-to="countdowns"`,
 		"Alfie&#39;s birthday", "Holiday to Spain", "Sports day")
@@ -70,10 +64,9 @@ func TestCountdownsAdmin(t *testing.T) {
 	expect(t, wall.get("/"), http.StatusOK, `data-panel="countdowns"`, `<span>Countdowns</span>`)
 	view := wall.get("/board/countdowns")
 	expect(t, view, http.StatusOK, "Alfie&#39;s birthday", "turns 9", "Holiday to Spain", "<b>3</b>", "Christmas", "Panto", "Fri 25 Dec")
-	notContains(t, view, "+ Add a countdown") // no child may yet
+	notContains(t, view, "+ Add a countdown")
 	expect(t, wall.get("/screensaver"), http.StatusOK, "Alfie&#39;s birthday tomorrow")
 
-	// Edit and delete.
 	spain := countdownNamed(t, h, "Holiday to Spain")
 	expect(t, phone.get("/admin/countdowns/"+itoa(spain.ID)), http.StatusOK, `value="Holiday to Spain"`, `value="2026-07-04"`,
 		`name="people_ids" value="`+itoa(alfie.ID)+`" data-kind="child" checked`,
@@ -91,13 +84,11 @@ func TestCountdownsAdmin(t *testing.T) {
 	expect(t, phone.get("/admin/countdowns/"+itoa(spain.ID)), http.StatusNotFound)
 	expect(t, phone.get("/admin"), http.StatusOK, "added a countdown", "removed a countdown")
 
-	// A passed one-off goes to Passed in admin and off the board.
-	h.advance(10 * 24 * 3600e9) // Sat 11 Jul
+	h.advance(10 * 24 * 3600e9)
 	list = phone.get("/admin/countdowns")
 	expect(t, list, http.StatusOK, "Passed (1)", "Sports day")
 	notContains(t, wall.get("/board/countdowns"), "Sports day")
 
-	// Only adults manage them.
 	expectRedirect(t, wall.get("/admin/countdowns"), "/admin/unlock")
 }
 
@@ -117,8 +108,6 @@ func TestCountdownsModuleOff(t *testing.T) {
 	notContains(t, wall.get("/board/calendar?view=month&from=2026-07-01"), "Sports day")
 }
 
-// Countdowns and birthdays show in the calendar on their day, and open the
-// Countdowns view.
 func TestCountdownsInCalendar(t *testing.T) {
 	h, wall, phone := boardHousehold(t)
 	alfie, isla := h.person("Alfie"), h.person("Isla")
@@ -145,10 +134,8 @@ func TestCountdownsInCalendar(t *testing.T) {
 	month := wall.get("/board/calendar?view=month&from=2026-07-01")
 	expect(t, month, http.StatusOK, "Holiday to Spain", "Alfie&#39;s birthday", "Sports day", "Anniversary")
 	notContains(t, month, "Panto")
-	// A yearly one shows every year.
 	expect(t, wall.get("/board/calendar/day/2026-07-08"), http.StatusOK, "Anniversary")
 
-	// One person: theirs, and those for nobody.
 	forIsla := wall.get("/board/calendar?view=month&from=2026-07-01&person=" + itoa(isla.ID))
 	expect(t, forIsla, http.StatusOK, "Sports day", "Anniversary")
 	notContains(t, forIsla, "Holiday to Spain", "Alfie&#39;s birthday")
@@ -161,11 +148,9 @@ func TestKidAddsCountdown(t *testing.T) {
 	alfie, isla := itoa(h.person("Alfie").ID), itoa(h.person("Isla").ID)
 	expect(t, phone.post("/admin/people/"+alfie+"/pin", url.Values{"pin": {"1357"}, "pin_confirm": {"1357"}}), http.StatusOK, "PIN saved.")
 
-	// Without the tick, nobody can.
 	expect(t, wall.get("/board/countdowns/by/"+alfie), http.StatusForbidden)
 	expect(t, wall.post("/board/countdowns/by/"+alfie, url.Values{"title": {"Party"}, "on_date": {"2026-07-20"}}), http.StatusForbidden)
 
-	// A grown-up ticks Can add countdowns for Alfie.
 	expect(t, phone.post("/admin/people/"+alfie, url.Values{
 		"name": {"Alfie"}, "kind": {"child"}, "colour": {"#46A758"}, "avatar_mode": {"emoji"}, "emoji": {"🦖"},
 		"countdowns_shown": {"1"}, "can_add_countdowns": {"1"},
@@ -176,7 +161,6 @@ func TestKidAddsCountdown(t *testing.T) {
 	notContains(t, who, `/board/countdowns/by/`+isla+`"`)
 	expect(t, wall.get("/board/countdowns/by/"+isla), http.StatusForbidden)
 
-	// The PIN pad, a wrong PIN, then the right one.
 	expect(t, wall.get("/board/countdowns/by/"+alfie), http.StatusOK, "Alfie's countdowns", "Enter your PIN", "data-pinpad")
 	expect(t, wall.post("/board/countdowns/by/"+alfie+"/pin", url.Values{"pin": {"0000"}}), http.StatusUnauthorized, "Wrong PIN")
 	r := wall.post("/board/countdowns/by/"+alfie+"/pin", url.Values{"pin": {"1357"}})
@@ -188,7 +172,6 @@ func TestKidAddsCountdown(t *testing.T) {
 	}
 	q := "?t=" + m[1]
 
-	// Without the token it asks for the PIN again.
 	expect(t, wall.post("/board/countdowns/by/"+alfie, url.Values{"title": {"Party"}, "on_date": {"2026-07-20"}}), http.StatusOK, "Enter your PIN again")
 	if n := len(must(h.st.Q.ListCountdowns(h.ctx(), h.hh))); n != 0 {
 		t.Fatalf("%d countdowns saved without a PIN", n)
@@ -205,12 +188,10 @@ func TestKidAddsCountdown(t *testing.T) {
 	}
 	expect(t, wall.get("/board/countdowns"), http.StatusOK, "My party")
 
-	// Change it, then delete it.
 	expect(t, wall.get("/board/countdowns/by/"+alfie+"/edit/"+itoa(party.ID)+q), http.StatusOK, "Change My party", `value="2026-07-20"`)
 	expect(t, wall.post("/board/countdowns/by/"+alfie+"/edit/"+itoa(party.ID)+q, url.Values{"title": {"Big party"}, "on_date": {"2026-07-21"}}),
 		http.StatusOK, "Saved Big party.")
 
-	// Not a grown-up's countdown, nor anyone else's.
 	expectRedirect(t, phone.post("/admin/countdowns", url.Values{
 		"title": {"Sports day"}, "emoji": {"⚽"}, "on_date": {"2026-07-10"},
 	}), "/admin/countdowns?flash=Added+Sports+day.")
@@ -223,7 +204,6 @@ func TestKidAddsCountdown(t *testing.T) {
 		t.Errorf("%d countdowns left, want Sports day", n)
 	}
 
-	// Untick: the token no longer lets them.
 	expect(t, phone.post("/admin/people/"+alfie, url.Values{
 		"name": {"Alfie"}, "kind": {"child"}, "colour": {"#46A758"}, "avatar_mode": {"emoji"}, "emoji": {"🦖"},
 		"countdowns_shown": {"1"},

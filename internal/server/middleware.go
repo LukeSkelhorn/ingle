@@ -11,48 +11,35 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
-// Cookie names. They keep the app's old name, Domus, so devices and
-// sessions from before the rename stay signed in.
+// Cookie names keep the old Domus name so pre-rename sessions stay signed in.
 const (
 	deviceCookie  = "domus_device"
 	sessionCookie = "domus_session"
 )
 
-// deviceCookieAge keeps a household display registered for ten years (or
-// until revoked under Admin › Devices).
 const deviceCookieAge = 10 * 365 * 24 * time.Hour
 
 type (
 	ctxKey struct{}
 )
 
-// HouseholdOf returns the household r is for, or 0 when none is known, for
-// handlers added through Deps.Routes.
+// HouseholdOf returns the household r is for, or 0 when none is known.
 func HouseholdOf(r *http.Request) int64 { return hhOf(r) }
 
-// RequireAdmin wraps a handler added through Deps.Routes so only a
-// signed-in adult of the request's household reaches it.
+// RequireAdmin lets only a signed-in adult of the household reach h.
 func (s *Server) RequireAdmin(h http.Handler) http.Handler { return s.requireAdmin(h) }
 
-// RequireViewer wraps a handler added through Deps.Routes so only a
-// household display or signed-in adult reaches it.
+// RequireViewer lets only a household display or signed-in adult reach h.
 func (s *Server) RequireViewer(h http.Handler) http.Handler { return s.requireViewer(h) }
 
-// hhOf returns the household r is for, or 0 when none is known: an open
-// page on a server with many households and nobody signed in.
 func hhOf(r *http.Request) int64 { return householdIn(r.Context()) }
 
-// householdIn returns the household stored in ctx by identify, or 0.
 func householdIn(ctx context.Context) int64 { return store.HouseholdFrom(ctx) }
 
-// withHousehold returns ctx for the household id. On Postgres, every query
-// made with it sees that household's rows only.
 func withHousehold(ctx context.Context, id int64) context.Context {
 	return store.WithHousehold(ctx, id)
 }
 
-// resolveHousehold asks the ResolveHousehold hook which household r is
-// for. Without the hook it's the server's one household.
 func (s *Server) resolveHousehold(r *http.Request) (int64, error) {
 	if s.ResolveHousehold == nil {
 		return s.HouseholdID, nil
@@ -64,7 +51,6 @@ func (s *Server) resolveHousehold(r *http.Request) (int64, error) {
 	return id, nil
 }
 
-// identity is who is making the request, resolved once per request.
 type identity struct {
 	Device  *dbq.Device
 	Session *auth.Session
@@ -75,9 +61,6 @@ func identityFrom(ctx context.Context) identity {
 	return id
 }
 
-// identify resolves the household and the display and session cookies.
-// The household is the one the resolver names, or else the display's or
-// session's own. A cookie for another household is cleared.
 func (s *Server) identify(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if isOpenAsset(r.URL.Path) {
@@ -111,8 +94,7 @@ func (s *Server) identify(next http.Handler) http.Handler {
 				s.serverError(w, r, err)
 				return
 			}
-			// On a household display only PIN (display) sessions count, so
-			// the idle auto-lock always applies there.
+			// On a display only PIN sessions count, so the idle auto-lock always applies.
 			if sess != nil && id.Device != nil && sess.Kind != auth.KindDisplay {
 				_ = s.Auth.EndSession(ctx, c.Value)
 				sess = nil
@@ -129,13 +111,9 @@ func (s *Server) identify(next http.Handler) http.Handler {
 	})
 }
 
-// requireSetup sends every page to /setup until an adult can sign in. A
-// request with no household has nothing to set up.
 func (s *Server) requireSetup(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hh := hhOf(r)
-		// With an outside sign-in, households are set up by the program
-		// that creates them (Hosted's sign-up), not by /setup.
 		if hh == 0 || s.SignIn != nil || s.isSetUp(hh) || isOpenAsset(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
@@ -158,7 +136,6 @@ func (s *Server) requireSetup(next http.Handler) http.Handler {
 	})
 }
 
-// signInURL is where people go to sign in.
 func (s *Server) signInURL() string {
 	if s.SignIn != nil {
 		return s.SignIn.URL
@@ -166,18 +143,13 @@ func (s *Server) signInURL() string {
 	return "/signin"
 }
 
-// isSetUp reports whether household hh is known to be set up.
 func (s *Server) isSetUp(hh int64) bool {
 	_, ok := s.setupDone.Load(hh)
 	return ok
 }
 
-// markSetUp latches household hh as set up. It only goes back when the
-// household is deleted (the last adult who can sign in can't be archived
-// or stripped).
 func (s *Server) markSetUp(hh int64) { s.setupDone.Store(hh, struct{}{}) }
 
-// requireViewer allows household displays and signed-in adults.
 func (s *Server) requireViewer(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := identityFrom(r.Context())
@@ -189,8 +161,6 @@ func (s *Server) requireViewer(next http.Handler) http.Handler {
 	})
 }
 
-// requireAdmin allows signed-in adults: PIN-unlocked on a display, or signed
-// in with a password elsewhere.
 func (s *Server) requireAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := identityFrom(r.Context())
@@ -206,13 +176,10 @@ func (s *Server) requireAdmin(next http.Handler) http.Handler {
 	})
 }
 
-// isOpenAsset reports paths that never need identity or setup.
 func isOpenAsset(p string) bool {
 	return p == "/healthz" || p == "/manifest.webmanifest" || p == "/sw.js" || strings.HasPrefix(p, "/static/")
 }
 
-// redirect sends the browser to url; htmx requests get HX-Redirect so the
-// whole page navigates instead of swapping a fragment.
 func redirect(w http.ResponseWriter, r *http.Request, url string) {
 	if r.Header.Get("HX-Request") == "true" {
 		w.Header().Set("HX-Redirect", url)
@@ -227,8 +194,7 @@ func secureRequest(r *http.Request) bool {
 }
 
 func (s *Server) setCookie(w http.ResponseWriter, r *http.Request, name, value string, maxAge time.Duration) {
-	// Secure is set whenever the request came over HTTPS (directly or via a
-	// proxy); plain HTTP is supported for home LANs without TLS.
+	// Secure only over HTTPS (direct or proxied); plain HTTP is allowed for home LANs.
 	c := &http.Cookie{ //nolint:gosec // G124: Secure is dynamic, see above
 		Name:     name,
 		Value:    value,
@@ -250,7 +216,6 @@ func (s *Server) clearCookie(w http.ResponseWriter, r *http.Request, name string
 	})
 }
 
-// view builds the common page data for r.
 func (s *Server) view(r *http.Request, title string, data any) view {
 	id := identityFrom(r.Context())
 	v := view{Title: title, Data: data, Version: s.version(), ExternalSignIn: s.SignIn != nil}
@@ -280,7 +245,6 @@ func (s *Server) view(r *http.Request, title string, data any) view {
 	return v
 }
 
-// actor returns the signed-in adult. Only call behind requireAdmin.
 func actor(r *http.Request) *auth.Session {
 	return identityFrom(r.Context()).Session
 }

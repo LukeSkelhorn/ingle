@@ -40,8 +40,6 @@ func TestRewardPeople(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Who sees what: chosen people, everyone, and no money rewards for
-	// adults.
 	for _, tc := range []struct {
 		who  dbq.Person
 		want []string
@@ -59,7 +57,6 @@ func TestRewardPeople(t *testing.T) {
 		t.Errorf("AllRewardPeople = %v", all)
 	}
 
-	// Nobody chosen, or an adult on a money reward, is refused.
 	for _, in := range []RewardInput{
 		{Title: "Nobody", CostPoints: 1, Chosen: true},
 		{Title: "Nobody", CostPoints: 1, Chosen: true, PeopleIDs: []int64{9999}},
@@ -71,7 +68,6 @@ func TestRewardPeople(t *testing.T) {
 		}
 	}
 
-	// Taking Bea off "Stay up late" clears her goal for it; Alfie keeps his.
 	at := int64(1)
 	for _, p := range []dbq.Person{alfie, bea} {
 		if _, err := f.st.Q.SetGoal(ctx, dbq.SetGoalParams{RewardID: &late.ID, SetAt: &at, HouseholdID: f.hh, ID: p.ID}); err != nil {
@@ -90,7 +86,6 @@ func TestRewardPeople(t *testing.T) {
 		t.Errorf("Alfie's goal = %v", p.GoalRewardID)
 	}
 
-	// Back to everyone: the chosen people go.
 	if _, err := f.svc.UpdateReward(ctx, f.hh, f.mum.ID, late.ID, RewardInput{Title: "Stay up late", CostPoints: 50}); err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +93,6 @@ func TestRewardPeople(t *testing.T) {
 		t.Errorf("people after everyone = %v", ids)
 	}
 
-	// Takeaway starting to cost money clears Mum's goal for it.
 	if _, err := f.st.Q.SetGoal(ctx, dbq.SetGoalParams{RewardID: &takeaway.ID, SetAt: &at, HouseholdID: f.hh, ID: f.mum.ID}); err != nil {
 		t.Fatal(err)
 	}

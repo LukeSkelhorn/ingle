@@ -7,12 +7,6 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
-// Rewards are claimed from the board and wait for an adult. A waiting claim
-// holds its cost: nothing is written to the ledger until an adult approves,
-// but what a person can spend is their balance less what their waiting
-// claims hold. Declining or cancelling a claim simply lets the hold go, so
-// the ledger only ever records real spending.
-
 // RedemptionDetail is a reward claim with who and what, for review.
 type RedemptionDetail struct {
 	ID          int64
@@ -21,18 +15,15 @@ type RedemptionDetail struct {
 	RequestedAt int64
 	Points      int64
 	Pence       int64
-	Person      dbq.Person // ID, Name, Colour and Avatar only
-	Title       string     // the reward
-	Emoji       string     // the reward's, "" for none
+	Person      dbq.Person
+	Title       string
+	Emoji       string
 }
 
 // Pending reports whether the claim is waiting for an adult.
 func (d RedemptionDetail) Pending() bool { return d.Status == StatusPending }
 
-// ClaimReward asks for a reward on personID's behalf. It fails with
-// ErrInsufficientBalance unless what they can spend (their balance less
-// their waiting claims) covers it. The claim waits for an adult, unless
-// approver (an adult who is there) is given, when it's approved at once.
+// ClaimReward asks for a reward on personID's behalf.
 func (s *Service) ClaimReward(ctx context.Context, householdID, rewardID, personID int64, approver *int64) (dbq.Redemption, error) {
 	var out dbq.Redemption
 	err := s.st.WithTx(ctx, func(q *dbq.Queries) error {
@@ -85,9 +76,6 @@ func (s *Service) ClaimReward(ctx context.Context, householdID, rewardID, person
 	return out, err
 }
 
-// rewardAllowed fails with ErrNotFound unless reward is active and personID
-// may have it: it's for everyone or chosen for them, and it costs no money
-// if they're an adult.
 func rewardAllowed(ctx context.Context, q *dbq.Queries, reward dbq.Reward, personID int64) error {
 	if reward.ArchivedAt != nil {
 		return ErrNotFound
@@ -102,7 +90,6 @@ func rewardAllowed(ctx context.Context, q *dbq.Queries, reward dbq.Reward, perso
 	return nil
 }
 
-// available is what personID can spend: their balance less waiting claims.
 func available(ctx context.Context, q *dbq.Queries, householdID, personID int64) (points, pence int64, err error) {
 	bal, err := q.BalanceForPerson(ctx, dbq.BalanceForPersonParams{HouseholdID: householdID, PersonID: personID})
 	if err != nil {
@@ -115,8 +102,7 @@ func available(ctx context.Context, q *dbq.Queries, householdID, personID int64)
 	return bal.Points - held.Points, bal.Pence - held.Pence, nil
 }
 
-// ApproveRedemption spends a waiting claim: the hold becomes a ledger
-// entry. reviewerID must be an adult.
+// ApproveRedemption spends a waiting claim: the hold becomes a ledger entry.
 func (s *Service) ApproveRedemption(ctx context.Context, householdID, redemptionID, reviewerID int64) error {
 	return s.st.WithTx(ctx, func(q *dbq.Queries) error {
 		if err := requireAdult(ctx, q, householdID, reviewerID); err != nil {
@@ -148,7 +134,6 @@ func (s *Service) approveTx(ctx context.Context, q *dbq.Queries, householdID, re
 	}); err != nil {
 		return fmt.Errorf("ledger: %w", err)
 	}
-	// Saving for it is done.
 	if err := q.ClearGoalIf(ctx, dbq.ClearGoalIfParams{HouseholdID: householdID, ID: d.PersonID, RewardID: &d.RewardID}); err != nil {
 		return fmt.Errorf("clear goal: %w", err)
 	}
@@ -157,7 +142,6 @@ func (s *Service) approveTx(ctx context.Context, q *dbq.Queries, householdID, re
 }
 
 // DeclineRedemption turns down a waiting claim and lets its hold go.
-// reviewerID must be an adult.
 func (s *Service) DeclineRedemption(ctx context.Context, householdID, redemptionID, reviewerID int64) error {
 	return s.st.WithTx(ctx, func(q *dbq.Queries) error {
 		if err := requireAdult(ctx, q, householdID, reviewerID); err != nil {
@@ -170,8 +154,7 @@ func (s *Service) DeclineRedemption(ctx context.Context, householdID, redemption
 	})
 }
 
-// CancelRedemption is the claimant changing their mind about a waiting
-// claim. It's stored as rejected, reviewed by the claimant themselves.
+// CancelRedemption is the claimant changing their mind about a waiting claim.
 func (s *Service) CancelRedemption(ctx context.Context, householdID, redemptionID int64) error {
 	return s.st.WithTx(ctx, func(q *dbq.Queries) error {
 		d, err := q.GetRedemption(ctx, dbq.GetRedemptionParams{HouseholdID: householdID, ID: redemptionID})
@@ -185,8 +168,6 @@ func (s *Service) CancelRedemption(ctx context.Context, householdID, redemptionI
 	})
 }
 
-// settle moves a pending claim to status, failing with ErrNotPending if
-// someone got there first.
 func (s *Service) settle(ctx context.Context, q *dbq.Queries, householdID, redemptionID, by int64, status string) (dbq.Redemption, error) {
 	now := s.now().Unix()
 	n, err := q.ReviewRedemption(ctx, dbq.ReviewRedemptionParams{
@@ -205,8 +186,7 @@ func (s *Service) settle(ctx context.Context, q *dbq.Queries, householdID, redem
 	return d, nil
 }
 
-// PendingRedemptions lists waiting claims, oldest first: everyone's, or
-// just personID's.
+// PendingRedemptions lists waiting claims, oldest first: everyone's, or just personID's.
 func (s *Service) PendingRedemptions(ctx context.Context, householdID int64, personID *int64) ([]RedemptionDetail, error) {
 	rows, err := s.st.Q.ListPendingRedemptionDetails(ctx, householdID)
 	if err != nil {
@@ -247,23 +227,20 @@ func redemptionDetail(r dbq.GetRedemptionDetailRow) RedemptionDetail {
 // DefaultGoalEmoji stands in for a reward without an emoji.
 const DefaultGoalEmoji = "🎯"
 
-// Goal is the reward a person is saving for and how close they are, from
-// what they can spend (their balance less waiting claims).
+// Goal is the reward a person is saving for and how close they are.
 type Goal struct {
-	RewardID              int64
-	Title                 string
-	RewardEmoji           string
-	CostPoints, CostPence int64
-	SetAt                 int64 // when they picked it
-	HavePoints, HavePence int64 // towards the cost: 0 to the cost
-	Percent               int   // the slower of points and money, 0 to 100
-	Reached               bool  // they can claim it now
-	Waiting               bool  // they've asked for it; a grown-up decides
-	// MatchedPoints and MatchedPence are the part of Have an adult matched;
-	// MatchPercent is that part of the bar.
+	RewardID                    int64
+	Title                       string
+	RewardEmoji                 string
+	CostPoints, CostPence       int64
+	SetAt                       int64
+	HavePoints, HavePence       int64
+	Percent                     int
+	Reached                     bool
+	Waiting                     bool
 	MatchedPoints, MatchedPence int64
 	MatchPercent                int
-	Offer                       *MatchOffer // the match on offer, if any
+	Offer                       *MatchOffer
 }
 
 // Emoji is the reward's emoji, or DefaultGoalEmoji.
@@ -274,8 +251,7 @@ func (g Goal) Emoji() string {
 	return g.RewardEmoji
 }
 
-// OwnPercent is the part of the bar they saved themselves, before the
-// matched part.
+// OwnPercent is the part of the bar they saved themselves, before the matched part.
 func (g Goal) OwnPercent() int { return g.Percent - g.MatchPercent }
 
 // NeedPoints is how many more points they need for it, never below 0.
@@ -284,16 +260,11 @@ func (g Goal) NeedPoints() int64 { return max(g.CostPoints-g.HavePoints, 0) }
 // NeedPence is how much more money they need for it, never below 0.
 func (g Goal) NeedPence() int64 { return max(g.CostPence-g.HavePence, 0) }
 
-// ShowToGo is whether to say how much is left to save ("40 pts to go"):
-// not once they have enough, nor while a claim for it is waiting.
+// ShowToGo is whether to say how much is left to save.
 func (g Goal) ShowToGo() bool {
 	return !g.Reached && !g.Waiting && (g.NeedPoints() > 0 || g.NeedPence() > 0)
 }
 
-// newGoal works out progress towards row from what the person can spend.
-// For a reward that costs points and money, progress is the slower of the
-// two, so the bar only fills once both are covered. While a claim for it is
-// waiting the hold has already taken the cost, so it shows as full.
 func newGoal(row dbq.ListGoalsRow, points, pence int64) Goal {
 	g := Goal{
 		RewardID: row.ID, Title: row.Title, RewardEmoji: row.Emoji,
@@ -317,8 +288,6 @@ func newGoal(row dbq.ListGoalsRow, points, pence int64) Goal {
 }
 
 // SetGoal has personID save for rewardID, replacing any goal they had.
-// Anyone at the board can do this. It returns ErrNotFound for an archived
-// person or reward, or one from another household.
 func (s *Service) SetGoal(ctx context.Context, householdID, personID, rewardID int64) (dbq.Reward, error) {
 	var reward dbq.Reward
 	err := s.st.WithTx(ctx, func(q *dbq.Queries) error {
@@ -333,7 +302,6 @@ func (s *Service) SetGoal(ctx context.Context, householdID, personID, rewardID i
 		if err := rewardAllowed(ctx, q, reward, personID); err != nil {
 			return err
 		}
-		// Swapping goals takes back what was matched towards the old one.
 		if p.GoalRewardID != nil && *p.GoalRewardID != rewardID {
 			if err := s.takeBackGoalMatch(ctx, q, householdID, p); err != nil {
 				return err
@@ -359,8 +327,7 @@ func (s *Service) SetGoal(ctx context.Context, householdID, personID, rewardID i
 	return reward, err
 }
 
-// ClearGoal stops personID saving for anything, taking back what was
-// matched towards it.
+// ClearGoal stops personID saving for anything, taking back what was matched towards it.
 func (s *Service) ClearGoal(ctx context.Context, householdID, personID int64) error {
 	return s.st.WithTx(ctx, func(q *dbq.Queries) error {
 		p, err := getPerson(ctx, q, householdID, personID)

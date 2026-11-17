@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Build one release archive: scripts/dist.sh VERSION OS/ARCH DIST_DIR LDFLAGS
 set -euo pipefail
 version=$1 os=${2%/*} arch=${2#*/} dist=$3 ldflags=$4
 name="ingle_${version}_${os}_${arch}"

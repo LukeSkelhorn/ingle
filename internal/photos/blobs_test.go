@@ -12,7 +12,6 @@ import (
 	"testing"
 )
 
-// memBlobs is a Blobs kept in memory, standing in for object storage.
 type memBlobs struct {
 	mu    sync.Mutex
 	files map[string][]byte

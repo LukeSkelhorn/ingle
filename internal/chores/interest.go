@@ -18,14 +18,13 @@ import (
 // InterestNote is the history line's text for a month's interest.
 const InterestNote = "Interest from the Bank of Mum and Dad"
 
-// bpScale is basis points in a whole: a rate of 100 is 1%.
 const bpScale = 10000
 
 // Interest is a household's Bank of Mum and Dad settings.
 type Interest struct {
-	RateBP              int64 // a month; 100 = 1%, 0 = off
-	Money, Points       bool  // what earns it
-	CapPence, CapPoints int64 // the most a child earns in a month; 0 = no cap
+	RateBP              int64
+	Money, Points       bool
+	CapPence, CapPoints int64
 	Since               *time.Time
 }
 
@@ -47,15 +46,11 @@ func (in Interest) On() bool {
 	return in.RateBP > 0 && (in.Money || in.Points) && in.Since != nil
 }
 
-// Earns reports whether p earns interest: children only, unless an adult
-// switched it off for them.
+// Earns reports whether p earns interest: children only, unless an adult switched it off for them.
 func (in Interest) Earns(p dbq.Person) bool {
 	return in.On() && p.Kind == "child" && p.InterestOptOut == 0 && p.ArchivedAt == nil
 }
 
-// accrue works out a month's interest on the lowest balance, in whole
-// pennies or points, and the fraction (in 1/10000ths) left for next month.
-// Over the cap, it pays the cap and drops the fraction.
 func accrue(lowest, bp, carry, cap int64) (whole, left int64) {
 	lowest = max(lowest, 0)
 	t := lowest*bp + carry
@@ -66,8 +61,7 @@ func accrue(lowest, bp, carry, cap int64) (whole, left int64) {
 	return whole, left
 }
 
-// InterestAfter is about what balance becomes after months of interest on it,
-// at rate bp a month and cap a month, with nothing else paid in or spent.
+// InterestAfter is roughly what balance becomes after months of interest.
 func InterestAfter(balance, bp, cap int64, months int) int64 {
 	var carry int64
 	for range months {
@@ -78,16 +72,11 @@ func InterestAfter(balance, bp, cap int64, months int) int64 {
 	return balance
 }
 
-// monthStart is local midnight on the first of t's month.
 func monthStart(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, t.Location())
 }
 
-// PayInterest pays each child their interest for every finished month since
-// interest was turned on that hasn't been paid yet, so it catches up after
-// downtime and is safe to run any number of times. Each month is worked out
-// on the lowest balance the child had in it (from the moment interest was
-// turned on, in its first month). It returns how many payments it made.
+// PayInterest pays each child every finished, unpaid month of interest; it is safe to rerun.
 func (s *Service) PayInterest(ctx context.Context, householdID int64) (int, error) {
 	hs, err := s.st.Q.GetSettings(ctx, householdID)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -132,9 +121,6 @@ func (s *Service) PayInterest(ctx context.Context, householdID int64) (int, erro
 	return paid, nil
 }
 
-// payMonth works out and pays one child's interest for one month, unless
-// it's done already. An opted-out child's month is recorded as nothing, so
-// opting back in never backdates it. It reports whether anything was paid.
 func (s *Service) payMonth(ctx context.Context, hh int64, p dbq.Person, in Interest, period string, from, end, now time.Time) (bool, error) {
 	paid := false
 	err := s.st.WithTx(ctx, func(q *dbq.Queries) error {
@@ -170,8 +156,7 @@ func (s *Service) payMonth(ctx context.Context, hh int64, p dbq.Person, in Inter
 			}
 		}
 		if row.Points > 0 || row.Pence > 0 {
-			// Dated the month's last second, so it counts towards next
-			// month's balance from the start.
+			// Dated the month's last second, so it counts towards next month's balance.
 			e, err := q.InsertLedgerEntry(ctx, dbq.InsertLedgerEntryParams{
 				HouseholdID: hh, PersonID: p.ID, Points: row.Points, Pence: row.Pence,
 				Kind: "interest", Note: InterestNote, CreatedAt: end.Unix() - 1,
@@ -195,8 +180,6 @@ func (s *Service) payMonth(ctx context.Context, hh int64, p dbq.Person, in Inter
 	return paid, err
 }
 
-// lowestBalance is the lowest a person's points and money each stood at in
-// [from, end).
 func lowestBalance(ctx context.Context, q *dbq.Queries, hh, personID int64, from, end time.Time) (points, pence int64, err error) {
 	bal, err := q.BalanceBeforeForPerson(ctx, dbq.BalanceBeforeForPersonParams{
 		HouseholdID: hh, PersonID: personID, BeforeUnix: from.Unix(),
@@ -241,7 +224,7 @@ func (s *Service) InterestSettings(ctx context.Context, householdID int64) (Inte
 // InterestInput is the Bank of Mum and Dad settings form.
 type InterestInput struct {
 	On                  bool
-	RateBP              int64 // a month; 100 = 1%
+	RateBP              int64
 	Money, Points       bool
 	CapPence, CapPoints int64
 }
@@ -250,9 +233,6 @@ type InterestInput struct {
 const MaxInterestBP = 1000
 
 // SaveInterest validates and saves the interest settings as actorID.
-// Turning interest on starts its first month now; turning it off stops it,
-// and a month that hasn't finished is never paid. Validation problems are
-// returned as valid.Errors.
 func (s *Service) SaveInterest(ctx context.Context, householdID, actorID int64, in InterestInput) error {
 	errs := valid.Errors{}
 	if in.On {
@@ -310,8 +290,7 @@ func (s *Service) SetInterestOptOut(ctx context.Context, householdID, personID i
 	return nil
 }
 
-// ParseRate reads a rate like "1", "0.5" or "1.25%" (a month) as basis
-// points.
+// ParseRate reads a rate like "1", "0.5" or "1.25%" (a month) as basis points.
 func ParseRate(v string) (int64, error) {
 	v = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(v), "%"))
 	whole, frac, _ := strings.Cut(v, ".")
@@ -342,8 +321,7 @@ func FormatRate(bp int64) string {
 	return s
 }
 
-// YearlyRate is about what a monthly rate comes to over a year, compounded,
-// as a percentage to one decimal place.
+// YearlyRate is roughly what a monthly rate compounds to over a year, as a percentage.
 func YearlyRate(bp int64) string {
 	return strconv.FormatFloat((math.Pow(1+float64(bp)/bpScale, 12)-1)*100, 'f', 1, 64)
 }

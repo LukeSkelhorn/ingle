@@ -11,17 +11,13 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/valid"
 )
 
-// bankPanel is the person page's Bank balance section: what Ingle knows is
-// in a child's real bank, and the form to update it (with what was typed,
-// after an error).
 type bankPanel struct {
-	Current *chores.Bank // nil until it's set up
+	Current *chores.Bank
 	Label   string
 	Amount  string
-	Typed   bool // Label and Amount are what was typed, not Current
+	Typed   bool
 }
 
-// loadBankPanel fills f.Bank for a child while My money is on.
 func (s *Server) loadBankPanel(r *http.Request, f *personForm) error {
 	if f.Kind != "child" || !s.moduleOn(r.Context(), modMoney) {
 		return nil
@@ -37,8 +33,6 @@ func (s *Server) loadBankPanel(r *http.Request, f *personForm) error {
 	return nil
 }
 
-// handleSetBankBalance is Update on the Bank balance section: an adult has
-// looked at the child's real bank and types in what's there.
 func (s *Server) handleSetBankBalance(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.loadPerson(w, r)
 	if !ok {
@@ -77,7 +71,6 @@ func (s *Server) handleSetBankBalance(w http.ResponseWriter, r *http.Request) {
 		fmt.Sprintf("Updated %s's bank balance.", p.Name))
 }
 
-// handleRemoveBankBalance stops showing a child's bank balance.
 func (s *Server) handleRemoveBankBalance(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.loadPerson(w, r)
 	if !ok {
@@ -105,7 +98,7 @@ func (s *Server) bankBalanceFailed(w http.ResponseWriter, r *http.Request, name 
 	switch {
 	case errors.Is(err, chores.ErrNotChild):
 		http.Error(w, "only children have a bank balance", http.StatusBadRequest)
-	case errors.Is(err, chores.ErrNotFound): // archived
+	case errors.Is(err, chores.ErrNotFound):
 		http.Error(w, "restore "+name+" first", http.StatusConflict)
 	case errors.Is(err, chores.ErrNotAdult):
 		http.Error(w, "forbidden", http.StatusForbidden)
@@ -114,8 +107,6 @@ func (s *Server) bankBalanceFailed(w http.ResponseWriter, r *http.Request, name 
 	}
 }
 
-// updatedAgo is how long ago a bank balance was checked: "today",
-// "yesterday" or "3 days ago".
 func updatedAgo(now, t time.Time) string {
 	switch d := now.Sub(t); {
 	case d < 24*time.Hour:

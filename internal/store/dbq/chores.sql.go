@@ -182,8 +182,6 @@ type ListChorePeopleRow struct {
 	PersonID int64 `json:"person_id"`
 }
 
-// Who each active shared chore is for: the chosen people still active, in
-// board order.
 func (q *Queries) ListChorePeople(ctx context.Context, householdID int64) ([]ListChorePeopleRow, error) {
 	rows, err := q.db.QueryContext(ctx, listChorePeople, householdID)
 	if err != nil {
@@ -307,7 +305,6 @@ type ListSharedChoresWithOnePersonRow struct {
 	PersonID int64 `json:"person_id"`
 }
 
-// Active shared chores left with a single chosen person, and who that is.
 func (q *Queries) ListSharedChoresWithOnePerson(ctx context.Context, householdID int64) ([]ListSharedChoresWithOnePersonRow, error) {
 	rows, err := q.db.QueryContext(ctx, listSharedChoresWithOnePerson, householdID)
 	if err != nil {

@@ -21,8 +21,6 @@ type CreateHouseholdKeyParams struct {
 	CreatedAt   int64  `json:"created_at"`
 }
 
-// Two requests may make a new household's key at once; the first wins and
-// both then read it back.
 func (q *Queries) CreateHouseholdKey(ctx context.Context, arg CreateHouseholdKeyParams) error {
 	_, err := q.db.ExecContext(ctx, createHouseholdKey, arg.HouseholdID, arg.WrappedKey, arg.CreatedAt)
 	return err

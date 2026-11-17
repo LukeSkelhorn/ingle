@@ -9,8 +9,6 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
-// kidWithMoney adds a child with a PIN and pence to spend, and returns
-// their id.
 func kidWithMoney(t *testing.T, h *harness, phone *device, name, pin string, pence int64) string {
 	t.Helper()
 	id := addKid(t, h, phone, name)
@@ -24,7 +22,6 @@ func kidWithMoney(t *testing.T, h *harness, phone *device, name, pin string, pen
 	return id
 }
 
-// openMoney types pin on the wall and returns My money and its token.
 func openMoney(t *testing.T, wall *device, id, pin string) (resp, string) {
 	t.Helper()
 	r := wall.post("/board/money/"+id+"/pin", url.Values{"pin": {pin}})
@@ -36,7 +33,6 @@ func openMoney(t *testing.T, wall *device, id, pin string) (resp, string) {
 	return r, m[1]
 }
 
-// pendingTransfer is the id of name's waiting bank request.
 func pendingTransfer(t *testing.T, h *harness, name string) string {
 	t.Helper()
 	rows, err := h.st.Q.PendingTransfersForPerson(h.ctx(), dbq.PendingTransfersForPersonParams{HouseholdID: h.hh, PersonID: h.person(name).ID})
@@ -57,9 +53,7 @@ func TestBankRequest(t *testing.T) {
 	r, tok := openMoney(t, wall, alfie, "1357")
 	expect(t, r, http.StatusOK, "Ask to move to my bank", base+"/bank?t="+tok)
 
-	// The ask panel starts at £1.00 and goes up to all he has.
 	expect(t, wall.get(base+"/bank?t="+tok), http.StatusOK, "data-bank-stepper", `data-max="800"`, `data-step="50"`, `name="pence" value="100"`, "All of it (£8.00)")
-	// Without his PIN check, back to the keypad.
 	r = wall.get(base + "/bank")
 	expect(t, r, http.StatusOK, "Enter your PIN again")
 	if r.header.Get("HX-Retarget") != "#sheet-body" {
@@ -67,10 +61,8 @@ func TestBankRequest(t *testing.T) {
 	}
 	_, islaTok := openMoney(t, wall, isla, "2468")
 	expect(t, wall.post(base+"/bank", url.Values{"t": {islaTok}, "pence": {"100"}}), http.StatusOK, "Enter your PIN again")
-	// Only 50p steps.
 	expect(t, wall.post(base+"/bank", url.Values{"t": {tok}, "pence": {"125"}}), http.StatusBadRequest)
 
-	// He asks for £2.50: it's held, and waits.
 	r = wall.post(base+"/bank", url.Values{"t": {tok}, "pence": {"250"}})
 	expect(t, r, http.StatusOK, "£2.50</strong> to your bank", "Waiting for a grown-up", "(£2.50 held)", "/cancel")
 	notContains(t, r, "Ask to move to my bank")
@@ -81,13 +73,11 @@ func TestBankRequest(t *testing.T) {
 	if !strings.Contains(r.header.Get("HX-Trigger"), "already asked") {
 		t.Errorf("second request HX-Trigger = %q", r.header.Get("HX-Trigger"))
 	}
-	// Adults pay out from Admin › People instead, and can't cancel for him.
 	expect(t, phone.post(base+"/bank", url.Values{"pence": {"100"}}), http.StatusForbidden)
 	r = phone.get(base + "/view")
 	expect(t, r, http.StatusOK, "Waiting for a grown-up")
 	notContains(t, r, "/cancel")
 
-	// A grown-up sees it on Admin home and in Admin › Bank, and declines.
 	expect(t, phone.get("/admin"), http.StatusOK, `href="/admin/bank"`, "Bank request<", "asked to move £2.50 to their bank")
 	req := pendingTransfer(t, h, "Alfie")
 	expect(t, phone.get("/admin/bank"), http.StatusOK, "£2.50 to Alfie", "/admin/bank/"+req+"/approve", "/admin/bank/"+req+"/decline")
@@ -98,7 +88,6 @@ func TestBankRequest(t *testing.T) {
 	notContains(t, r, "held)")
 	expect(t, phone.post("/admin/bank/"+req+"/approve", nil), http.StatusConflict, "already been decided")
 
-	// He asks again, then changes his mind.
 	expect(t, wall.post(base+"/bank", url.Values{"t": {tok}, "pence": {"500"}}), http.StatusOK, "Waiting for a grown-up")
 	req = pendingTransfer(t, h, "Alfie")
 	expect(t, wall.post(base+"/bank/"+req+"/cancel", url.Values{"t": {islaTok}}), http.StatusOK, "Enter your PIN again")
@@ -106,7 +95,6 @@ func TestBankRequest(t *testing.T) {
 	expect(t, r, http.StatusOK, "Ask to move to my bank")
 	notContains(t, r, "Waiting for a grown-up")
 
-	// And again; this time Mum sends it.
 	expect(t, wall.post(base+"/bank", url.Values{"t": {tok}, "pence": {"300"}}), http.StatusOK)
 	req = pendingTransfer(t, h, "Alfie")
 	expect(t, phone.post("/admin/bank/"+req+"/approve", nil), http.StatusOK, "Approved.", "Sent by Mum")
@@ -114,7 +102,6 @@ func TestBankRequest(t *testing.T) {
 	expect(t, phone.get("/admin"), http.StatusOK, "approved moving £3.00 to Alfie")
 	notContains(t, phone.get("/admin"), "Bank request")
 
-	// While the displays are locked, nothing.
 	expectRedirect(t, phone.post("/lock", nil), "/")
 	if r := wall.post(base+"/bank", url.Values{"t": {tok}, "pence": {"100"}}); r.status != http.StatusLocked {
 		t.Errorf("POST bank while locked = %d", r.status)

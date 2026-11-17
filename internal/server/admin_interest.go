@@ -8,18 +8,16 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/locale"
 )
 
-// interestForm is Admin › Settings › Bank of Mum and Dad.
 type interestForm struct {
 	On                  bool
-	Rate                string // % a month, as typed
+	Rate                string
 	Money, Points       bool
-	CapMoney, CapPoints string // "" for no limit
+	CapMoney, CapPoints string
 
 	filled bool
 }
 
-// Yearly is about what the rate comes to over a year, or "" if it isn't a
-// rate yet.
+// Yearly is roughly what the rate comes to over a year, or "" if it isn't a rate yet.
 func (f interestForm) Yearly() string {
 	bp, err := chores.ParseRate(f.Rate)
 	if err != nil || bp <= 0 || bp > chores.MaxInterestBP {

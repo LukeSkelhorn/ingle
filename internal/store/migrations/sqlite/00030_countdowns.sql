@@ -1,15 +1,9 @@
 -- +goose Up
--- Countdowns: days to go until a birthday, a holiday or a big day.
--- A person can have a birthday (MM-DD, and the year if it's known); it
--- counts down every year without a countdowns row. A child with
--- can_add_countdowns may add countdowns from the board after their PIN.
 ALTER TABLE people ADD COLUMN birthday TEXT
     CHECK (birthday IS NULL OR date('2000-' || birthday) IS '2000-' || birthday);
 ALTER TABLE people ADD COLUMN birth_year INTEGER CHECK (birth_year IS NULL OR birth_year BETWEEN 1900 AND 2999);
 ALTER TABLE people ADD COLUMN can_add_countdowns INTEGER NOT NULL DEFAULT 0 CHECK (can_add_countdowns IN (0, 1));
 
--- on_date is a local date. A yearly countdown counts to the same day and
--- month every year; a one-off one is over after on_date.
 CREATE TABLE countdowns (
     id           INTEGER PRIMARY KEY,
     household_id INTEGER NOT NULL REFERENCES households (id) ON DELETE CASCADE,
@@ -22,7 +16,6 @@ CREATE TABLE countdowns (
 ) STRICT;
 CREATE INDEX countdowns_household_idx ON countdowns (household_id, on_date);
 
--- Who a countdown is for, if anyone: their pictures show next to it.
 CREATE TABLE countdown_people (
     household_id INTEGER NOT NULL REFERENCES households (id) ON DELETE CASCADE,
     countdown_id INTEGER NOT NULL REFERENCES countdowns (id) ON DELETE CASCADE,

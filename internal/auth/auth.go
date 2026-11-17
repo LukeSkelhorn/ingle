@@ -23,16 +23,13 @@ const (
 // PersonalSessionTTL is how long a personal-device sign-in lasts without use.
 const PersonalSessionTTL = 30 * 24 * time.Hour
 
-// Failure limits for PIN and password attempts. The per-address limit is
-// looser because everyone behind a reverse proxy shares one address.
+// Failure limits for PIN and password attempts.
 const (
 	MaxFailures        = 5
 	MaxAddressFailures = 20
 	LockoutPeriod      = 5 * time.Minute
 )
 
-// touchInterval throttles last_seen writes for displays and personal
-// sessions; display sessions are always touched so the idle timeout is exact.
 const touchInterval = time.Minute
 
 // Errors returned by Service.
@@ -44,19 +41,17 @@ var (
 
 // Session is a validated, signed-in adult.
 type Session struct {
-	Kind     string
-	Person   dbq.Person
-	DeviceID *int64
-	// TokenHash identifies the session for sign-out and revocation.
+	Kind      string
+	Person    dbq.Person
+	DeviceID  *int64
 	TokenHash []byte
 }
 
 // Service manages household displays and adult sessions.
 type Service struct {
-	st       *store.Store
-	settings *settings.Service
-	now      func() time.Time
-	// personalIdle is how long a personal session lasts without use.
+	st           *store.Store
+	settings     *settings.Service
+	now          func() time.Time
 	personalIdle time.Duration
 
 	pinLimiter  *Limiter
@@ -82,8 +77,7 @@ func New(st *store.Store, set *settings.Service) *Service {
 	}
 }
 
-// SetPersonalIdle sets how long a personal session lasts without use; 0
-// keeps PersonalSessionTTL.
+// SetPersonalIdle sets how long a personal session lasts without use; 0 keeps PersonalSessionTTL.
 func (s *Service) SetPersonalIdle(d time.Duration) {
 	if d <= 0 {
 		d = PersonalSessionTTL
@@ -91,8 +85,7 @@ func (s *Service) SetPersonalIdle(d time.Duration) {
 	s.personalIdle = d
 }
 
-// PersonalIdle is how long a personal session lasts without use, which is
-// also its cookie's lifetime.
+// PersonalIdle is how long a personal session lasts without use, which is also its cookie's lifetime.
 func (s *Service) PersonalIdle() time.Duration { return s.personalIdle }
 
 // SetClock replaces the clock (tests).
@@ -104,8 +97,7 @@ func (s *Service) SetClock(now func() time.Time) {
 	s.addrLimiter.now = now
 }
 
-// RegisterDisplay registers the current device as a household display and
-// returns the token to store in its cookie.
+// RegisterDisplay registers the current device as a household display and returns its token.
 func (s *Service) RegisterDisplay(ctx context.Context, householdID int64, name string, by int64) (string, dbq.Device, error) {
 	name = strings.TrimSpace(name)
 	if name == "" || len([]rune(name)) > 50 {
@@ -166,9 +158,7 @@ func (s *Service) PINLocked(personID int64) bool {
 	return blocked
 }
 
-// UnlockWithPIN checks personID's PIN on a registered display and returns a
-// display session token. After MaxFailures wrong PINs the person is locked
-// out for LockoutPeriod.
+// UnlockWithPIN checks personID's PIN on a registered display and returns a display session token.
 func (s *Service) UnlockWithPIN(ctx context.Context, device *dbq.Device, personID int64, pin string) (string, error) {
 	if device == nil {
 		return "", ErrNotDisplay
@@ -200,9 +190,7 @@ func (s *Service) UnlockWithPIN(ctx context.Context, device *dbq.Device, personI
 	return s.createSession(ctx, p, KindDisplay, &device.ID, "")
 }
 
-// SignIn checks an adult's email and password and returns a personal session
-// token. Attempts are limited per email and, more loosely, per client
-// address.
+// SignIn checks an adult's email and password and returns a personal session token.
 func (s *Service) SignIn(ctx context.Context, email, password, userAgent, clientAddr string) (string, dbq.Person, error) {
 	email = strings.TrimSpace(email)
 	emailKey, addrKey := "email:"+strings.ToLower(email), "addr:"+clientAddr
@@ -212,8 +200,7 @@ func (s *Service) SignIn(ctx context.Context, email, password, userAgent, client
 	if blocked, _ := s.addrLimiter.Blocked(addrKey); blocked {
 		return "", dbq.Person{}, ErrLockedOut
 	}
-	// Emails are stored lower case. SQLite compares them without case anyway;
-	// Postgres doesn't.
+	// Emails are stored lower case: Postgres compares them with case, unlike SQLite.
 	lookup := strings.ToLower(email)
 	p, err := s.st.Q.GetPersonByEmail(store.AsSystem(ctx), &lookup)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -238,15 +225,12 @@ func (s *Service) SignIn(ctx context.Context, email, password, userAgent, client
 	return token, p, err
 }
 
-// StartPersonalSession signs personID in without a password, for the end of
-// first-run setup where they have just chosen one.
+// StartPersonalSession signs personID in without a password, at the end of first-run setup.
 func (s *Service) StartPersonalSession(ctx context.Context, p dbq.Person, userAgent string) (string, error) {
 	return s.createSession(ctx, p, KindPersonal, nil, userAgent)
 }
 
-// StartSessionFor signs person personID of household hh in without a
-// password, once another service has confirmed who they are. It fails with
-// ErrBadCredentials unless they are an active adult of hh.
+// StartSessionFor signs personID of hh in once another service has confirmed who they are.
 func (s *Service) StartSessionFor(ctx context.Context, hh, personID int64, userAgent string) (string, error) {
 	if hh <= 0 || personID <= 0 {
 		return "", ErrBadCredentials
@@ -302,10 +286,7 @@ func (s *Service) createSession(ctx context.Context, p dbq.Person, kind string, 
 	return token, nil
 }
 
-// Session validates token and returns the signed-in adult, or nil if the
-// token is unknown, expired, belongs to an archived person, or is a display
-// session presented by a different device. Valid sessions are touched so the
-// expiry slides.
+// Session validates token and returns the signed-in adult, or nil if it isn't valid.
 func (s *Service) Session(ctx context.Context, token string, device *dbq.Device) (*Session, error) {
 	if token == "" {
 		return nil, nil
@@ -385,8 +366,7 @@ func (s *Service) RevokeSession(ctx context.Context, householdID int64, tokenHas
 	})
 }
 
-// SignOutEverywhere ends every session for personID except keep (the
-// caller's own, which may be nil to end all).
+// SignOutEverywhere ends every session for personID except keep, which may be nil.
 func (s *Service) SignOutEverywhere(ctx context.Context, householdID, personID int64, keep []byte) error {
 	if keep == nil {
 		keep = []byte{}

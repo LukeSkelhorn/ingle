@@ -12,15 +12,11 @@ import (
 )
 
 // MoneyTokenTTL is how long a My money PIN check lasts without being used.
-// Each use extends it by this much, up to MoneyTokenMax after the PIN.
 const MoneyTokenTTL = 60 * time.Second
 
-// MoneyTokenMax is the longest a My money PIN check lasts, however much it's
-// used: after this it asks for the PIN again.
+// MoneyTokenMax is the longest a My money PIN check lasts, however much it's used.
 const MoneyTokenMax = 10 * time.Minute
 
-// moneyGrant is what a My money token opens: one person's money, on one
-// display, for a short while.
 type moneyGrant struct {
 	householdID int64
 	personID    int64
@@ -29,20 +25,13 @@ type moneyGrant struct {
 	expires     time.Time
 }
 
-// moneyTokens holds My money tokens in memory, keyed by the token's hash.
-// They're deliberately not sessions, so one can never be taken for an
-// adult's session; a restart simply asks for the PIN again.
+// Deliberately not sessions, so a money token can never pass as an adult's session.
 type moneyTokens struct {
 	mu     sync.Mutex
 	grants map[string]moneyGrant
 }
 
-// CheckMoneyPIN checks the PIN of personID, a child or an adult, picked on a
-// registered household display. It opens only that person's My money: the
-// token it returns is for that person on that display, and lasts
-// MoneyTokenTTL after each use, up to MoneyTokenMax after the PIN. It never
-// opens admin or unlocks the displays. Wrong PINs count against the person
-// (as for admin) and, more loosely, the client address.
+// CheckMoneyPIN checks the PIN of personID, a child or an adult, on a registered display.
 func (s *Service) CheckMoneyPIN(ctx context.Context, device *dbq.Device, personID int64, pin, clientAddr string) (string, error) {
 	if device == nil {
 		return "", ErrNotDisplay
@@ -94,8 +83,6 @@ func (s *Service) CheckMoneyPIN(ctx context.Context, device *dbq.Device, personI
 }
 
 // MoneyToken reports whose My money token is, if it's still good on device.
-// A good token is extended by MoneyTokenTTL, up to MoneyTokenMax after the
-// PIN.
 func (s *Service) MoneyToken(device *dbq.Device, token string) (int64, bool) {
 	if device == nil || token == "" {
 		return 0, false

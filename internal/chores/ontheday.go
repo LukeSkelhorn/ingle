@@ -11,16 +11,9 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
-// ErrTooLate is returned when completing or claiming an Only on the day
-// chore after its time has passed.
+// ErrTooLate is returned when doing an Only on the day chore after its time.
 var ErrTooLate = errors.New("too late for that chore")
 
-// cutoff is when an Only on the day occurrence due on dueOn (its last
-// allowed day, for a flexible-day chore) stops being doable: its due time
-// if it has one, else the start of the next board day. A due time earlier
-// than dayStart belongs to the end of the board day, so the next calendar
-// day. Clock times are wall-clock, so days when the clocks change still
-// cut off at the right local time.
 func cutoff(dueOn string, dueTime *string, loc *time.Location, dayStart time.Duration) (time.Time, bool) {
 	d, err := time.ParseInLocation(DateLayout, dueOn, loc)
 	if err != nil {
@@ -42,8 +35,6 @@ func cutoff(dueOn string, dueTime *string, loc *time.Location, dayStart time.Dur
 	return time.Date(d.Year(), d.Month(), d.Day(), int(at/time.Hour), int(at%time.Hour/time.Minute), 0, 0, loc), true
 }
 
-// onTheDayCutoff is the cutoff of an occurrence due on dueOn of a chore with
-// the given on_the_day flag and due time, and false when it can be done late.
 func onTheDayCutoff(onTheDay int64, dueOn string, dueTime *string, loc *time.Location, dayStart time.Duration) (time.Time, bool) {
 	if onTheDay != 1 {
 		return time.Time{}, false
@@ -51,14 +42,12 @@ func onTheDayCutoff(onTheDay int64, dueOn string, dueTime *string, loc *time.Loc
 	return cutoff(dueOn, dueTime, loc, dayStart)
 }
 
-// tooLate reports whether occurrence occ of chore c is past its cutoff.
 func (s *Service) tooLate(ctx context.Context, householdID int64, c dbq.Chore, occ dbq.ChoreOccurrence) bool {
 	at, ok := onTheDayCutoff(c.OnTheDay, occ.DueOn, optTime(occ.DueTime), s.loc(ctx, householdID), s.dayStart(ctx, householdID))
 	return ok && !s.now().Before(at)
 }
 
-// MissedDays is how far back Admin › Completions lists missed chores,
-// counting today.
+// MissedDays is how far back Admin › Completions lists missed chores, counting today.
 const MissedDays = 7
 
 // MissedDetail is an Only on the day chore that wasn't done in time.
@@ -70,15 +59,11 @@ type MissedDetail struct {
 	DueTime      *string
 	Points       int64
 	Pence        int64
-	// Person is whose it was (the assignee, or whoever claimed it); nil
-	// when Choices lists who could have done it (a shared chore's people,
-	// or everyone for an unclaimed pool chore).
-	Person  *dbq.Person
-	Choices []dbq.Person
+	Person       *dbq.Person
+	Choices      []dbq.Person
 }
 
-// Missed lists Only on the day chores from the last MissedDays board days
-// (up to boardDay) that are past their cutoff and weren't done, newest first.
+// Missed lists Only on the day chores from the last MissedDays board days that weren't done.
 func (s *Service) Missed(ctx context.Context, householdID int64, boardDay time.Time) ([]MissedDetail, error) {
 	q := s.st.Q
 	today := boardDay.Format(DateLayout)
@@ -110,7 +95,7 @@ func (s *Service) Missed(ctx context.Context, householdID int64, boardDay time.T
 			continue
 		}
 		if hols.cleared(r.DueOn, today, rowOwners(r, shared)) {
-			continue // cleared by a holiday
+			continue
 		}
 		at, ok := onTheDayCutoff(r.OnTheDay, r.DueOn, optTime(r.DueTime), loc, dayStart)
 		if !ok || now.Before(at) {
@@ -128,7 +113,7 @@ func (s *Service) Missed(ctx context.Context, householdID int64, boardDay time.T
 		case owner != nil:
 			p, ok := byID[*owner]
 			if !ok {
-				continue // archived since
+				continue
 			}
 			m.Person = &p
 			m.Points, m.Pence = Earns(p.Kind, r.Points, r.Pence, r.AdultPoints)
@@ -155,7 +140,6 @@ func (s *Service) Missed(ctx context.Context, householdID int64, boardDay time.T
 	return out, nil
 }
 
-// compareTimes orders optional HH:MM times, untimed last.
 func compareTimes(a, b *string) int {
 	switch {
 	case a == nil && b == nil:
@@ -168,10 +152,7 @@ func compareTimes(a, b *string) int {
 	return cmp.Compare(*a, *b)
 }
 
-// MarkDone records an adult (adultID) marking a not-done occurrence as done
-// by personID, for a missed Only on the day chore that was done but never
-// ticked. It is approved straight away, with the adult as reviewer, so the
-// points are added even if the chore normally needs checking.
+// MarkDone records an adult marking a missed Only on the day chore as done by personID.
 func (s *Service) MarkDone(ctx context.Context, householdID, occurrenceID, personID, adultID int64) error {
 	return s.st.WithTx(ctx, func(q *dbq.Queries) error {
 		if err := requireAdult(ctx, q, householdID, adultID); err != nil {
@@ -202,16 +183,10 @@ func (s *Service) MarkDone(ctx context.Context, householdID, occurrenceID, perso
 	})
 }
 
-// ErrNotMissed is returned when dismissing a chore that isn't a missed Only
-// on the day chore (it was done, dismissed already, or isn't late yet), or
-// restoring one that isn't dismissed.
+// ErrNotMissed is returned when an occurrence isn't missed (or dismissed) as required.
 var ErrNotMissed = errors.New("chore isn't missed")
 
-// Dismiss takes missed Only on the day chores off Admin › Completions, as
-// adult adultID. They stay missed: no points, and the calendar still shows
-// them as missed. It returns the ids it dismissed, skipping any that aren't
-// missed (done or dismissed since the page was loaded); ErrNotMissed if
-// none were.
+// Dismiss takes missed Only on the day chores off Admin › Completions, as adult adultID.
 func (s *Service) Dismiss(ctx context.Context, householdID, adultID int64, occurrenceIDs []int64) ([]int64, error) {
 	var done []int64
 	err := s.st.WithTx(ctx, func(q *dbq.Queries) error {
@@ -252,9 +227,7 @@ func (s *Service) Dismiss(ctx context.Context, householdID, adultID int64, occur
 	return done, nil
 }
 
-// Restore undoes Dismiss for the given occurrences, as adult adultID,
-// putting them back on the Missed list. It returns how many it restored;
-// ErrNotMissed if none were dismissed.
+// Restore undoes Dismiss for the given occurrences.
 func (s *Service) Restore(ctx context.Context, householdID, adultID int64, occurrenceIDs []int64) (int, error) {
 	n := 0
 	err := s.st.WithTx(ctx, func(q *dbq.Queries) error {

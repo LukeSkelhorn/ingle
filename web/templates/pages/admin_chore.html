@@ -161,9 +161,6 @@
     <button class="btn btn--primary" type="submit">{{if .Data.ID}}Save{{else}}Add chore{{end}}</button>
   </form>
   <script>
-    // What it's worth: a chore for one adult shows only Adults' points, one
-    // for one child only Points and Pocket money, anything else all three.
-    // Adults' points copy Points until they're changed.
     (function () {
       var form = document.querySelector(".chore-form");
       if (!form) return;

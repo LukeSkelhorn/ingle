@@ -9,14 +9,10 @@ import (
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
 
-// Rewards for chosen people: the form saves who, the list says who, and a
-// person's sheet, Admin › People's Saving for and the claim only offer the
-// rewards they may have.
 func TestRewardsForChosenPeople(t *testing.T) {
 	h, wall, phone := boardHousehold(t)
 	mum, alfie, isla := h.person("Mum"), h.person("Alfie"), h.person("Isla")
 
-	// An adult can't be chosen for a reward that costs money.
 	r := phone.post("/admin/rewards", url.Values{
 		"title": {"Sweets"}, "cost_points": {"0"}, "money": {"1.00"},
 		"reward_who": {"chosen"}, "people_ids": {itoa(mum.ID), itoa(alfie.ID)},
@@ -37,13 +33,11 @@ func TestRewardsForChosenPeople(t *testing.T) {
 		ids[rw.Title] = rw.ID
 	}
 
-	// The form shows who's chosen and marks adults; the list says who.
 	expect(t, phone.get("/admin/rewards/"+itoa(ids["Stay up late"])), http.StatusOK,
 		`name="reward_who" value="chosen" checked`,
 		`value="`+itoa(alfie.ID)+`" data-kind="child" checked`, `value="`+itoa(mum.ID)+`" data-kind="adult">`)
 	expect(t, phone.get("/admin/rewards"), http.StatusOK, "For Alfie", "Everyone", "Children")
 
-	// Each sheet lists only that person's rewards.
 	for _, tc := range []struct {
 		who       string
 		id        int64
@@ -66,7 +60,6 @@ func TestRewardsForChosenPeople(t *testing.T) {
 		}
 	}
 
-	// Claiming or saving for someone else's reward is refused.
 	if _, err := h.st.Q.InsertLedgerEntry(h.ctx(), dbq.InsertLedgerEntryParams{
 		HouseholdID: h.hh, PersonID: isla.ID, Points: 100, Kind: "completion", CreatedAt: 1,
 	}); err != nil {
@@ -84,7 +77,6 @@ func TestRewardsForChosenPeople(t *testing.T) {
 		t.Error("Isla saving for Alfie's reward")
 	}
 
-	// Admin › People › Saving for lists only theirs.
 	page := phone.get("/admin/people/" + itoa(isla.ID))
 	if strings.Contains(page.body, "Stay up late") || !strings.Contains(page.body, "Takeaway") {
 		t.Error("Isla's Saving for picker isn't filtered")

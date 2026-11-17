@@ -7,8 +7,6 @@ import (
 	"time"
 )
 
-// boardAt materialises from a week before day and builds the board for day
-// (YYYY-MM-DD, local midnight).
 func (f *fixture) boardAt(day string) Board {
 	f.t.Helper()
 	d, err := time.ParseInLocation(DateLayout, day, london)
@@ -44,16 +42,13 @@ func titles(cards []Card) []string {
 
 func TestBoardOverdueRule(t *testing.T) {
 	f := newFixture(t)
-	// Board day is Wed 4 Nov; nothing has been done.
 	f.chore("Bins", choreOpts{assignee: &f.kid.ID, rrule: ptr("FREQ=WEEKLY;BYDAY=MO"), startsOn: "2026-10-01"})
 	f.chore("Teeth", choreOpts{assignee: &f.kid.ID, rrule: ptr("FREQ=DAILY"), startsOn: "2026-10-01"})
-	f.chore("Ancient", choreOpts{assignee: &f.kid.ID, startsOn: "2026-10-01"}) // one-off, > 14 days ago
+	f.chore("Ancient", choreOpts{assignee: &f.kid.ID, startsOn: "2026-10-01"})
 	f.chore("Recent one-off", choreOpts{assignee: &f.kid.ID, startsOn: "2026-11-01"})
 
 	b := f.boardAt("2026-11-04")
 	got := titles(b.column("Alfie").Cards)
-	// Overdue first (Mon's bins and Sunday's one-off), then today's teeth.
-	// Mon/Tue teeth are superseded by today's; the ancient one is too old.
 	want := []string{"Recent one-off@2026-11-01", "Bins@2026-11-02", "Teeth@2026-11-04"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("cards = %v, want %v", got, want)
@@ -63,7 +58,6 @@ func TestBoardOverdueRule(t *testing.T) {
 			t.Errorf("%s not marked overdue", c.Title)
 		}
 	}
-	// Overdue chores count towards "x of y", so "all done" means caught up.
 	if col := b.column("Alfie"); col.TotalToday != 3 || col.DoneToday != 0 {
 		t.Errorf("progress = %d/%d, want 0/3", col.DoneToday, col.TotalToday)
 	}
@@ -91,7 +85,6 @@ func TestBoardDoneOverdueStaysForTheDay(t *testing.T) {
 	if col.DoneToday != 1 || col.TotalToday != 1 {
 		t.Errorf("progress = %d/%d, want 1/1", col.DoneToday, col.TotalToday)
 	}
-	// The next day it's gone.
 	if got := f.boardAt("2026-11-05").column("Alfie").Cards; len(got) != 0 {
 		t.Errorf("caught-up chore still shown next day: %v", titles(got))
 	}
@@ -113,7 +106,6 @@ func TestBoardPoolClaimAndDone(t *testing.T) {
 	if err := f.svc.Claim(ctx, f.hh, hoover.OccurrenceID, f.kid.ID); err != nil {
 		t.Fatal(err)
 	}
-	// Car is done straight from the pool by Isla, without claiming.
 	if _, err := f.svc.Complete(ctx, f.hh, car.OccurrenceID, f.kid2.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +119,6 @@ func TestBoardPoolClaimAndDone(t *testing.T) {
 		t.Errorf("Alfie's cards = %+v, want claimed Hoover", alfie)
 	}
 	isla := b.column("Isla")
-	// Undone "Mine" first, then done "Car".
 	if got := titles(isla.Cards); !slices.Equal(got, []string{"Mine@2026-11-02", "Car@2026-11-02"}) {
 		t.Errorf("Isla's cards = %v", got)
 	}
@@ -236,7 +227,6 @@ func TestUndo(t *testing.T) {
 		t.Errorf("second Undo = %v, want ErrNotFound", err)
 	}
 
-	// Complete again and wait too long.
 	c, err = f.svc.Complete(ctx, f.hh, occ.ID, f.kid.ID)
 	if err != nil {
 		t.Fatal(err)

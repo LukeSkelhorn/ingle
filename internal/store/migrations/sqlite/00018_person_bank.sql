@@ -1,8 +1,4 @@
 -- +goose Up
--- A child's real bank balance, as Ingle last knew it: typed in by an adult
--- (source 'manual') or, later, read from Monzo ('monzo'). updated_at is when
--- someone last checked the real bank; payouts from Ingle add to pence
--- without moving it, so the "check their balance" nudge still comes round.
 CREATE TABLE person_bank (
     person_id    INTEGER PRIMARY KEY REFERENCES people (id) ON DELETE CASCADE,
     household_id INTEGER NOT NULL REFERENCES households (id) ON DELETE CASCADE,

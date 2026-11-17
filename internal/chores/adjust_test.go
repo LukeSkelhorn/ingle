@@ -15,7 +15,6 @@ func TestAdjustPoints(t *testing.T) {
 	ctx := t.Context()
 	f.earn(f.kid, 3, 50)
 
-	// Taking away more than they have goes below zero; money is untouched.
 	e, err := f.svc.AdjustPoints(ctx, f.hh, f.adult.ID, f.kid.ID, -6, "  Hit his sister. We don't hurt people. ")
 	if err != nil {
 		t.Fatal(err)
@@ -31,7 +30,6 @@ func TestAdjustPoints(t *testing.T) {
 		t.Errorf("this week = %d, want net -3", s.WeekPoints)
 	}
 
-	// A bonus, for an adult too.
 	if _, err := f.svc.AdjustPoints(ctx, f.hh, f.adult.ID, f.adult.ID, 2, "Did the big shop"); err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +37,6 @@ func TestAdjustPoints(t *testing.T) {
 		t.Errorf("adult balance = %d, want 2", got)
 	}
 
-	// A chore reversal isn't listed as an adjustment.
 	if _, err := f.st.Q.InsertLedgerEntry(ctx, dbq.InsertLedgerEntryParams{
 		HouseholdID: f.hh, PersonID: f.kid.ID, Points: -1, Kind: "adjustment", Note: "Reversed: Bins", CreatedAt: f.svc.now().Unix(),
 	}); err != nil {
@@ -125,7 +122,6 @@ func TestUndoAdjustment(t *testing.T) {
 		t.Errorf("undo twice: err = %v, want ErrUndoExpired", err)
 	}
 
-	// Too old.
 	old, err := f.svc.AdjustPoints(ctx, f.hh, f.adult.ID, f.kid.ID, 2, "Helped")
 	if err != nil {
 		t.Fatal(err)
@@ -136,7 +132,6 @@ func TestUndoAdjustment(t *testing.T) {
 		t.Errorf("old undo: err = %v, want ErrUndoExpired", err)
 	}
 
-	// Only manual entries can be undone this way.
 	f.earn(f.kid, 4, 0)
 	var id int64
 	if err := f.st.SQL().QueryRowContext(ctx, "SELECT MAX(id) FROM ledger_entries WHERE kind = 'completion'").Scan(&id); err != nil {
