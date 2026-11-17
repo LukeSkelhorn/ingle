@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/lukeskelhorn/ingle/internal/auth"
+	"github.com/lukeskelhorn/ingle/internal/avatar"
 	"github.com/lukeskelhorn/ingle/internal/emoji"
 	"github.com/lukeskelhorn/ingle/internal/store"
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
@@ -169,6 +170,84 @@ func (s *Service) Setup(ctx context.Context, householdID int64, in SetupInput) (
 		return err
 	})
 	return p, err
+}
+
+// NewHouseholdInput is a new household and its first adult, who has an
+// email but no password.
+type NewHouseholdInput struct {
+	HouseholdName string
+	Timezone      string      // IANA, e.g. Europe/London
+	Person        PersonInput // Kind is forced to adult; Avatar comes from Emoji
+	// Emoji is the adult's picture, one of avatar.Emojis, or "" for none.
+	Emoji string
+	Email string
+}
+
+// CreateHousehold makes a new household, with its settings, and its first
+// adult. Invalid input is a valid.Errors; an email someone already has is
+// one too.
+func (s *Service) CreateHousehold(ctx context.Context, in NewHouseholdInput) (dbq.Household, dbq.Person, error) {
+	in.Person.Kind = KindAdult
+	in.Person.SortOrder = 0
+	in.Person.Avatar = nil
+	errs := validatePerson(in.Person)
+	if e := strings.TrimSpace(in.Emoji); e != "" {
+		v, ok := avatar.EmojiValue(e)
+		if !ok {
+			errs.Add("emoji", "Choose one of the emoji.")
+		}
+		in.Person.Avatar = &v
+	}
+	name := strings.TrimSpace(in.HouseholdName)
+	if name == "" || len([]rune(name)) > 50 {
+		errs.Add("household_name", "Enter a household name (up to 50 characters).")
+	}
+	email, emailErr := normaliseEmail(in.Email)
+	if emailErr != "" {
+		errs.Add("email", emailErr)
+	}
+	tz := strings.TrimSpace(in.Timezone)
+	if _, err := time.LoadLocation(tz); err != nil || tz == "" || tz == "Local" {
+		errs.Add("timezone", "Choose a timezone, like Europe/London.")
+	}
+	if err := errs.Err(); err != nil {
+		return dbq.Household{}, dbq.Person{}, err
+	}
+
+	now := s.now()
+	// The household is made before it can be scoped to, so as the system;
+	// everything in it is then made in its own scope.
+	h, err := s.st.Q.CreateHousehold(store.AsSystem(ctx), dbq.CreateHouseholdParams{Name: name, CreatedAt: now.Unix()})
+	if err != nil {
+		return dbq.Household{}, dbq.Person{}, fmt.Errorf("create household: %w", err)
+	}
+	ctx = store.WithHousehold(ctx, h.ID)
+	var p dbq.Person
+	err = s.st.WithTx(ctx, func(q *dbq.Queries) error {
+		if err := q.InsertDefaultSettings(ctx, dbq.InsertDefaultSettingsParams{HouseholdID: h.ID, Timezone: tz, UpdatedAt: now.Unix()}); err != nil {
+			return fmt.Errorf("insert settings: %w", err)
+		}
+		var err error
+		if p, err = createPerson(ctx, q, h.ID, in.Person, now); err != nil {
+			return err
+		}
+		if err := q.SetPersonLogin(ctx, dbq.SetPersonLoginParams{Email: &email, HouseholdID: h.ID, ID: p.ID}); err != nil {
+			return uniqueErr(err)
+		}
+		if err := log(ctx, q, h.ID, p.ID, "household.created", "household", h.ID, now); err != nil {
+			return err
+		}
+		p, err = q.GetPerson(ctx, dbq.GetPersonParams{HouseholdID: h.ID, ID: p.ID})
+		return err
+	})
+	if err != nil {
+		// Don't leave an empty household behind.
+		if delErr := s.st.Q.DeleteHousehold(ctx, h.ID); delErr != nil {
+			err = errors.Join(err, fmt.Errorf("remove household: %w", delErr))
+		}
+		return dbq.Household{}, dbq.Person{}, err
+	}
+	return h, p, nil
 }
 
 // People returns active people in board order.

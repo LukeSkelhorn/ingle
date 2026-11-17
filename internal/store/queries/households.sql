@@ -12,3 +12,7 @@ SELECT * FROM households ORDER BY id LIMIT 1;
 UPDATE households SET name = ? WHERE id = ?;
 -- name: ListHouseholdIDs :many
 SELECT id FROM households ORDER BY id;
+
+-- name: DeleteHousehold :exec
+-- Its rows in every other table go with it (ON DELETE CASCADE).
+DELETE FROM households WHERE id = ?;
