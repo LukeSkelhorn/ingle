@@ -45,6 +45,17 @@ type Options struct {
 	PhotoBlobs       PhotoBlobs
 	Jobs             JobMode
 	SignIn           *SignIn
+	// HouseholdState is asked on every change and admin page, so keep it quick.
+	HouseholdState func(ctx context.Context, hh int64) (HouseholdState, error)
+}
+
+// HouseholdState is how a household is, as the program running Ingle says.
+type HouseholdState struct {
+	// ReadOnly refuses changes with Notice; signing in and out, locking and deleting the household still work.
+	ReadOnly bool
+	// Notice is shown on admin pages, and on the board when ReadOnly.
+	Notice     string
+	NoticeLink AdminLink
 }
 
 // SignIn is another service that signs adults in instead of Ingle's own sign-in.
@@ -307,7 +318,21 @@ func build(ctx context.Context, opts Options) (*core, error) {
 		routes = func(s *server.Server, mux *http.ServeMux) { opts.Routes(mux, Helpers{srv: s}) }
 	}
 
+	var state func(context.Context, int64) (server.HouseholdState, error)
+	if opts.HouseholdState != nil {
+		state = func(ctx context.Context, hh int64) (server.HouseholdState, error) {
+			st, err := opts.HouseholdState(ctx, hh)
+			return server.HouseholdState{
+				ReadOnly:    st.ReadOnly,
+				Notice:      st.Notice,
+				NoticeLabel: st.NoticeLink.Label,
+				NoticePath:  st.NoticeLink.Path,
+			}, err
+		}
+	}
+
 	c.srv, err = server.New(server.Deps{
+		State:            state,
 		Store:            st,
 		HouseholdID:      single,
 		ResolveHousehold: opts.ResolveHousehold,

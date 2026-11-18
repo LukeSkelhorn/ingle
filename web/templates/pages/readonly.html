@@ -1,0 +1,10 @@
+{{define "bodyclass"}}admin{{end}}
+{{define "content"}}
+{{template "admin_nav" .}}
+<main class="admin__main">
+  <h1>Can't change that</h1>
+  <p>{{.Data}}</p>
+  <p>Everything can still be seen, and exported from Settings › Household.</p>
+  <p><a class="btn btn--ghost" href="/admin">Back to Admin</a></p>
+</main>
+{{end}}

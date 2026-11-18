@@ -8,6 +8,7 @@
     <button class="btn btn--primary" type="submit">Unlock</button>
   </form>
   {{end}}
+  {{with householdState}}{{if .ReadOnly}}{{template "notice" .}}{{end}}{{end}}
   <header class="board__header">
     <div class="board__title">
       <div class="board__name">

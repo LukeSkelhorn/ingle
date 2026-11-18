@@ -52,6 +52,7 @@ type Deps struct {
 	TrustedProxies   []netip.Prefix
 	Version          string
 	SignIn           *SignIn
+	State            func(ctx context.Context, hh int64) (HouseholdState, error)
 }
 
 // SignIn is another service that signs adults in.
@@ -130,14 +131,16 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /admin/unlock", s.notWhileLocked(s.handleAdminUnlock))
 	mux.HandleFunc("POST /admin/lock", s.handleSignOut)
 
-	viewer := func(h http.HandlerFunc) http.Handler { return s.requireViewer(s.lockGate(h)) }
+	viewer := func(h http.HandlerFunc) http.Handler { return s.requireViewer(s.writable(s.lockGate(h))) }
 	mux.Handle("GET /{$}", viewer(s.handleIndex))
 	mux.Handle("GET /clock", viewer(s.handleClock))
 	mux.Handle("GET /avatars/{name}", viewer(s.handleAvatar))
 	mux.Handle("GET /screensaver", viewer(s.handleScreensaver))
-	mux.Handle("POST /lock", viewer(s.handleLock))
-	mux.Handle("POST /unlock", viewer(s.handleUnlock))
-	mux.Handle("POST /activity", viewer(s.handleActivity))
+	// Locking and activity aren't changes, so they work while read-only.
+	always := func(h http.HandlerFunc) http.Handler { return s.requireViewer(s.lockGate(h)) }
+	mux.Handle("POST /lock", always(s.handleLock))
+	mux.Handle("POST /unlock", always(s.handleUnlock))
+	mux.Handle("POST /activity", always(s.handleActivity))
 	mux.Handle("GET /board", viewer(s.handleBoard))
 	mux.Handle("GET /board/events", viewer(s.handleBoardEvents))
 	mux.Handle("GET /board/people/{id}", viewer(s.handlePersonSheet))
@@ -159,7 +162,9 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /board/completions/{id}/reject", viewer(s.boardReview(s.Chores.Reject, "Not counted. It's back on the board.")))
 	mux.Handle("POST /board/completions/{id}/reverse", viewer(s.boardReview(s.Chores.Reverse, "Reversed. Points taken back.")))
 
-	admin := func(h http.HandlerFunc) http.Handler { return s.requireAdmin(s.publishAfterWrite(h)) }
+	admin := func(h http.HandlerFunc) http.Handler { return s.requireAdmin(s.writable(s.publishAfterWrite(h))) }
+	// Signing out and deleting the household work while read-only.
+	adminAlways := func(h http.HandlerFunc) http.Handler { return s.requireAdmin(s.publishAfterWrite(h)) }
 	mux.Handle("GET /admin", admin(s.handleAdminHome))
 
 	mux.Handle("GET /admin/people", admin(s.handlePeople))
@@ -194,9 +199,9 @@ func (s *Server) Handler() http.Handler {
 
 	mux.Handle("GET /admin/devices", admin(s.handleDevices))
 	mux.Handle("POST /admin/devices/register", admin(s.handleDeviceRegister))
-	mux.Handle("POST /admin/devices/{id}/revoke", admin(s.handleDeviceRevoke))
-	mux.Handle("POST /admin/sessions/revoke", admin(s.handleSessionRevoke))
-	mux.Handle("POST /admin/sessions/others", admin(s.handleSignOutOthers))
+	mux.Handle("POST /admin/devices/{id}/revoke", adminAlways(s.handleDeviceRevoke))
+	mux.Handle("POST /admin/sessions/revoke", adminAlways(s.handleSessionRevoke))
+	mux.Handle("POST /admin/sessions/others", adminAlways(s.handleSignOutOthers))
 
 	mux.Handle("GET /admin/modules", admin(s.handleModules))
 	mux.Handle("POST /admin/modules", admin(s.handleModulesUpdate))
@@ -211,7 +216,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /admin/settings/holidays/{id}/delete", admin(s.handleHolidayRemove))
 	if s.Takeout != nil {
 		mux.Handle("GET /admin/household/export", admin(s.handleHouseholdExport))
-		mux.Handle("POST /admin/household/delete", admin(s.handleHouseholdDelete))
+		mux.Handle("POST /admin/household/delete", adminAlways(s.handleHouseholdDelete))
 	}
 
 	for _, m := range s.Modules.Registry().All() {

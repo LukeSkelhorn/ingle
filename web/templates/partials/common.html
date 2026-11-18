@@ -43,7 +43,10 @@
   </div>
   <script src="{{asset "menus.js"}}" defer></script>
 </header>
+{{template "notice" householdState}}
 {{end}}
+
+{{define "notice"}}{{with .Notice}}<p class="notice{{if $.ReadOnly}} notice--stop{{end}}" role="status">{{.}}{{with $.NoticePath}} <a href="{{.}}">{{or $.NoticeLabel "More"}}</a>{{end}}</p>{{end}}{{end}}
 
 {{define "colour_picker"}}
 <fieldset class="field">

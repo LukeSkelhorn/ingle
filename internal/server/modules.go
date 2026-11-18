@@ -93,11 +93,11 @@ type moduleRouter struct {
 }
 
 func (r moduleRouter) Viewer(pattern string, h http.HandlerFunc) {
-	r.mux.Handle(pattern, r.s.requireViewer(r.s.requireModule(r.id, r.s.lockGate(h))))
+	r.mux.Handle(pattern, r.s.requireViewer(r.s.requireModule(r.id, r.s.writable(r.s.lockGate(h)))))
 }
 
 func (r moduleRouter) Admin(pattern string, h http.HandlerFunc) {
-	r.mux.Handle(pattern, r.s.requireAdmin(r.s.requireModule(r.id, r.s.publishAfterWrite(h))))
+	r.mux.Handle(pattern, r.s.requireAdmin(r.s.requireModule(r.id, r.s.writable(r.s.publishAfterWrite(h)))))
 }
 
 // RunModuleLoops runs every module's background loops until ctx ends.
