@@ -13,12 +13,14 @@
   --ok-bg: #e7f5ec;
   --ok-fg: #1f6b3a;
   --err: #b42318;
+  --warn-bg: #fff4d6; --warn-fg: #5c4400; --stop-bg: #fde2e1; --stop-fg: #7a1a12;
   --radius: 14px;
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #11151c; --accent-ink: var(--accent); --surface: #1a2029; --fg: #e8ebf0; --muted: #9aa3b2; --line: #2a313c;
     --danger: #ef6b6b; --ok-bg: #173323; --ok-fg: #8fd6a8; --err: #ff8a80;
+    --warn-bg: #3a2f10; --warn-fg: #f3d58a; --stop-bg: #3d1a18; --stop-fg: #ffb4ab;
   }
 }
 * { box-sizing: border-box; }
@@ -469,6 +471,9 @@ input, select, textarea { -webkit-user-select: text; user-select: text; }
 .btn--ghost { border-color: transparent; background: transparent; }
 .btn--block { width: 100%; min-height: 52px; }
 .flash { background: var(--ok-bg); color: var(--ok-fg); padding: 10px 14px; border-radius: 10px; margin: 0 0 16px; }
+.notice { background: var(--warn-bg); color: var(--warn-fg); padding: 10px 14px; margin: 0; text-align: center; }
+.notice a { color: inherit; font-weight: 600; }
+.notice--stop { background: var(--stop-bg); color: var(--stop-fg); }
 .flash--undo { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-block: 4px; }
 .flash--undo .btn { color: inherit; text-decoration: underline; }
 .btn--icon { min-width: 44px; padding: 8px; font-size: 1.3rem; line-height: 1; color: var(--muted); }
@@ -859,7 +864,7 @@ button.cal-item--event:focus-visible { outline: 2px solid var(--accent); outline
     height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
     display: flex; flex-direction: column; padding-bottom: 72px;
   }
-  .is-board .board__locked, .is-board .board__header, .is-board .board__holiday, .is-board .countdown-strip { flex: none; }
+  .is-board .board__locked, .is-board .notice, .is-board .board__header, .is-board .board__holiday, .is-board .countdown-strip { flex: none; }
   .is-board .views__panel[data-panel="countdowns"]:not([hidden]) { display: block; overflow-y: auto; overscroll-behavior: contain; }
   .is-board .views { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   .is-board .views__panel:not([hidden]) { flex: 1; min-height: 0; display: flex; flex-direction: column; }

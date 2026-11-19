@@ -152,8 +152,9 @@ func avatarOf(p dbq.Person, size string) avatarView {
 
 func (s *Server) householdFuncs(ctx context.Context) template.FuncMap {
 	return template.FuncMap{
-		"moduleOn": func(id string) bool { return s.moduleOn(ctx, id) },
-		"adminNav": func() adminNav { return s.adminNav(ctx) },
+		"moduleOn":       func(id string) bool { return s.moduleOn(ctx, id) },
+		"adminNav":       func() adminNav { return s.adminNav(ctx) },
+		"householdState": func() HouseholdState { return s.state(ctx, householdIn(ctx)) },
 		"when": func(unix int64) string {
 			loc := s.Locale
 			if s.Settings != nil {
