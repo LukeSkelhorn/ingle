@@ -47,6 +47,11 @@ type Options struct {
 	SignIn           *SignIn
 	// HouseholdState is asked on every change and admin page, so keep it quick.
 	HouseholdState func(ctx context.Context, hh int64) (HouseholdState, error)
+	// HouseholdDeleting runs before household hh is deleted from Admin.
+	// An error stops the delete, and the admin is told nothing was removed.
+	HouseholdDeleting func(ctx context.Context, hh int64) error
+	// HouseholdDeleted runs after household hh has been deleted.
+	HouseholdDeleted func(ctx context.Context, hh int64)
 }
 
 // HouseholdState is how a household is, as the program running Ingle says.
@@ -332,23 +337,25 @@ func build(ctx context.Context, opts Options) (*core, error) {
 	}
 
 	c.srv, err = server.New(server.Deps{
-		State:            state,
-		Store:            st,
-		HouseholdID:      single,
-		ResolveHousehold: opts.ResolveHousehold,
-		Households:       c.households,
-		Routes:           routes,
-		AdminLinks:       adminLinks,
-		Auth:             c.auth,
-		Settings:         c.set,
-		Chores:           c.chores,
-		Household:        hhSvc,
-		Avatars:          avatars,
-		Photos:           library,
-		Calendars:        cals,
-		Lock:             c.lock,
-		Takeout:          takeout.New(st, keys, library, avatars, log),
-		Modules:          module.NewService(st, module.NewRegistry()),
+		State:             state,
+		HouseholdDeleting: opts.HouseholdDeleting,
+		HouseholdDeleted:  opts.HouseholdDeleted,
+		Store:             st,
+		HouseholdID:       single,
+		ResolveHousehold:  opts.ResolveHousehold,
+		Households:        c.households,
+		Routes:            routes,
+		AdminLinks:        adminLinks,
+		Auth:              c.auth,
+		Settings:          c.set,
+		Chores:            c.chores,
+		Household:         hhSvc,
+		Avatars:           avatars,
+		Photos:            library,
+		Calendars:         cals,
+		Lock:              c.lock,
+		Takeout:           takeout.New(st, keys, library, avatars, log),
+		Modules:           module.NewService(st, module.NewRegistry()),
 		Locale: locale.Locale{
 			Location:   cfg.Location,
 			DateFormat: cfg.DateFormat,
