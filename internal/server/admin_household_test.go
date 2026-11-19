@@ -3,6 +3,9 @@ package server
 import (
 	"archive/zip"
 	"bytes"
+	"context"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -80,4 +83,35 @@ func TestHouseholdDeleteLeavesOthers(t *testing.T) {
 	}
 	expect(t, x.bW.get("/admin/people"), http.StatusOK, "Bea")
 	expect(t, x.bW.get("/board"), http.StatusOK, "Walk the dog")
+}
+
+func TestHouseholdDeleteHooks(t *testing.T) {
+	x := newTwoHouseholds(t)
+	var calls []string
+	fail := true
+	x.h.srv.HouseholdDeleting = func(_ context.Context, hh int64) error {
+		calls = append(calls, fmt.Sprintf("deleting %d", hh))
+		if fail {
+			return errors.New("not now")
+		}
+		return nil
+	}
+	x.h.srv.HouseholdDeleted = func(_ context.Context, hh int64) {
+		calls = append(calls, fmt.Sprintf("deleted %d", hh))
+	}
+
+	expect(t, x.aW.post("/admin/household/delete", url.Values{"confirm": {"The Smiths"}}), http.StatusBadGateway, "Nothing has been removed")
+	if _, err := x.h.st.Q.GetHousehold(x.h.ctx(), x.a); err != nil {
+		t.Errorf("household gone after the hook refused: %v", err)
+	}
+
+	fail = false
+	expectRedirect(t, x.aW.post("/admin/household/delete", url.Values{"confirm": {"The Smiths"}}), "/")
+	if _, err := x.h.st.Q.GetHousehold(x.h.ctx(), x.a); err == nil {
+		t.Error("household A still exists")
+	}
+	want := fmt.Sprintf("deleting %d,deleting %d,deleted %d", x.a, x.a, x.a)
+	if got := strings.Join(calls, ","); got != want {
+		t.Errorf("hooks = %s, want %s", got, want)
+	}
 }

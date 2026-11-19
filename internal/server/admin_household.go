@@ -51,10 +51,21 @@ func (s *Server) handleHouseholdDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if s.HouseholdDeleting != nil {
+		if err := s.HouseholdDeleting(ctx, hh); err != nil {
+			s.Log.ErrorContext(ctx, "before deleting household", slog.Int64("household", hh), slog.Any("err", err))
+			s.renderSettings(w, r, http.StatusBadGateway, s.settingsForm(set),
+				map[string]string{"confirm": "Couldn't delete the household. Nothing has been removed; try again."}, "")
+			return
+		}
+	}
 	recreate := s.ResolveHousehold == nil
 	if err := s.Takeout.Delete(ctx, hh, recreate); err != nil {
 		s.serverError(w, r, err)
 		return
+	}
+	if s.HouseholdDeleted != nil {
+		s.HouseholdDeleted(ctx, hh)
 	}
 	s.Settings.Invalidate(hh)
 	s.Lock.Invalidate(hh)

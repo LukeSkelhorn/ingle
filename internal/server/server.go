@@ -53,6 +53,10 @@ type Deps struct {
 	Version          string
 	SignIn           *SignIn
 	State            func(ctx context.Context, hh int64) (HouseholdState, error)
+	// HouseholdDeleting runs before a household is deleted from Admin; an
+	// error stops the delete. HouseholdDeleted runs once it has gone.
+	HouseholdDeleting func(ctx context.Context, hh int64) error
+	HouseholdDeleted  func(ctx context.Context, hh int64)
 }
 
 // SignIn is another service that signs adults in.
