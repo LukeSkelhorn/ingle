@@ -52,6 +52,8 @@ type Options struct {
 	HouseholdDeleting func(ctx context.Context, hh int64) error
 	// HouseholdDeleted runs after household hh has been deleted.
 	HouseholdDeleted func(ctx context.Context, hh int64)
+	// DisplayActions are links under the household displays in Admin › Devices.
+	DisplayActions []AdminLink
 }
 
 // HouseholdState is how a household is, as the program running Ingle says.
@@ -99,6 +101,12 @@ func (h Helpers) RequireViewer(next http.Handler) http.Handler { return h.srv.Re
 // StartSession starts an Ingle session for an adult the SignIn service has confirmed.
 func (h Helpers) StartSession(w http.ResponseWriter, r *http.Request, hh, personID int64) error {
 	return h.srv.StartSession(w, r, hh, personID)
+}
+
+// RegisterDisplay makes the browser of r a household display of hh, named name, added by adult by.
+// It ends any session on that browser.
+func (h Helpers) RegisterDisplay(w http.ResponseWriter, r *http.Request, hh int64, name string, by int64) error {
+	return h.srv.RegisterDisplay(w, r, hh, name, by)
 }
 
 // CreateHouseholdInput is a new household and its first adult.
@@ -318,6 +326,10 @@ func build(ctx context.Context, opts Options) (*core, error) {
 	for _, l := range opts.AdminLinks {
 		adminLinks = append(adminLinks, module.NavItem{Key: l.Path, Label: l.Label, Path: l.Path})
 	}
+	displayActions := make([]module.NavItem, 0, len(opts.DisplayActions))
+	for _, l := range opts.DisplayActions {
+		displayActions = append(displayActions, module.NavItem{Key: l.Path, Label: l.Label, Path: l.Path})
+	}
 	var routes func(*server.Server, *http.ServeMux)
 	if opts.Routes != nil {
 		routes = func(s *server.Server, mux *http.ServeMux) { opts.Routes(mux, Helpers{srv: s}) }
@@ -340,6 +352,7 @@ func build(ctx context.Context, opts Options) (*core, error) {
 		State:             state,
 		HouseholdDeleting: opts.HouseholdDeleting,
 		HouseholdDeleted:  opts.HouseholdDeleted,
+		DisplayActions:    displayActions,
 		Store:             st,
 		HouseholdID:       single,
 		ResolveHousehold:  opts.ResolveHousehold,
