@@ -10,6 +10,7 @@ import (
 
 	"github.com/lukeskelhorn/ingle/internal/auth"
 	"github.com/lukeskelhorn/ingle/internal/chores"
+	"github.com/lukeskelhorn/ingle/internal/module"
 	"github.com/lukeskelhorn/ingle/internal/settings"
 	"github.com/lukeskelhorn/ingle/internal/store/dbq"
 )
@@ -453,6 +454,7 @@ type devicesView struct {
 	OnDisplay     bool
 	Me            int64
 	DefaultName   string
+	Actions       []module.NavItem
 }
 
 type sessionRow struct {
@@ -478,7 +480,7 @@ func (s *Server) renderDevices(w http.ResponseWriter, r *http.Request, status in
 		s.serverError(w, r, err)
 		return
 	}
-	data := devicesView{Displays: displays, Me: id.Session.Person.ID, DefaultName: "Kitchen"}
+	data := devicesView{Displays: displays, Me: id.Session.Person.ID, DefaultName: "Kitchen", Actions: s.DisplayActions}
 	if id.Device != nil {
 		data.OnDisplay = true
 		data.ThisDisplayID = id.Device.ID

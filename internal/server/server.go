@@ -57,6 +57,8 @@ type Deps struct {
 	// error stops the delete. HouseholdDeleted runs once it has gone.
 	HouseholdDeleting func(ctx context.Context, hh int64) error
 	HouseholdDeleted  func(ctx context.Context, hh int64)
+	// DisplayActions are buttons under the household displays in Admin › Devices.
+	DisplayActions []module.NavItem
 }
 
 // SignIn is another service that signs adults in.

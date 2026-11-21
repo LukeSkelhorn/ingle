@@ -19,6 +19,7 @@
       <li class="list__empty muted">No household displays yet.</li>
       {{end}}
     </ul>
+    {{range .Data.Actions}}<a class="btn" href="{{.Path}}">{{.Label}}</a>{{end}}
     {{if not .Data.OnDisplay}}
     <form class="stack" method="post" action="/admin/devices/register">
       <p>Is this the device on the wall? Make it a household display. You'll be signed out here, and use your PIN for admin from then on.</p>

@@ -2,7 +2,9 @@ package server
 
 import (
 	"context"
+	"database/sql"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -215,6 +217,31 @@ func (s *Server) StartSession(w http.ResponseWriter, r *http.Request, hh, person
 		return err
 	}
 	s.setCookie(w, r, sessionCookie, token, s.Auth.PersonalIdle())
+	return nil
+}
+
+// RegisterDisplay makes the browser of r a household display of hh, named name, added by adult by.
+func (s *Server) RegisterDisplay(w http.ResponseWriter, r *http.Request, hh int64, name string, by int64) error {
+	if cur := hhOf(r); cur != 0 && cur != hh {
+		return auth.ErrBadCredentials
+	}
+	ctx := withHousehold(r.Context(), hh)
+	p, err := s.Store.Q.GetPerson(ctx, dbq.GetPersonParams{HouseholdID: hh, ID: by})
+	if errors.Is(err, sql.ErrNoRows) || err == nil && (p.Kind != "adult" || p.ArchivedAt != nil) {
+		return auth.ErrBadCredentials
+	}
+	if err != nil {
+		return fmt.Errorf("get person: %w", err)
+	}
+	token, _, err := s.Auth.RegisterDisplay(ctx, hh, name, by)
+	if err != nil {
+		return err
+	}
+	if c, err := r.Cookie(sessionCookie); err == nil {
+		_ = s.Auth.EndSession(ctx, c.Value)
+	}
+	s.clearCookie(w, r, sessionCookie)
+	s.setCookie(w, r, deviceCookie, token, deviceCookieAge)
 	return nil
 }
 
