@@ -5,10 +5,13 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"errors"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/netip"
+	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -59,6 +62,8 @@ type Deps struct {
 	HouseholdDeleted  func(ctx context.Context, hh int64)
 	// DisplayActions are buttons under the household displays in Admin › Devices.
 	DisplayActions []module.NavItem
+	// HeadScripts are extra script paths every page loads, deferred.
+	HeadScripts []string
 }
 
 // SignIn is another service that signs adults in.
@@ -235,7 +240,7 @@ func (s *Server) Handler() http.Handler {
 
 	// Order matters: reject cross-origin writes, then identify, then require setup.
 	csrf := http.NewCrossOriginProtection()
-	return csrf.Handler(s.identify(s.requireSetup(mux)))
+	return csrf.Handler(s.identify(s.recoverPanics(s.requireSetup(mux))))
 }
 
 type clockView struct {
@@ -347,6 +352,26 @@ func (s *Server) publishAfterWrite(next http.HandlerFunc) http.HandlerFunc {
 func (s *Server) serverError(w http.ResponseWriter, r *http.Request, err error) {
 	s.Log.ErrorContext(r.Context(), "request failed", slog.String("path", r.URL.Path), slog.Any("err", err))
 	http.Error(w, "Something went wrong. Please try again.", http.StatusInternalServerError)
+}
+
+// recoverPanics turns a panic in a handler into a logged error and a 500,
+// like serverError, instead of a dropped connection.
+func (s *Server) recoverPanics(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			v := recover()
+			if v == nil {
+				return
+			}
+			if err, ok := v.(error); ok && errors.Is(err, http.ErrAbortHandler) {
+				panic(v)
+			}
+			s.Log.ErrorContext(r.Context(), "request panicked", slog.String("path", r.URL.Path),
+				slog.Any("err", fmt.Errorf("panic: %v", v)), slog.String("stack", string(debug.Stack())))
+			http.Error(w, "Something went wrong. Please try again.", http.StatusInternalServerError)
+		}()
+		next.ServeHTTP(w, r)
+	})
 }
 
 func serveFile(fsys fs.FS, name, contentType string) http.HandlerFunc {
