@@ -25,3 +25,4 @@ If your employer owns what you write, make sure they agree before you sign (sect
 - Install the hooks with `lefthook install`. The pre-commit hook formats staged files and runs the same lint.
 - Follow [CLAUDE.md](CLAUDE.md) on comments: only where they're needed.
 - Keep commit and pull request titles short, in plain words, describing the change: for example, "Let an overdue up for grabs leftover be picked".
+
