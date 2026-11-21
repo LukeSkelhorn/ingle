@@ -226,6 +226,10 @@ Every table has a `household_id`, so one database can hold several households. A
 
 Timestamps are stored as unix seconds (UTC), local dates as `YYYY-MM-DD`, and money as integer pence.
 
+## Contributing
+
+Pull requests are welcome. Contributors sign a short [contributor licence agreement](CLA.md) on their first pull request. [CONTRIBUTING.md](CONTRIBUTING.md) explains why, and how to make a change.
+
 ## Licence
 
 [GNU AGPL-3.0](LICENSE). You're free to self-host, modify and share Ingle. If you run a modified version as a service for other people, you must make your source code available to them.
