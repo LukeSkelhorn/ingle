@@ -237,6 +237,7 @@ func (s *Server) staticFuncs() template.FuncMap {
 		"activityLine":  s.activityLine,
 		"asset":         func(name string) string { return "/static/" + name + "?v=" + web.StaticVersion() },
 		"activityActor": activityActor,
+		"headScripts":   func() []string { return s.HeadScripts },
 	}
 }
 

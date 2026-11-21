@@ -54,6 +54,9 @@ type Options struct {
 	HouseholdDeleted func(ctx context.Context, hh int64)
 	// DisplayActions are links under the household displays in Admin › Devices.
 	DisplayActions []AdminLink
+	// HeadScripts are extra script paths every core page loads, deferred,
+	// for example ones served by Routes.
+	HeadScripts []string
 }
 
 // HouseholdState is how a household is, as the program running Ingle says.
@@ -160,6 +163,10 @@ func PersonEmojis() []string { return slices.Clone(avatar.Emojis) }
 
 // HouseholdOf returns the household a request is for, or 0 if not yet known.
 func HouseholdOf(r *http.Request) int64 { return server.HouseholdOf(r) }
+
+// HouseholdFromContext returns the household of the request a context
+// came from, or 0 if not yet known. Log records carry that context.
+func HouseholdFromContext(ctx context.Context) int64 { return store.HouseholdFrom(ctx) }
 
 // Run serves on INGLE_ADDR until ctx is cancelled, then shuts down gracefully.
 func Run(ctx context.Context, opts Options) error {
@@ -353,6 +360,7 @@ func build(ctx context.Context, opts Options) (*core, error) {
 		HouseholdDeleting: opts.HouseholdDeleting,
 		HouseholdDeleted:  opts.HouseholdDeleted,
 		DisplayActions:    displayActions,
+		HeadScripts:       opts.HeadScripts,
 		Store:             st,
 		HouseholdID:       single,
 		ResolveHousehold:  opts.ResolveHousehold,
