@@ -234,6 +234,17 @@ func TestBoardEvents(t *testing.T) {
 		}
 		close(lines)
 	}()
+	// The stream says which version is running, first.
+	for _, want := range []string{"retry: 3000", "", "event: version", "data: v9.8.7"} {
+		select {
+		case l := <-lines:
+			if l != want {
+				t.Fatalf("stream line %q, want %q", l, want)
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatalf("no %q", want)
+		}
+	}
 	nextEvent := func(wait time.Duration) string {
 		t.Helper()
 		timeout := time.After(wait)
@@ -243,7 +254,7 @@ func TestBoardEvents(t *testing.T) {
 				if !ok {
 					return "closed"
 				}
-				if strings.HasPrefix(l, "event: ") && l != "event: lock" {
+				if strings.HasPrefix(l, "event: ") && l != "event: lock" && l != "event: version" {
 					return strings.TrimPrefix(l, "event: ")
 				}
 			case <-timeout:
@@ -404,7 +415,7 @@ func openEvents(t *testing.T, ctx context.Context, d *device) <-chan string {
 		defer close(events)
 		sc := bufio.NewScanner(res.Body)
 		for sc.Scan() {
-			if l := sc.Text(); strings.HasPrefix(l, "event: ") && l != "event: lock" {
+			if l := sc.Text(); strings.HasPrefix(l, "event: ") && l != "event: lock" && l != "event: version" {
 				events <- strings.TrimPrefix(l, "event: ")
 			}
 		}

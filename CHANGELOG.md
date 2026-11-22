@@ -6,6 +6,10 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ## [Unreleased]
 
+### Changed
+
+- **Displays update themselves when idle.** After you upgrade Ingle, a wall display switches to the new version the next time its screensaver comes on, so it never reloads under someone's finger. With no screensaver, it waits until nobody has touched it for 10 minutes. ([DOM-96](https://linear.app/skeltech/issue/DOM-96))
+
 ## [v0.4.7] - 2026-11-17
 
 ### Added

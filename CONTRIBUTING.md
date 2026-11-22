@@ -22,6 +22,7 @@ If your employer owns what you write, make sure they agree before you sign (sect
 
 - For anything bigger than a small fix, open an issue first, so we can agree on the approach.
 - Run `task check` before you push. It checks the sqlc output, `go mod tidy`, formatting and lint, and runs the tests with the race detector. `task test:pg` runs them on Postgres as well. The [README](README.md#development) lists the other tasks.
+- Postgres migrations only add things: new tables, new columns with a default, wider checks. The previous version has to keep working on the new schema, so that a deploy has no downtime and can be rolled back. To remove or rename something, stop using it in one release and remove it in a later one, in a migration with a `-- contract: <why>` line. A test checks this.
 - Install the hooks with `lefthook install`. The pre-commit hook formats staged files and runs the same lint.
 - Follow [CLAUDE.md](CLAUDE.md) on comments: only where they're needed.
 - Keep commit and pull request titles short, in plain words, describing the change: for example, "Let an overdue up for grabs leftover be picked".

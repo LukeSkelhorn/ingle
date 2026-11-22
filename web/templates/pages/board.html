@@ -189,6 +189,15 @@
         if (e.data !== (page.dataset.locked === "1" ? "locked" : "unlocked")) location.replace("/");
       });
       es.addEventListener("open", function () { if (connected) refresh(); connected = true; });
+      // A new server version: reload, but only when nobody's using the board.
+      var version = "";
+      es.addEventListener("version", function (e) {
+        if (!version) version = e.data;
+        else if (e.data !== version && !window.ingleStale) {
+          window.ingleStale = true;
+          document.dispatchEvent(new Event("ingle:stale"));
+        }
+      });
     }
     // Key kept from when Ingle was Domus, so displays remember past celebrations.
     var CELEBRATED = "domus.celebrated";
@@ -431,7 +440,13 @@
     function resetIdle() {
       clearTimeout(idleTimer);
       if (idleMs > 0 && !saver.showing()) idleTimer = setTimeout(start, idleMs);
+      // With no screensaver, a new version waits for 10 quiet minutes.
+      else if (idleMs <= 0 && window.ingleStale) idleTimer = setTimeout(function () { location.replace("/"); }, 600000);
     }
+    document.addEventListener("ingle:stale", function () {
+      if (saver.showing()) location.replace("/?screensaver=1");
+      else resetIdle();
+    });
     ["pointerdown", "keydown", "input", "scroll", "wheel"].forEach(function (e) {
       document.addEventListener(e, function () { if (!saver.showing()) resetIdle(); }, { passive: true, capture: true });
     });
@@ -452,6 +467,7 @@
         return;
       }
       clearTimeout(idleTimer);
+      if (window.ingleStale) { location.replace("/?screensaver=1"); return; }
       if (sheet.open) sheet.close();
       if (window.IngleViews) IngleViews.show("chores");
       saver.start();
