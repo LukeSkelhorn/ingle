@@ -238,6 +238,8 @@ type settingsForm struct {
 	CanTakeout, StartsAgain bool
 	// DeleteRefused is why this adult can't delete the household, if they can't.
 	DeleteRefused string
+	// DataLink is more about the household's data, if there is any.
+	DataLink module.NavItem
 
 	HouseholdName                       string
 	Timezone                            string
@@ -307,6 +309,7 @@ func (s *Server) renderSettings(w http.ResponseWriter, r *http.Request, status i
 	f.CanTakeout, f.StartsAgain = s.Takeout != nil, s.ResolveHousehold == nil
 	f.NoClearOut = s.NoClearOut
 	f.DeleteRefused = s.restricted(r, ActionDeleteHousehold, hhOf(r))
+	f.DataLink = s.DataLink
 	if err := s.loadHolidays(r, &f.Holiday); err != nil {
 		s.serverError(w, r, err)
 		return
