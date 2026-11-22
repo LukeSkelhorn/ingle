@@ -52,6 +52,10 @@ type Options struct {
 	HouseholdDeleting func(ctx context.Context, hh int64) error
 	// HouseholdDeleted runs after household hh has been deleted.
 	HouseholdDeleted func(ctx context.Context, hh int64)
+	// Restrict, if set, is asked before the signed-in adult does action to
+	// target, one of the Action constants. A non-empty reason refuses it,
+	// and is shown to them instead of the button.
+	Restrict func(r *http.Request, action string, target int64) (reason string)
 	// DisplayActions are links under the household displays in Admin › Devices.
 	DisplayActions []AdminLink
 	// HeadScripts are extra script paths every core page loads, deferred,
@@ -67,6 +71,14 @@ type HouseholdState struct {
 	Notice     string
 	NoticeLink AdminLink
 }
+
+// Actions an adult can be refused through [Options.Restrict].
+const (
+	// ActionDeleteHousehold is deleting the household; target is its id.
+	ActionDeleteHousehold = server.ActionDeleteHousehold
+	// ActionArchivePerson is archiving someone; target is their person id.
+	ActionArchivePerson = server.ActionArchivePerson
+)
 
 // SignIn is another service that signs adults in instead of Ingle's own sign-in.
 type SignIn struct {
@@ -359,6 +371,7 @@ func build(ctx context.Context, opts Options) (*core, error) {
 		State:             state,
 		HouseholdDeleting: opts.HouseholdDeleting,
 		HouseholdDeleted:  opts.HouseholdDeleted,
+		Restrict:          opts.Restrict,
 		DisplayActions:    displayActions,
 		HeadScripts:       opts.HeadScripts,
 		Store:             st,

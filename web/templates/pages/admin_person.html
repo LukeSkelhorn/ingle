@@ -300,7 +300,9 @@
   <section class="card stack">
     <h2>Archive</h2>
     <p class="muted">Hides {{.Data.Name}} from the board. Their history and balance are kept, and you can restore them later.</p>
+    {{if .Data.ArchiveRefused}}<p class="muted">{{.Data.ArchiveRefused}}</p>{{else}}
     <form method="post" action="/admin/people/{{.Data.ID}}/archive"><button class="btn btn--danger" type="submit">Archive {{.Data.Name}}</button></form>
+    {{end}}
   </section>
   {{end}}
 </main>
