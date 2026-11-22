@@ -115,3 +115,44 @@ func TestHouseholdDeleteHooks(t *testing.T) {
 		t.Errorf("hooks = %s, want %s", got, want)
 	}
 }
+
+// Restrict can stop an adult deleting the household or archiving someone,
+// and says why instead of the button.
+func TestRestrict(t *testing.T) {
+	h := newHarness(t)
+	wall := h.setUp()
+	expectPersonCreated(t, wall.post("/admin/people", url.Values{"name": {"Alfie"}, "kind": {"child"}, "colour": {"#46A758"}, "avatar_mode": {"none"}}))
+	alfie := h.person("Alfie")
+	var asked []string
+	h.srv.Restrict = func(_ *http.Request, action string, target int64) string {
+		asked = append(asked, fmt.Sprintf("%s %d", action, target))
+		return "Only Mum can."
+	}
+
+	r := wall.get("/admin/settings")
+	expect(t, r, http.StatusOK, "Only Mum can.")
+	expectNot(t, r, `action="/admin/household/delete"`)
+	expect(t, wall.post("/admin/household/delete", url.Values{"confirm": {"The Smiths"}}), http.StatusForbidden, "Only Mum can.")
+	if _, err := h.st.Q.GetHousehold(h.ctx(), h.hh); err != nil {
+		t.Errorf("household deleted although refused: %v", err)
+	}
+
+	r = wall.get("/admin/people/" + itoa(alfie.ID))
+	expect(t, r, http.StatusOK, "Only Mum can.")
+	expectNot(t, r, "/archive")
+	expect(t, wall.post("/admin/people/"+itoa(alfie.ID)+"/archive", nil), http.StatusForbidden, "Only Mum can.")
+	expect(t, wall.get("/admin/people"), http.StatusOK, "Alfie")
+	expectNot(t, wall.get("/admin/people"), "Archived (1)")
+
+	if want := fmt.Sprintf("household.delete %d", h.hh); asked[0] != want {
+		t.Errorf("asked %v, want %s first", asked, want)
+	}
+	if !strings.Contains(strings.Join(asked, ","), fmt.Sprintf("person.archive %d", alfie.ID)) {
+		t.Errorf("asked %v", asked)
+	}
+
+	// Allowed again, it works as before.
+	h.srv.Restrict = func(*http.Request, string, int64) string { return "" }
+	expectRedirect(t, wall.post("/admin/people/"+itoa(alfie.ID)+"/archive", nil), "/admin/people")
+	expectRedirect(t, wall.post("/admin/household/delete", url.Values{"confirm": {"The Smiths"}}), "/")
+}

@@ -115,6 +115,8 @@ type personForm struct {
 	HasLogin bool
 	Email    string
 	IsMe     bool
+	// ArchiveRefused is why this adult can't archive them, if they can't.
+	ArchiveRefused string
 
 	Colours []string
 	Emojis  []string
@@ -190,6 +192,7 @@ func (s *Server) renderPerson(w http.ResponseWriter, r *http.Request, status int
 		title = f.Name
 	}
 	if f.ID != 0 && !f.Archived {
+		f.ArchiveRefused = s.restricted(r, ActionArchivePerson, f.ID)
 		if s.moduleOn(r.Context(), modRewards) {
 			rewards, err := s.Household.RewardsFor(r.Context(), hhOf(r), f.ID)
 			if err != nil {
@@ -434,6 +437,10 @@ func (s *Server) savePersonGoal(r *http.Request, p dbq.Person, goal *int64) (dbq
 func (s *Server) handlePersonArchive(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.loadPerson(w, r)
 	if !ok {
+		return
+	}
+	if why := s.restricted(r, ActionArchivePerson, p.ID); why != "" {
+		s.renderPerson(w, r, http.StatusForbidden, s.personFormFor(r, p), nil, why)
 		return
 	}
 	err := s.Household.ArchivePerson(r.Context(), hhOf(r), actor(r).Person.ID, p.ID)

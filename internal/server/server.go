@@ -60,10 +60,27 @@ type Deps struct {
 	// error stops the delete. HouseholdDeleted runs once it has gone.
 	HouseholdDeleting func(ctx context.Context, hh int64) error
 	HouseholdDeleted  func(ctx context.Context, hh int64)
+	// Restrict, if set, is asked before an adult does action to target; a
+	// non-empty reason refuses it, and is shown to them.
+	Restrict func(r *http.Request, action string, target int64) (reason string)
 	// DisplayActions are buttons under the household displays in Admin › Devices.
 	DisplayActions []module.NavItem
 	// HeadScripts are extra script paths every page loads, deferred.
 	HeadScripts []string
+}
+
+// Actions an adult can be refused through Deps.Restrict.
+const (
+	ActionDeleteHousehold = "household.delete"
+	ActionArchivePerson   = "person.archive"
+)
+
+// restricted is why the signed-in adult can't do action to target, or "".
+func (s *Server) restricted(r *http.Request, action string, target int64) string {
+	if s.Restrict == nil {
+		return ""
+	}
+	return s.Restrict(r, action, target)
 }
 
 // SignIn is another service that signs adults in.

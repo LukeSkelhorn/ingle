@@ -45,6 +45,10 @@ func (s *Server) handleHouseholdDelete(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
+	if why := s.restricted(r, ActionDeleteHousehold, hh); why != "" {
+		s.renderSettings(w, r, http.StatusForbidden, s.settingsForm(set), nil, why)
+		return
+	}
 	if !strings.EqualFold(strings.TrimSpace(r.PostFormValue("confirm")), strings.TrimSpace(set.HouseholdName)) {
 		s.renderSettings(w, r, http.StatusUnprocessableEntity, s.settingsForm(set),
 			map[string]string{"confirm": "Type the household's name exactly, to show you mean it."}, "")

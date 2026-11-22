@@ -236,6 +236,8 @@ var activityText = map[string]string{
 
 type settingsForm struct {
 	CanTakeout, StartsAgain bool
+	// DeleteRefused is why this adult can't delete the household, if they can't.
+	DeleteRefused string
 
 	HouseholdName                       string
 	Timezone                            string
@@ -304,6 +306,7 @@ func (s *Server) renderSettings(w http.ResponseWriter, r *http.Request, status i
 	f.Timezones = timezoneOptions(f.Timezone)
 	f.CanTakeout, f.StartsAgain = s.Takeout != nil, s.ResolveHousehold == nil
 	f.NoClearOut = s.NoClearOut
+	f.DeleteRefused = s.restricted(r, ActionDeleteHousehold, hhOf(r))
 	if err := s.loadHolidays(r, &f.Holiday); err != nil {
 		s.serverError(w, r, err)
 		return
