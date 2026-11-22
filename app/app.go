@@ -58,6 +58,9 @@ type Options struct {
 	Restrict func(r *http.Request, action string, target int64) (reason string)
 	// DisplayActions are links under the household displays in Admin › Devices.
 	DisplayActions []AdminLink
+	// DataLink, if set, is a link in Settings › Your household's data, to
+	// more about the household's data and how to ask about it.
+	DataLink AdminLink
 	// HeadScripts are extra script paths every core page loads, deferred,
 	// for example ones served by Routes.
 	HeadScripts []string
@@ -373,6 +376,7 @@ func build(ctx context.Context, opts Options) (*core, error) {
 		HouseholdDeleted:  opts.HouseholdDeleted,
 		Restrict:          opts.Restrict,
 		DisplayActions:    displayActions,
+		DataLink:          module.NavItem{Key: opts.DataLink.Path, Label: opts.DataLink.Label, Path: opts.DataLink.Path},
 		HeadScripts:       opts.HeadScripts,
 		Store:             st,
 		HouseholdID:       single,

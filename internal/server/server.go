@@ -65,6 +65,8 @@ type Deps struct {
 	Restrict func(r *http.Request, action string, target int64) (reason string)
 	// DisplayActions are buttons under the household displays in Admin › Devices.
 	DisplayActions []module.NavItem
+	// DataLink, if it has a Path, is a link in Settings › Your household's data.
+	DataLink module.NavItem
 	// HeadScripts are extra script paths every page loads, deferred.
 	HeadScripts []string
 }

@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/lukeskelhorn/ingle/internal/module"
 )
 
 func zipFiles(t *testing.T, body string) map[string]string {
@@ -150,6 +152,11 @@ func TestRestrict(t *testing.T) {
 	if !strings.Contains(strings.Join(asked, ","), fmt.Sprintf("person.archive %d", alfie.ID)) {
 		t.Errorf("asked %v", asked)
 	}
+
+	// Settings links to more about the household's data, when there's a link.
+	expectNot(t, wall.get("/admin/settings"), "/admin/your-data")
+	h.srv.DataLink = module.NavItem{Label: "Your data", Path: "/admin/your-data"}
+	expect(t, wall.get("/admin/settings"), http.StatusOK, `<a href="/admin/your-data">Your data</a>`)
 
 	// Allowed again, it works as before.
 	h.srv.Restrict = func(*http.Request, string, int64) string { return "" }

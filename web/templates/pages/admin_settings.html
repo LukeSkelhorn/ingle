@@ -195,6 +195,7 @@
     <h2>Your household's data</h2>
     <p class="muted">Download everything Ingle holds for your household: people, chores, points and money, rewards, calendars, settings and photos. Passwords, PINs and sign-in codes aren't included.</p>
     <p><a class="btn" href="/admin/household/export" download>Download our data</a></p>
+    {{with .Data.DataLink.Path}}<p><a href="{{.}}">{{$.Data.DataLink.Label}}</a></p>{{end}}
     {{if .Data.DeleteRefused}}
     <h3>Delete the household</h3>
     <p class="muted">{{.Data.DeleteRefused}}</p>
