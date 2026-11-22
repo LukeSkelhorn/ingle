@@ -112,6 +112,15 @@
     if (window.EventSource) {
       var es = new EventSource("/board/events");
       es.addEventListener("lock", function (e) { if (e.data === "unlocked") location.replace("/"); });
+      // Nothing to lose here mid-tap except an open PIN pad: reload on a new
+      // version once it's closed.
+      var version = "", stale = false;
+      es.addEventListener("version", function (e) {
+        if (!version) version = e.data;
+        else if (e.data !== version) stale = true;
+        if (stale && !pad.open) location.reload();
+      });
+      pad.addEventListener("close", function () { if (stale) location.reload(); });
     }
   })();
 </script>

@@ -92,7 +92,8 @@ func (s *Server) handleBoardEvents(w http.ResponseWriter, r *http.Request) {
 		return "event: lock\ndata: unlocked\n\n"
 	}
 
-	if _, err := w.Write([]byte("retry: 3000\n\n" + lockEvent())); err != nil {
+	// The version first: a display that sees it change reloads when idle.
+	if _, err := w.Write([]byte("retry: 3000\n\nevent: version\ndata: " + s.version() + "\n\n" + lockEvent())); err != nil {
 		return
 	}
 	if err := rc.Flush(); err != nil {
