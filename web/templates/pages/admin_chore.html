@@ -5,8 +5,10 @@
   <p><a href="{{.Data.Back}}">‹ Chores</a></p>
   <h1>{{if .Data.ID}}{{.Data.Title}}{{else}}Add a chore{{end}}</h1>
   {{template "flash" .}}
-  <form class="card stack chore-form" method="post" action="{{if .Data.ID}}/admin/chores/{{.Data.ID}}{{else}}/admin/chores{{end}}">
+  <form class="cards chore-form" method="post" action="{{if .Data.ID}}/admin/chores/{{.Data.ID}}{{else}}/admin/chores{{end}}">
     <input type="hidden" name="back" value="{{.Data.Back}}">
+    <section class="card stack">
+    <h2>The chore</h2>
     <label class="field">
       <span>What needs doing?</span>
       <input name="title" value="{{.Data.Title}}" required maxlength="100" autocomplete="off" placeholder="Feed the cat">
@@ -18,7 +20,10 @@
       <textarea name="description" maxlength="1000" rows="2">{{.Data.Description}}</textarea>
       {{template "err" index .Errors "description"}}
     </label>
+    </section>
 
+    <section class="card stack">
+    <h2>Who</h2>
     <fieldset class="field">
       <legend>Who does it?</legend>
       <div class="segmented">
@@ -51,7 +56,10 @@
       {{template "people_pick" (dict "People" .Data.People "Name" "each_ids" "Multi" true "Chosen" .Data.PeopleIDs "Show" "each_who=chosen")}}
       {{template "err" index .Errors "each_ids"}}
     </fieldset>
+    </section>
 
+    <section class="card stack">
+    <h2>When</h2>
     <label class="field">
       <span>How often?</span>
       <select name="repeat">
@@ -130,7 +138,10 @@
       <span>Only on the day
         <small class="muted">It can't be done late, like putting the bins out. Once it's too late it comes off the board.</small></span>
     </label>
+    </section>
 
+    <section class="card stack">
+    <h2>Points and money</h2>
     <div class="row" data-pay="kids">
       <label class="field">
         <span>Points</span>
@@ -158,7 +169,8 @@
       <span>An adult checks it before points or money are given</span>
     </label>
 
-    <button class="btn btn--primary" type="submit">{{if .Data.ID}}Save{{else}}Add chore{{end}}</button>
+    </section>
+    <button class="btn btn--primary btn--block" type="submit">{{if .Data.ID}}Save{{else}}Add chore{{end}}</button>
   </form>
   <script>
     (function () {
