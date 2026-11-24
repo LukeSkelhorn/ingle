@@ -42,10 +42,19 @@
         <input type="password" name="password_confirm" required minlength="10" maxlength="128" autocomplete="new-password">
         {{template "err" index .Errors "password_confirm"}}
       </label>
-      <div class="field">
+      {{$pinErr := or (index .Errors "pin") (index .Errors "pin_confirm")}}
+      <div class="field" id="pin">
         <span>PIN</span>
         <small class="muted">Unlocks admin on the household display, so the kids can't change settings.</small>
-        {{template "pinpad_set" (dict "Name" "pin" "Confirm" "pin_confirm" "Label" "Choose a PIN (4–6 digits)" "Again" "Confirm PIN" "Err" (or (index .Errors "pin") (index .Errors "pin_confirm")) "Submit" false)}}
+        {{/* Without JavaScript the PIN boxes stay here. With it, they move
+             into the dialog and a button opens it. */}}
+        <div data-pin-here>
+          {{template "pinpad_set" (dict "Name" "pin" "Confirm" "pin_confirm" "Label" "Choose a PIN (4–6 digits)" "Again" "Confirm PIN" "Err" $pinErr "Submit" false)}}
+        </div>
+        <div class="stack" data-pin-summary hidden>
+          <p class="credential__status" data-pin-status>No PIN yet.</p>
+          <div class="credential__actions"><a class="btn" href="#pin" data-dialog="pin-dialog" data-pin-open>Set a PIN</a></div>
+        </div>
       </div>
     </section>
 
@@ -62,8 +71,38 @@
       </label>
     </section>
 
+    {{/* Outside the cards, whose spacing would stop it centring. */}}
+    <dialog class="dialog" id="pin-dialog" aria-labelledby="pin-dialog-h" data-keep{{if $pinErr}} data-open{{end}}>
+      <div class="dialog__head"><h2 id="pin-dialog-h">Your PIN</h2></div>
+      <div data-pin-dialog></div>
+      <p class="dialog__foot"><a class="btn btn--ghost" href="#pin" data-dialog-close>Cancel</a></p>
+    </dialog>
+
     <button class="btn btn--primary btn--block" type="submit">Set up Ingle</button>
   </form>
+  <script>
+    // The PIN is chosen in a dialog, opened by "Set a PIN". This runs before
+    // pinpad.js, so the keypad knows it's in the dialog.
+    (function () {
+      var d = document.getElementById("pin-dialog");
+      if (!d || !d.showModal) return;
+      var box = document.querySelector("[data-pin-here] [data-pinpad-set]"),
+          summary = document.querySelector("[data-pin-summary]"),
+          status = summary.querySelector("[data-pin-status]"),
+          open = summary.querySelector("[data-pin-open]");
+      d.querySelector("[data-pin-dialog]").appendChild(box);
+      summary.hidden = false;
+      box.addEventListener("pinset:ready", function () {
+        status.innerHTML = '<span class="credential__tick" aria-hidden="true">✓</span> PIN chosen.';
+        open.textContent = "Change PIN";
+      });
+      box.addEventListener("pinset:cleared", function () {
+        status.textContent = "No PIN yet.";
+        open.textContent = "Set a PIN";
+      });
+    })();
+  </script>
   <script src="{{asset "pinpad.js"}}"></script>
+  <script src="{{asset "dialogs.js"}}"></script>
 </main>
 {{end}}
