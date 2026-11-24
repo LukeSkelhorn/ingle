@@ -1,20 +1,20 @@
 {{define "bodyclass"}}page{{end}}
 {{define "content"}}
-<main class="card card--narrow">
+<main class="card--narrow">
   <h1>Welcome to Ingle</h1>
   <p class="muted">Set up your household and the first adult. You can add everyone else afterwards.</p>
-  <form method="post" action="/setup" class="stack">
-    <fieldset class="stack">
-      <legend>Household</legend>
+  <form method="post" action="/setup" class="cards">
+    <section class="card stack">
+      <h2>Your household</h2>
       <label class="field">
         <span>Household name</span>
         <input name="household_name" value="{{.Data.HouseholdName}}" required maxlength="50" autocomplete="off">
         {{template "err" index .Errors "household_name"}}
       </label>
-    </fieldset>
+    </section>
 
-    <fieldset class="stack">
-      <legend>You</legend>
+    <section class="card stack">
+      <h2>You</h2>
       <label class="field">
         <span>Your name</span>
         <input name="name" value="{{.Data.Name}}" required maxlength="50" autocomplete="given-name">
@@ -22,6 +22,10 @@
       </label>
       {{template "colour_picker" (dict "Selected" .Data.Colour "Colours" .Data.Colours "Err" (index .Errors "colour"))}}
       {{template "emoji_picker" (dict "Selected" .Data.Emoji "Emojis" .Data.Emojis "Err" (index .Errors "emoji"))}}
+    </section>
+
+    <section class="card stack">
+      <h2>Signing in</h2>
       <label class="field">
         <span>Email</span>
         <input type="email" name="email" value="{{.Data.Email}}" required autocomplete="email">
@@ -43,10 +47,10 @@
         <small class="muted">Unlocks admin on the household display, so the kids can't change settings.</small>
         {{template "pinpad_set" (dict "Name" "pin" "Confirm" "pin_confirm" "Label" "Choose a PIN (4–6 digits)" "Again" "Confirm PIN" "Err" (or (index .Errors "pin") (index .Errors "pin_confirm")) "Submit" false)}}
       </div>
-    </fieldset>
+    </section>
 
-    <fieldset class="stack">
-      <legend>This device</legend>
+    <section class="card stack">
+      <h2>This device</h2>
       <label class="check">
         <input type="checkbox" name="use_as_display" value="1"{{if .Data.UseAsDisplay}} checked{{end}}>
         <span>Use this device as the household display (e.g. the wall tablet)</span>
@@ -56,7 +60,7 @@
         <input name="display_name" value="{{.Data.DisplayName}}" maxlength="50">
         {{template "err" index .Errors "display_name"}}
       </label>
-    </fieldset>
+    </section>
 
     <button class="btn btn--primary btn--block" type="submit">Set up Ingle</button>
   </form>
