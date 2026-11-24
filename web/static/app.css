@@ -425,6 +425,7 @@ form.picker:not(:has(input:checked)) [hx-post] { opacity: 0.4; pointer-events: n
   padding: 20px; margin: 0 0 16px;
 }
 .card--narrow { max-width: 520px; margin: 0 auto; }
+.cards { margin: 0 0 32px; }
 .stack > * + * { margin-top: 14px; }
 fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 legend { padding: 0; font-weight: 600; margin-bottom: 8px; }
@@ -601,9 +602,9 @@ input, select, textarea { -webkit-user-select: text; user-select: text; }
 
 .nudges { list-style: none; padding: 0; margin: 0 0 16px; display: grid; gap: 6px; }
 .nudges li { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
-.tiles { list-style: none; padding: 0; margin: 0 0 16px; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.tiles { list-style: none; padding: 0; margin: 0 0 16px; display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; }
 .tile {
-  display: flex; flex-direction: column; gap: 2px; padding: 16px; border-radius: var(--radius);
+  display: flex; flex-direction: column; gap: 2px; padding: 16px; border-radius: var(--radius); height: 100%; box-sizing: border-box;
   background: var(--surface); border: 1px solid var(--line); text-decoration: none; color: var(--fg);
 }
 .tile strong { font-size: 1.8rem; }
@@ -654,6 +655,12 @@ input, select, textarea { -webkit-user-select: text; user-select: text; }
 .credential__status { margin: 0; font-weight: 600; }
 .credential__tick { color: var(--ok-fg); }
 .credential__actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.reveal { position: relative; display: block; }
+.reveal input { width: 100%; padding-right: 48px; box-sizing: border-box; }
+.reveal__btn { position: absolute; top: 50%; right: 4px; transform: translateY(-50%); display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; }
+.reveal__btn:hover { color: var(--fg); }
+.reveal__btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
+.reveal__btn svg { width: 22px; height: 22px; }
 @media (max-width: 600px) {
   .dialog { width: 100vw; max-width: 100vw; margin: auto 0 0; border-radius: 20px 20px 0 0; padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
 }

@@ -12,8 +12,10 @@
   {{else}}{{template "flash" .}}{{end}}
   {{if .Data.Archived}}<p class="flash">Archived. Restore them from the People list to show them on the board again.</p>{{end}}
 
-  <form class="card stack" method="post" enctype="multipart/form-data"
+  <form class="cards" method="post" enctype="multipart/form-data"
         action="{{if .Data.ID}}/admin/people/{{.Data.ID}}{{else}}/admin/people{{end}}">
+    <section class="card stack">
+    <h2>About them</h2>
     <label class="field">
       <span>Name</span>
       <input name="name" value="{{.Data.Name}}" required maxlength="50" autocomplete="off">
@@ -72,6 +74,9 @@
         <small class="muted">They can add their own countdowns on a household display, after their PIN.</small></span>
     </label>
     {{end}}
+    </section>
+    <section class="card stack">
+    <h2>On the board</h2>
     <label class="check" data-show-when="kind=child">
       <input type="checkbox" name="picture_cards" value="1"{{if .Data.Pictures}} checked{{end}}>
       <span>Picture cards
@@ -100,7 +105,8 @@
       <input type="number" name="sort_order" value="{{.Data.SortOrder}}" min="0" max="999" inputmode="numeric">
       {{template "err" index .Errors "sort_order"}}
     </label>
-    <button class="btn btn--primary" type="submit">{{if .Data.ID}}Save{{else}}Add{{end}}</button>
+    </section>
+    <button class="btn btn--primary btn--block" type="submit">{{if .Data.ID}}Save{{else}}Add{{end}}</button>
   </form>
 
   {{if and .Data.ID (not .Data.Archived)}}

@@ -71,7 +71,11 @@
         first = box.querySelector("[data-pin-first]"),
         again = box.querySelector("[data-pin-again]"),
         sends = box.dataset.submit === "1",
-        entered = "", step = 1, ready = false, mine = false;
+        dialog = box.closest("dialog"),
+        // A dialog marked data-keep closes once the PIN is chosen, and keeps
+        // it for the form around it, as at first-time set-up.
+        keep = !!(dialog && dialog.hasAttribute("data-keep")),
+        entered = "", step = 1, ready = false, kept = false, mine = false;
 
     // Hidden boxes can't be required: the browser would block the form silently.
     fields.hidden = true;
@@ -94,7 +98,7 @@
     var pad = Pinpad(padEl, {
       active: function () { return mine; },
       onInput: function () {
-        if (ready) { ready = false; fill(""); ask(1); }
+        if (ready) { ready = false; kept = false; fill(""); ask(1); box.dispatchEvent(new CustomEvent("pinset:cleared")); }
       },
       onSubmit: function (code) {
         if (step === 1) {
@@ -115,6 +119,12 @@
           return;
         }
         ready = true;
+        if (keep) {
+          kept = true;
+          box.dispatchEvent(new CustomEvent("pinset:ready"));
+          dialog.close();
+          return;
+        }
         ask(1);
         pad.reset("", 0);
         prompt.textContent = "✓ PIN ready. Type a new one to change it.";
@@ -122,9 +132,12 @@
     });
     ask(1);
 
-    var dialog = box.closest("dialog");
     if (dialog) {
       dialog.addEventListener("close", function () {
+        ask(1);
+        pad.reset("", 0);
+        if (kept) return;
+        if (keep) box.dispatchEvent(new CustomEvent("pinset:cleared"));
         ready = false;
         fill("");
         ask(1);
@@ -142,6 +155,7 @@
     form.addEventListener("submit", function (e) {
       if (first.value) return;
       e.preventDefault();
+      if (dialog && !dialog.open && dialog.showModal) dialog.showModal();
       pad.error(step === 2 ? "Type it again to confirm." : "Type the PIN on the keypad.");
       padEl.scrollIntoView({ block: "center" });
       padEl.focus();

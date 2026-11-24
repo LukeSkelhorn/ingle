@@ -8,6 +8,8 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ### Changed
 
+- **Admin's longer pages are in sections.** Settings has a card each for the household, the wall displays, locking the displays and history. A person's page splits into **About them** and **On the board**, and a chore into **The chore**, **Who**, **When** and **Points and money**. Each still saves with one button, at the bottom. Admin's home fits all its counts on one row. First-time set-up is in cards too: **Your household**, **You**, **Signing in** and **This device**. The PIN is chosen in a pop-up, from a **Set a PIN** button, and every password box has an eye to show what you've typed.
+
 - **Displays update themselves when idle.** After you upgrade Ingle, a wall display switches to the new version the next time its screensaver comes on, so it never reloads under someone's finger. With no screensaver, it waits until nobody has touched it for 10 minutes. ([DOM-96](https://linear.app/skeltech/issue/DOM-96))
 
 ## [v0.4.7] - 2026-11-17
