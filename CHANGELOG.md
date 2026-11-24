@@ -6,6 +6,8 @@ Each release's section is also its GitHub release notes (`task release:notes`).
 
 ## [Unreleased]
 
+## [v0.4.8] - 2026-11-24
+
 ### Changed
 
 - **Admin's longer pages are in sections.** Settings has a card each for the household, the wall displays, locking the displays and history. A person's page splits into **About them** and **On the board**, and a chore into **The chore**, **Who**, **When** and **Points and money**. Each still saves with one button, at the bottom. Admin's home fits all its counts on one row. First-time set-up is in cards too: **Your household**, **You**, **Signing in** and **This device**. The PIN is chosen in a pop-up, from a **Set a PIN** button, and every password box has an eye to show what you've typed.
@@ -295,7 +297,8 @@ The first release: a family chores board for a wall tablet, ready to run on a ho
 
 - First release: nothing to upgrade from. New installs start at the setup page.
 
-[Unreleased]: https://github.com/lukeskelhorn/ingle/compare/v0.2.4...HEAD
+[Unreleased]: https://github.com/lukeskelhorn/ingle/compare/v0.4.8...HEAD
+[v0.4.8]: https://github.com/lukeskelhorn/ingle/compare/v0.4.7...v0.4.8
 [v0.2.4]: https://github.com/lukeskelhorn/ingle/compare/v0.2.3...v0.2.4
 [v0.2.3]: https://github.com/lukeskelhorn/ingle/compare/v0.2.2...v0.2.3
 [v0.2.2]: https://github.com/lukeskelhorn/ingle/compare/v0.2.1...v0.2.2
